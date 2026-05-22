@@ -17,7 +17,7 @@ Five tests (Section 17 of CLAUDE.md):
 import numpy as np
 
 from sim.glider_dynamics import GliderDynamics, GliderParams, build_state, ZERO_CONTROLS
-from sim.aerodynamics import CL, CD, forces_moments
+from sim.aerodynamics import CL, CD
 from sim.math_utils import quat_to_rotmat
 
 # ---------------------------------------------------------------------------
@@ -192,50 +192,62 @@ def test_stall_behaviour() -> None:
 
 
 def test_trim_glide() -> None:
-    """Release at zero-elevator trim: pitch rate must stay below 0.1 rad/s for 15 s.
+    """Release at zero-elevator trim (~4.8 deg alpha): pitch rate < 0.1 rad/s for 15 s.
 
-    Natural trim (zero elevator) is where Cm = 0 with de=0:
-        Cm0 + Cm_alpha * alpha = 0  =>  alpha_trim = -Cm0 / Cm_alpha (~4.77 deg)
+    Natural trim (de=0): Cm0 + Cm_alpha * alpha = 0
+        => alpha_trim = -Cm0 / Cm_alpha  (~4.77 deg)
 
-    The trim airspeed follows from lift = weight at that alpha.  Body velocity
-    and attitude are set on the trim glide path with zero angular rates so the
-    short-period mode is not excited.  The lightly-damped phugoid (~4.6 s
-    period, zeta~0.05) produces pitch rate oscillations of roughly 0.1 rad/s
-    amplitude over its first cycle; the threshold is set to 0.15 rad/s to
-    accommodate that while still catching any divergent motion.
+    Speed and attitude are solved from the EXACT nonlinear force balance so
+    that F_body = 0 identically in floating-point:
+
+        mg = sqrt(L^2 + D^2)
+          => V = sqrt(2*m*g / (rho*S*hypot(CL, CD)))
+
+        pitch = atan2(CD*cos(alpha) - CL*sin(alpha),
+                      CD*sin(alpha) + CL*cos(alpha))
+
+    These two expressions cancel algebraically:
+        F_aero + F_grav = mg * [ -CL*sa + CD*ca, 0, -CL*ca - CD*sa ] / hypot(...)
+                        + mg * [  CD*ca - CL*sa, 0,  CD*sa + CL*ca ] / hypot(...)
+                        = 0
+
+    Starting from exact trim the phugoid is not excited and the pitch rate
+    stays near machine-epsilon for the full 15 s (3000 RK4 steps).
     """
     p = GliderParams()
 
-    # --- Natural trim (de=0) ---
-    alpha_trim = -p.Cm0 / p.Cm_alpha                   # ~0.0833 rad (4.77 deg)
-    cl_trim    = p.a0 * alpha_trim
-    q_trim     = (p.m * p.g) / (p.S * cl_trim)
-    V_trim     = np.sqrt(2.0 * q_trim / p.rho)         # ~10.06 m/s
+    # --- Exact trim (de=0, beta=0, omega=0) ---
+    alpha_trim = -p.Cm0 / p.Cm_alpha                   # Cm = 0 analytically  (~4.77 deg)
+    cl_trim    = CL(alpha_trim, p)
+    cd_trim    = CD(cl_trim, p)
 
-    k          = 1.0 / (np.pi * p.e * p.AR)
-    cd_trim    = p.CD0 + k * cl_trim ** 2
-    gamma      = np.arctan(cd_trim / cl_trim)           # glide path angle (rad, positive down)
-    theta      = alpha_trim - gamma                     # nose-up angle above NED horizontal
+    # Exact speed: mg = sqrt(L^2 + D^2) = q_dyn*S*hypot(CL, CD)
+    V_trim = np.sqrt(
+        2.0 * p.m * p.g / (p.rho * p.S * np.hypot(cl_trim, cd_trim))
+    )
 
-    u0 = V_trim * np.cos(alpha_trim)
-    w0 = V_trim * np.sin(alpha_trim)
+    # Exact pitch angle: F_body = 0 identically (see docstring)
+    ca, sa   = np.cos(alpha_trim), np.sin(alpha_trim)
+    pitch_exact = np.arctan2(
+        cd_trim * ca - cl_trim * sa,    # => F_grav_x cancels F_aero_x
+        cd_trim * sa + cl_trim * ca,    # => F_grav_z cancels F_aero_z
+    )
 
     state = build_state(
         p_ned  = np.array([0.0, 0.0, -300.0]),
-        v_body = np.array([u0, 0.0, w0]),
-        pitch  = -theta,                                # negative = nose-up (see pitch convention)
+        v_body = np.array([V_trim * ca, 0.0, V_trim * sa]),
+        pitch  = pitch_exact,
     )
 
-    controls = ZERO_CONTROLS
     dyn = GliderDynamics(params=p)
     dyn.reset(state)
 
-    PITCH_RATE_LIMIT = 0.15                             # rad/s; allows for phugoid (~0.1 rad/s)
+    PITCH_RATE_LIMIT = 0.10                             # rad/s
     max_q_rate       = 0.0
 
-    for step in range(int(15.0 / DT_PHYS)):
-        dyn.step(controls, WIND_ZERO, DT_PHYS)
-        q_rate    = abs(dyn.state[11])                  # body pitch rate (rad/s)
+    for step in range(int(15.0 / DT_PHYS)):            # 3000 steps at 200 Hz
+        dyn.step(ZERO_CONTROLS, WIND_ZERO, DT_PHYS)
+        q_rate     = abs(dyn.state[11])
         max_q_rate = max(max_q_rate, q_rate)
         assert q_rate < PITCH_RATE_LIMIT, (
             f"Pitch rate {q_rate:.4f} rad/s at step {step} exceeds "
@@ -244,7 +256,7 @@ def test_trim_glide() -> None:
 
     print(
         f"PASS  test_trim_glide            "
-        f"max pitch rate = {max_q_rate:.4f} rad/s  "
+        f"max pitch rate = {max_q_rate:.2e} rad/s  "
         f"(alpha_trim={np.degrees(alpha_trim):.2f} deg, V_trim={V_trim:.2f} m/s)"
     )
 

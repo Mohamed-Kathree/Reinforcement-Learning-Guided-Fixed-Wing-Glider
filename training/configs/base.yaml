@@ -1,0 +1,136 @@
+# training/configs/base.yaml
+# ===========================
+# Single source of truth for all simulation, glider, reward, PPO, and
+# curriculum parameters.  Every other module reads from this file; do not
+# hard-code these values elsewhere.
+#
+# Consumed by:
+#   training/train.py     -- PPO setup, env construction, curriculum
+#   training/evaluate.py  -- env construction, evaluation episodes
+#   env/glider_env.py     -- sim timing, launch params
+#   env/reward.py         -- reward weights (DEFAULT_REWARD_CFG is the code mirror)
+#   env/curriculum.py     -- curriculum advance rule
+
+# ---------------------------------------------------------------------------
+# Simulation timing
+# ---------------------------------------------------------------------------
+sim:
+  dt_phys:    0.005       # physics integration step (s)  -- 200 Hz
+  dt_rl:      0.050       # RL policy step (s)            -- 20 Hz
+  substeps:   10          # dt_rl / dt_phys; kept explicit for readability
+  max_steps:  2000        # maximum policy steps per episode (~100 s of flight)
+  rho:        1.225       # air density (kg/m^3), sea-level ISA
+
+# ---------------------------------------------------------------------------
+# Glider physical parameters (nominal; domain randomisation scales these)
+# ---------------------------------------------------------------------------
+glider:
+  m:    1.1               # all-up mass (kg)
+  S:    0.38              # wing area (m^2)
+  b:    2.0               # wingspan (m)
+  c:    0.19              # mean aerodynamic chord (m)  ~= S/b
+  AR:   10.5              # aspect ratio               ~= b^2/S
+  # Inertia tensor diagonal (kg*m^2, FRD body frame)
+  Ixx:  0.18              # roll inertia
+  Iyy:  0.10              # pitch inertia
+  Izz:  0.26              # yaw inertia
+  Ixz:  0.01              # roll-yaw cross term (small; symmetric glider)
+
+# ---------------------------------------------------------------------------
+# Launch conditions (nominal; jitter applied per curriculum stage)
+# ---------------------------------------------------------------------------
+launch:
+  speed_ms:   15.0        # initial airspeed at hand-launch (m/s)
+  angle_deg:  15.0        # nose-up launch angle (deg)
+  alt0_m:     100.0       # launch altitude AGL (m); overridden by curriculum
+  jitter:     0.0         # fractional speed jitter; overridden by curriculum
+
+# ---------------------------------------------------------------------------
+# Reward weights  (mirrors DEFAULT_REWARD_CFG in env/reward.py)
+# ---------------------------------------------------------------------------
+reward:
+  # Terminal
+  w_terminal:   500.0     # bonus on reaching home radius (must dominate all dense terms)
+  w_crash:      100.0     # penalty on ground impact
+
+  # Dense
+  w_progress:   1.0       # reward per metre of horizontal progress toward home
+  w_airtime:    0.1       # reward per second of sustained flight
+  dt_rl:        0.050     # policy step size (s); multiplied by w_airtime each step
+
+  # Safety penalties
+  w_agl:        50.0      # AGL violation: quadratic penalty below agl_min
+  w_stall:      30.0      # stall margin violation: linear penalty
+  w_bank:       5.0       # excess bank: linear penalty above soft limit
+
+  # Smoothness regularisation
+  w_smooth:     0.01      # L2 penalty on action change (prevents chattering)
+
+  # Thresholds
+  R_home_m:             15.0    # success radius (m); overridden by curriculum
+  agl_min:               8.0    # minimum safe AGL (m)
+  stall_buffer_rad:      0.0349 # ~2 deg before stall alpha (rad)
+  bank_soft_limit_rad:   0.5236 # 30 deg bank soft limit (rad)
+
+# ---------------------------------------------------------------------------
+# PPO hyperparameters (Stable-Baselines3)
+# ---------------------------------------------------------------------------
+ppo:
+  policy:           MlpPolicy
+  n_envs:           8               # parallel environments (SubprocVecEnv)
+  n_steps:          2048            # rollout steps per env before each update
+  batch_size:       256             # minibatch size for gradient updates
+  n_epochs:         10              # gradient update passes per rollout
+  gae_lambda:       0.95            # GAE lambda for advantage estimation
+  gamma:            0.999           # discount factor (high: glide episodes are long)
+  ent_coef:         0.005           # entropy bonus (keeps policy exploratory early)
+  vf_coef:          0.5             # value function loss coefficient
+  max_grad_norm:    0.5             # gradient clipping norm
+  learning_rate:    3.0e-4          # Adam learning rate
+  clip_range:       0.2             # PPO clipping epsilon
+  net_arch:         [128, 128]      # shared MLP hidden layer sizes
+  total_timesteps:  20_000_000      # total environment steps for the full run
+  normalize_obs:    true            # use VecNormalize on observations
+  normalize_reward: true            # use VecNormalize on rewards
+  clip_obs:         10.0            # VecNormalize observation clip bound
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+eval:
+  n_episodes:       100             # episodes per evaluation call
+  eval_freq:        50_000          # timesteps between EvalCallback evaluations
+  deterministic:    true            # use deterministic policy during evaluation
+  best_model_path:  checkpoints/best_model
+  vecnorm_path:     checkpoints/vecnormalize.pkl
+
+# ---------------------------------------------------------------------------
+# Curriculum scheduler
+# ---------------------------------------------------------------------------
+curriculum:
+  advance_threshold: 0.80           # rolling success rate required to advance stage
+  rolling_window:    100            # number of recent episodes for rolling rate
+
+# ---------------------------------------------------------------------------
+# Logging and checkpointing
+# ---------------------------------------------------------------------------
+logging:
+  tensorboard_log:  runs/           # TensorBoard log directory
+  checkpoint_dir:   checkpoints/    # model checkpoint directory
+  checkpoint_freq:  100_000         # timesteps between checkpoints
+  verbose:          1               # SB3 verbosity (0=silent, 1=info, 2=debug)
+
+# ---------------------------------------------------------------------------
+# Domain randomisation ranges (applied per episode in env.reset())
+# Values here are the Stage 3 (full) ranges; earlier stages narrow them
+# via curriculum stage overrides.
+# ---------------------------------------------------------------------------
+domain_rand:
+  mass_range:           [0.85, 1.35]   # kg
+  inertia_scale_range:  [0.85, 1.15]   # uniform multiplier on I tensor
+  aero_scale_range:     [0.80,  1.20]  # CD0 scale
+  cl_slope_range:       [0.90,  1.10]  # lift-curve slope scale
+  ctrl_eff_range:       [0.75,  1.10]  # control effectiveness scale
+  servo_tau_range:      [0.03,  0.12]  # servo lag time constant (s)
+  servo_rate_scale:     [0.70,  1.30]  # servo rate limit scale
+  servo_max_scale:      [0.80,  1.00]  # servo deflection limit scale
