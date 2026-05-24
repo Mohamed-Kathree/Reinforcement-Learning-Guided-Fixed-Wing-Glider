@@ -4,6 +4,9 @@
 # curriculum parameters.  Every other module reads from this file; do not
 # hard-code these values elsewhere.
 #
+# FDM: JSBSim v1.3.1  (aircraft/rlglider/rlglider.xml owns mass, inertia,
+#      aerodynamics, and actuator dynamics; values here are documentation only)
+#
 # Consumed by:
 #   training/train.py     -- PPO setup, env construction, curriculum
 #   training/evaluate.py  -- env construction, evaluation episodes
@@ -126,11 +129,12 @@ logging:
 # via curriculum stage overrides.
 # ---------------------------------------------------------------------------
 domain_rand:
-  mass_range:           [0.85, 1.35]   # kg
-  inertia_scale_range:  [0.85, 1.15]   # uniform multiplier on I tensor
-  aero_scale_range:     [0.80,  1.20]  # CD0 scale
-  cl_slope_range:       [0.90,  1.10]  # lift-curve slope scale
-  ctrl_eff_range:       [0.75,  1.10]  # control effectiveness scale
-  servo_tau_range:      [0.03,  0.12]  # servo lag time constant (s)
-  servo_rate_scale:     [0.70,  1.30]  # servo rate limit scale
-  servo_max_scale:      [0.80,  1.00]  # servo deflection limit scale
+  # Applied each episode via JSBSimFDM.apply_domain_rand()
+  aero_scale_range:     [0.80,  1.20]  # additive CD0 offset scale (cd0_add = 0.025*(scale-1))
+  # cl_mult and ctrl_eff_mult ranges are hardcoded in env/_sample_domain_rand()
+  # (0.9-1.1 and 0.75-1.10 respectively); move here when curriculum integration added.
+  #
+  # NOT used with JSBSim (actuator dynamics fixed in aircraft/rlglider/rlglider.xml):
+  #   servo_tau_range, servo_rate_scale, servo_max_scale
+  # NOT used with JSBSim (mass/inertia fixed in rlglider.xml; pending per-episode XML reload):
+  #   mass_range, inertia_scale_range
