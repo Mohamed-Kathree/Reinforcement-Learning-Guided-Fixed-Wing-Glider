@@ -13,7 +13,7 @@ Produces four figures per call:
 
 Usage
 -----
-Run against the deterministic baseline (no trained model needed):
+Run agains the deterministic baseline (no trained model needed):
 
     python -m analysis.plot_trajectories
 
