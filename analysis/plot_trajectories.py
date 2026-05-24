@@ -139,7 +139,7 @@ def collect_trajectory(
     t = 0.0
     while True:
         # Record ground-truth state BEFORE this step
-        s     = raw_env._dyn.state
+        s     = raw_env._fdm.state
         roll, pitch, _ = euler_from_quat(s[6:10])
         alpha = float(np.arctan2(s[5], s[3]))
         V     = float(np.linalg.norm(s[3:6]))

@@ -139,7 +139,7 @@ def test_energy_conservation() -> None:
         raise AssertionError(
             f"Energy drift {max_drift * 100:.3f}% >= 0.1% tolerance"
         )
-    print(f"PASS  test_energy_conservation  max drift = {max_drift * 100:.3e}%")
+    print(f"[PASS] Gate 1 — Energy Conservation   drift={max_drift * 100:.3f}%  (threshold < 0.1%)")
 
 
 # ---------------------------------------------------------------------------
@@ -175,10 +175,7 @@ def test_glide_ratio() -> None:
         raise AssertionError(
             f"Glide ratio {glide:.2f} outside ({LO}, {HI})"
         )
-    print(
-        f"PASS  test_glide_ratio          "
-        f"glide ratio = {glide:.2f}  (in {LO}–{HI})"
-    )
+    print(f"[PASS] Gate 2 — Glide Ratio           L/D={glide:.1f}      (threshold {LO:.0f}–{HI:.0f})")
 
 
 # ---------------------------------------------------------------------------
@@ -231,11 +228,7 @@ def test_stall() -> None:
             f"CL not sustained drop at stall+10°: CL(22°)={cl_22:.4f} >= peak {cl_12:.4f}"
         )
 
-    print(
-        f"PASS  test_stall                "
-        f"CL: 4°={cl_4:.3f}  10°={cl_10:.3f}  "
-        f"12°(peak)={cl_12:.3f}  14°={cl_14:.3f}  22°={cl_22:.3f}"
-    )
+    print(f"[PASS] Gate 3 — Stall Behaviour       CL drops past alpha=12 deg")
 
 
 # ---------------------------------------------------------------------------
@@ -269,10 +262,7 @@ def test_trimmed_stability() -> None:
                 f"— model is longitudinally unstable"
             )
 
-    print(
-        f"PASS  test_trimmed_stability    "
-        f"max pitch rate = {max_q:.4f} rad/s  (< 0.1)"
-    )
+    print(f"[PASS] Gate 4 — Trim Stability        max|q|={max_q:.3f} rad/s  (threshold < 0.1)")
 
 
 # ---------------------------------------------------------------------------
@@ -318,13 +308,7 @@ def test_attitude_integrity() -> None:
         max_abs_phi   = max(max_abs_phi,   abs(phi))
         max_abs_theta = max(max_abs_theta, abs(theta))
 
-    h_final = fdm["position/h-agl-ft"] * FT2M
-    print(
-        f"PASS  test_attitude_integrity   "
-        f"max |roll|={np.degrees(max_abs_phi):.2f}°  "
-        f"max |pitch|={np.degrees(max_abs_theta):.2f}°  "
-        f"final alt={h_final:.1f} m"
-    )
+    print(f"[PASS] Gate 5 — Attitude Integrity    Euler angles finite over 30s")
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +316,7 @@ def test_attitude_integrity() -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    print("\n=== validate_glide.py  —  JSBSim physics gates ===\n")
+    print("\nRunning physics validation gates...\n")
 
     gates = [
         test_energy_conservation,
@@ -342,24 +326,20 @@ def main() -> None:
         test_attitude_integrity,
     ]
 
-    results: list[tuple[str, bool, str]] = []
+    n_passed = 0
     for fn in gates:
         try:
             fn()
-            results.append((fn.__name__, True, ""))
+            n_passed += 1
         except Exception as exc:
-            print(f"FAIL  {fn.__name__:<36} {exc}")
-            results.append((fn.__name__, False, str(exc)))
+            gate_num = gates.index(fn) + 1
+            print(f"[FAIL] Gate {gate_num}  {exc}")
 
     print()
-    all_passed = all(ok for _, ok, _ in results)
-    for name, ok, _ in results:
-        print(f"  {'PASSED' if ok else 'FAILED'}  {name}")
-    print()
-    if all_passed:
-        print("All 5 gates PASSED — JSBSim model is flight-worthy.")
+    if n_passed == len(gates):
+        print("All 5 gates PASSED. Simulator ready for training.")
     else:
-        n_failed = sum(1 for _, ok, _ in results if not ok)
+        n_failed = len(gates) - n_passed
         print(f"{n_failed} of {len(gates)} gates FAILED.")
         sys.exit(1)
 

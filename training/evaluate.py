@@ -234,6 +234,36 @@ def aggregate(results: list[dict]) -> dict:
 # Pretty-print comparison table
 # ---------------------------------------------------------------------------
 
+def print_baseline_summary(
+    stats:     dict,
+    stage_idx: int,
+    n_episodes: int,
+    seed:      int,
+) -> None:
+    """Print a formatted single-controller summary in demo style."""
+    sep = '=' * 40
+    mean_steps = stats['mean_steps'] if stats['mean_steps'] > 0 else 1.0
+
+    agl_pct   = stats['mean_agl_violations']   / mean_steps * 100.0
+    stall_pct = stats['mean_stall_violations'] / mean_steps * 100.0
+    bank_pct  = stats['mean_bank_violations']  / mean_steps * 100.0
+
+    print(sep)
+    print(f"  BASELINE EVALUATION — Stage {stage_idx}")
+    print(f"  Episodes: {n_episodes}  |  Seed: {seed}")
+    print(sep)
+    print(f"  Success rate:    {stats['success_rate']:>10.1%}")
+    print(f"  Crash rate:      {stats['crash_rate']:>10.1%}")
+    print(f"  Timeout rate:    {stats['timeout_rate']:>10.1%}")
+    print(f"  Mean reward:     {stats['mean_reward']:>10.1f}  (± {stats['std_reward']:.1f})")
+    print(f"  Mean steps:      {stats['mean_steps']:>10.1f}")
+    print(f"  Mean final dist: {stats['mean_dist_home']:>9.1f} m")
+    print(f"  AGL violations:  {agl_pct:>9.1f}%")
+    print(f"  Stall violations:{stall_pct:>9.1f}%")
+    print(f"  Bank violations: {bank_pct:>9.1f}%")
+    print(sep)
+
+
 def print_comparison(
     rl_stats:       dict | None,
     base_stats:     dict,
@@ -311,13 +341,15 @@ def evaluate(
     seeds = [int(rng.integers(0, 2**31)) for _ in range(n_episodes)]
 
     # --- Baseline --------------------------------------------------------
-    print(f"\nEvaluating DeterministicRTL  (stage {stage_idx}, {n_episodes} episodes) …")
+    if not baseline_only:
+        print(f"\nEvaluating DeterministicRTL  (stage {stage_idx}, {n_episodes} episodes) …")
     base_env  = _build_eval_env(cfg, stage_idx)
     base_ctrl = DeterministicRTL()
     base_results = run_episodes(base_ctrl, base_env, n_episodes, seeds)
     base_stats   = aggregate(base_results)
-    print(f"  Done.  success={base_stats['success_rate']:.1%}  "
-          f"reward={base_stats['mean_reward']:.1f}")
+    if not baseline_only:
+        print(f"  Done.  success={base_stats['success_rate']:.1%}  "
+              f"reward={base_stats['mean_reward']:.1f}")
 
     # --- RL policy -------------------------------------------------------
     rl_stats   = None
@@ -340,8 +372,11 @@ def evaluate(
         print(f"  Done.  success={rl_stats['success_rate']:.1%}  "
               f"reward={rl_stats['mean_reward']:.1f}")
 
-    # --- Print comparison table ------------------------------------------
-    print_comparison(rl_stats, base_stats, stage_idx, n_episodes)
+    # --- Print results ---------------------------------------------------
+    if baseline_only:
+        print_baseline_summary(base_stats, stage_idx, n_episodes, seed)
+    else:
+        print_comparison(rl_stats, base_stats, stage_idx, n_episodes)
 
     # --- Save JSON results -----------------------------------------------
     timestamp = time.strftime('%Y%m%d_%H%M%S')
@@ -370,7 +405,7 @@ def evaluate(
 
     with open(out_path, 'w') as f:
         json.dump(output, f, indent=2)
-    print(f"\nResults saved to {out_path}")
+    print(f"Results saved → {out_path}")
 
     return output
 
@@ -404,8 +439,8 @@ def _parse_args() -> argparse.Namespace:
         help='number of evaluation episodes (default: 100)',
     )
     parser.add_argument(
-        '--seed', type=int, default=42,
-        help='base RNG seed for episode generation (default: 42)',
+        '--seed', type=int, default=0,
+        help='base RNG seed for episode generation (default: 0)',
     )
     parser.add_argument(
         '--output-dir', default='results',
