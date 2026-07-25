@@ -78,6 +78,15 @@ def _build_eval_env(cfg: dict, stage_idx: int) -> GliderEnv:
     stage_cfg = dict(STAGES[stage_idx])
     reward_cfg = dict(DEFAULT_REWARD_CFG)
     reward_cfg.update(cfg.get('reward', {}))
+    # launch.speed_ms/angle_deg are hardware constants, not curriculum-varied
+    # (see train.flat_env_cfg for the same mapping) -- alt0_m/jitter are NOT
+    # pulled from here since stage_cfg (below) already carries the correct
+    # per-stage values.
+    launch = cfg.get('launch', {})
+    if 'speed_ms' in launch:
+        reward_cfg['launch_speed_ms'] = launch['speed_ms']
+    if 'angle_deg' in launch:
+        reward_cfg['launch_angle_deg'] = launch['angle_deg']
     reward_cfg.update(stage_cfg)
     return GliderEnv(cfg=reward_cfg)
 

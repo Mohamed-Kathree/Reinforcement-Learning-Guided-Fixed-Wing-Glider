@@ -71,6 +71,10 @@ AILERON_MAX_RAD  = np.radians(25.0)
 ELEVATOR_MAX_RAD = np.radians(20.0)
 RUDDER_MAX_RAD   = np.radians(25.0)
 
+# Number of <contact> elements in aircraft/rlglider/rlglider.xml
+# (NOSE, TAIL, LEFT_WINGTIP, RIGHT_WINGTIP) -- belly-skid ground contact points.
+N_CONTACT_POINTS = 4
+
 
 # ---------------------------------------------------------------------------
 # JSBSimFDM
@@ -260,7 +264,17 @@ class JSBSimFDM:
         if not ok:
             self._fault = True   # caller checks self.fault and ends the episode
 
-        return self.state
+        state = self.state
+        if not np.all(np.isfinite(state)):
+            # fdm.run() can return True even when the ground-contact spring-
+            # damper model has numerically diverged (observed: a sudden multi-
+            # metre altitude spike on touchdown followed by NaN the very next
+            # step). Fold this into the same fault flag so the caller ends
+            # the episode immediately instead of running up to MAX_STEPS on a
+            # corrupted state.
+            self._fault = True
+
+        return state
 
     # ------------------------------------------------------------------
     # Domain randomisation
@@ -380,3 +394,23 @@ class JSBSimFDM:
         The env should treat a fault as a crash and end the episode.
         """
         return self._fault
+
+    @property
+    def touched_down(self) -> bool:
+        """True if any belly-skid contact point has ground contact (WOW).
+
+        The 4 <contact> points in rlglider.xml sit ~0.1 m below the CG (see
+        their z-offset), so JSBSim's spring-damper ground-reaction model
+        engages measurably BEFORE position_ned[2] (CG altitude) crosses zero.
+        Use this -- not "p_d > 0" -- to detect ground contact: letting the
+        sim keep running physics steps through the contact/bounce transient
+        while only checking CG altitude gives the (fairly stiff) contact
+        model room to do multiple compression/release cycles, which can
+        numerically diverge (observed as a sudden multi-metre altitude spike
+        immediately followed by a NaN state -- see the finite-state guard in
+        step()).
+        """
+        fdm = self._fdm
+        return any(
+            bool(fdm[f"contact/unit[{i}]/WOW"]) for i in range(N_CONTACT_POINTS)
+        )

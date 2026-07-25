@@ -8,10 +8,21 @@ conditions, wide home radius) and advances automatically when the rolling
 success rate over the last N episodes crosses a threshold.
 
 Four stages (CLAUDE.md Section 12):
-    0 : calm air, no noise, R_home=30 m   -- learns basic RTL geometry
+    0 : calm air, no noise, R_home=25 m   -- learns basic RTL geometry
     1 : light wind, mild noise            -- adds disturbance rejection
     2 : moderate wind + gusts             -- adds robust aero uncertainty
     3 : full domain randomisation         -- final deployment difficulty
+
+Launch altitude and horizontal offset (as-built hardware notes):
+    The glider is hand/ground-launched, not tow-released at altitude.
+    Realistic peak altitude after the launch zoom-climb is ~15-25 m, so
+    alt0_m is held in that band across all stages (unlike wind/noise, this
+    is a hardware constant, not something that should vary with difficulty).
+    launch_offset_{min,max}_m are scaled to fit inside the glide range
+    available from that altitude (L/D ~= 12-14 per validate_glide.py) while
+    staying comfortably clear of R_home_m so the task remains well-posed.
+    R_home_m is widened versus the original design to account for the
+    NEO-6M GPS's ~2.5 m CEP (vs the ~1.5 m originally assumed).
 
 Advance rule (CLAUDE.md Section 15):
     advance_threshold = 0.80  (80 % success rate)
@@ -51,51 +62,59 @@ from typing import Deque
 STAGES: list[dict] = [
     # Stage 0 — perfect conditions: learn the geometry with no distractions
     dict(
-        wind_speed      = 0.0,
-        gust_intensity  = 0.0,
-        sensor_noise    = 0.0,
-        dropout_prob    = 0.0,
-        R_home_m        = 30.0,
-        alt0_m          = 120.0,
-        launch_jitter   = 0.0,
-        aero_scale_range= (1.0,  1.0),
-        mass_range      = (1.1,  1.1),
+        wind_speed          = 0.0,
+        gust_intensity      = 0.0,
+        sensor_noise        = 0.0,
+        dropout_prob        = 0.0,
+        R_home_m            = 25.0,
+        alt0_m              = 25.0,
+        launch_offset_min_m = 50.0,
+        launch_offset_max_m = 90.0,
+        launch_jitter       = 0.0,
+        aero_scale_range    = (1.0,  1.0),
+        mass_range          = (1.1,  1.1),
     ),
     # Stage 1 — light wind, mild noise: add first disturbances
     dict(
-        wind_speed      = 3.0,
-        gust_intensity  = 0.5,
-        sensor_noise    = 0.3,
-        dropout_prob    = 0.05,
-        R_home_m        = 20.0,
-        alt0_m          = 100.0,
-        launch_jitter   = 0.1,
-        aero_scale_range= (0.9,  1.1),
-        mass_range      = (1.0,  1.2),
+        wind_speed          = 3.0,
+        gust_intensity      = 0.5,
+        sensor_noise        = 0.3,
+        dropout_prob        = 0.05,
+        R_home_m            = 22.0,
+        alt0_m              = 23.0,
+        launch_offset_min_m = 45.0,
+        launch_offset_max_m = 80.0,
+        launch_jitter       = 0.1,
+        aero_scale_range    = (0.9,  1.1),
+        mass_range          = (1.0,  1.2),
     ),
     # Stage 2 — moderate wind + gusts, meaningful noise
     dict(
-        wind_speed      = 6.0,
-        gust_intensity  = 1.0,
-        sensor_noise    = 0.7,
-        dropout_prob    = 0.15,
-        R_home_m        = 15.0,
-        alt0_m          = 90.0,
-        launch_jitter   = 0.2,
-        aero_scale_range= (0.85, 1.15),
-        mass_range      = (0.9,  1.3),
+        wind_speed          = 6.0,
+        gust_intensity      = 1.0,
+        sensor_noise        = 0.7,
+        dropout_prob        = 0.15,
+        R_home_m            = 20.0,
+        alt0_m              = 21.0,
+        launch_offset_min_m = 40.0,
+        launch_offset_max_m = 70.0,
+        launch_jitter       = 0.2,
+        aero_scale_range    = (0.85, 1.15),
+        mass_range          = (0.9,  1.3),
     ),
     # Stage 3 — full domain randomisation: deployment difficulty
     dict(
-        wind_speed      = 9.0,
-        gust_intensity  = 2.0,
-        sensor_noise    = 1.0,
-        dropout_prob    = 0.25,
-        R_home_m        = 12.0,
-        alt0_m          = 80.0,
-        launch_jitter   = 0.3,
-        aero_scale_range= (0.8,  1.2),
-        mass_range      = (0.85, 1.35),
+        wind_speed          = 9.0,
+        gust_intensity      = 2.0,
+        sensor_noise        = 1.0,
+        dropout_prob        = 0.25,
+        R_home_m            = 20.0,
+        alt0_m              = 20.0,
+        launch_offset_min_m = 40.0,
+        launch_offset_max_m = 70.0,
+        launch_jitter       = 0.3,
+        aero_scale_range    = (0.8,  1.2),
+        mass_range          = (0.85, 1.35),
     ),
 ]
 

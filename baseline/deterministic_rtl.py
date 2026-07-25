@@ -4,7 +4,7 @@ deterministic_rtl.py
 Part of: RL-Guided Return-to-Launch Fixed-Wing Glider
 
 Rule-based return-to-launch controller used as a benchmark and fallback.
-Consumes the same 12-element normalised observation and produces the same
+Consumes the same 11-element normalised observation and produces the same
 2-element normalised action as the RL policy, so training/evaluate.py can
 compare both controllers through an identical evaluation harness.
 
@@ -98,7 +98,7 @@ class DeterministicRTL:
             action, _ = policy.predict(obs, deterministic=True)
 
         Args:
-            obs           : shape (12,) or (N, 12) float32 observation vector
+            obs           : shape (11,) or (N, 11) float32 observation vector
             deterministic : ignored; present for interface compatibility
 
         Returns:
@@ -107,7 +107,7 @@ class DeterministicRTL:
         obs = np.asarray(obs, dtype=np.float32)
         batched = obs.ndim == 2
         if not batched:
-            obs = obs[np.newaxis, :]   # (1, 12)
+            obs = obs[np.newaxis, :]   # (1, 11)
 
         actions = np.stack([self._act_single(o) for o in obs])
 
@@ -120,7 +120,7 @@ class DeterministicRTL:
         """Convenience wrapper — returns action array only (no state tuple).
 
         Args:
-            obs : shape (12,) observation vector (single step)
+            obs : shape (11,) observation vector (single step)
 
         Returns:
             action : shape (2,) float32 normalised action

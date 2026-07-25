@@ -1,21 +1,51 @@
 # training/configs/base.yaml
 # ===========================
-# Single source of truth for all simulation, glider, reward, PPO, and
-# curriculum parameters.  Every other module reads from this file; do not
-# hard-code these values elsewhere.
+# Reference documentation for simulation, glider, reward, PPO, and curriculum
+# parameters. NOT every section here is actually read by code -- see the
+# per-section notes below. Where a section IS live-wired, treat it as the
+# source of truth and do not hard-code those values elsewhere; where a
+# section is marked reference-only, the real values live in the Python file
+# named in that section's comment, and this file exists purely so a human
+# can see the full parameter picture in one place.
 #
-# FDM: JSBSim v1.3.1  (aircraft/rlglider/rlglider.xml owns mass, inertia,
-#      aerodynamics, and actuator dynamics; values here are documentation only)
+# Live-wired sections (actually read by code):
+#   reward:      -- training/train.py flat_env_cfg() / training/evaluate.py
+#                   _build_eval_env() -> env/glider_env.py GliderEnv(cfg=...)
+#                   (env/reward.py DEFAULT_REWARD_CFG is the fallback used
+#                   when GliderEnv is constructed without an explicit cfg,
+#                   e.g. in tests/scratch scripts)
+#   launch.speed_ms / launch.angle_deg
+#                -- same flat_env_cfg()/_build_eval_env() path; hardware
+#                   constants, not curriculum-stage-dependent
+#   ppo:         -- training/train.py train()
+#   eval:        -- training/train.py train() (EvalCallback), training/evaluate.py
+#   curriculum:  -- training/train.py train() -> CurriculumScheduler
 #
-# Consumed by:
-#   training/train.py     -- PPO setup, env construction, curriculum
-#   training/evaluate.py  -- env construction, evaluation episodes
-#   env/glider_env.py     -- sim timing, launch params
-#   env/reward.py         -- reward weights (DEFAULT_REWARD_CFG is the code mirror)
-#   env/curriculum.py     -- curriculum advance rule
+# Reference-only sections (code does NOT read these; kept for documentation --
+# changing a value here has no effect until the referenced Python file is
+# also updated):
+#   sim:         -- module constants in env/glider_env.py (DT_PHYS, DT_RL,
+#                   N_SUBSTEPS, MAX_STEPS). Not runtime-configurable: JSBSim
+#                   caches dt at load_model() time (see sim/jsbsim_fdm.py),
+#                   so changing dt_phys requires re-deriving several other
+#                   constants together, not a safe single cfg override.
+#   glider:      -- aircraft/rlglider/rlglider.xml (JSBSim owns mass, inertia,
+#                   aerodynamics, actuator dynamics)
+#   launch.alt0_m / launch.jitter
+#                -- these ARE curriculum-stage-dependent; the real per-stage
+#                   values live in env/curriculum.py STAGES, applied via
+#                   env.set_stage(). The values here are just Stage-0-ish
+#                   nominal defaults for eyeballing.
+#   domain_rand: -- per-stage aero_scale_range now lives in env/curriculum.py
+#                   STAGES (superseding this flat section); cl_mult and
+#                   ctrl_eff_mult ranges are hardcoded in
+#                   env/glider_env.py::_sample_domain_rand(). mass_range /
+#                   inertia_scale_range / servo_* are not used at all with
+#                   JSBSim (mass/inertia/actuators are fixed in rlglider.xml).
 
 # ---------------------------------------------------------------------------
-# Simulation timing
+# Simulation timing (REFERENCE ONLY -- see note above; real values are the
+# DT_PHYS/DT_RL/N_SUBSTEPS/MAX_STEPS constants in env/glider_env.py)
 # ---------------------------------------------------------------------------
 sim:
   dt_phys:    0.005       # physics integration step (s)  -- 200 Hz
@@ -40,13 +70,16 @@ glider:
   Ixz:  0.01              # roll-yaw cross term (small; symmetric glider)
 
 # ---------------------------------------------------------------------------
-# Launch conditions (nominal; jitter applied per curriculum stage)
+# Launch conditions
+# alt0_m reflects the as-built hardware: hand/ground-launched, not a tow
+# release. Realistic peak altitude after the launch zoom-climb is ~15-25 m
+# (see as-built electronics notes).
 # ---------------------------------------------------------------------------
 launch:
-  speed_ms:   15.0        # initial airspeed at hand-launch (m/s)
-  angle_deg:  15.0        # nose-up launch angle (deg)
-  alt0_m:     100.0       # launch altitude AGL (m); overridden by curriculum
-  jitter:     0.0         # fractional speed jitter; overridden by curriculum
+  speed_ms:   15.0        # initial airspeed at hand-launch (m/s) -- LIVE (flat_env_cfg)
+  angle_deg:  15.0        # nose-up launch angle (deg)            -- LIVE (flat_env_cfg)
+  alt0_m:     22.0        # REFERENCE ONLY -- real per-stage values are env/curriculum.py STAGES
+  jitter:     0.0         # REFERENCE ONLY -- real per-stage values are env/curriculum.py STAGES
 
 # ---------------------------------------------------------------------------
 # Reward weights  (mirrors DEFAULT_REWARD_CFG in env/reward.py)
@@ -62,7 +95,7 @@ reward:
   dt_rl:        0.050     # policy step size (s); multiplied by w_airtime each step
 
   # Safety penalties
-  w_agl:        50.0      # AGL violation: quadratic penalty below agl_min
+  w_agl:        50.0      # landing-flare violation: quadratic penalty below agl_min
   w_stall:      30.0      # stall margin violation: linear penalty
   w_bank:       5.0       # excess bank: linear penalty above soft limit
 
@@ -70,8 +103,8 @@ reward:
   w_smooth:     0.01      # L2 penalty on action change (prevents chattering)
 
   # Thresholds
-  R_home_m:             15.0    # success radius (m); overridden by curriculum
-  agl_min:               8.0    # minimum safe AGL (m)
+  R_home_m:             20.0    # success radius (m); widened for NEO-6M GPS (~2.5 m CEP); overridden by curriculum
+  agl_min:               2.5    # landing flare trigger (m); ultrasonic only valid <4.5 m, not a continuous floor
   stall_buffer_rad:      0.0349 # ~2 deg before stall alpha (rad)
   bank_soft_limit_rad:   0.5236 # 30 deg bank soft limit (rad)
 
@@ -124,15 +157,17 @@ logging:
   verbose:          1               # SB3 verbosity (0=silent, 1=info, 2=debug)
 
 # ---------------------------------------------------------------------------
-# Domain randomisation ranges (applied per episode in env.reset())
-# Values here are the Stage 3 (full) ranges; earlier stages narrow them
-# via curriculum stage overrides.
+# Domain randomisation ranges -- REFERENCE ONLY, superseded by curriculum.
+# Curriculum integration (mentioned as future work in an earlier revision of
+# this comment) has since landed: per-stage aero_scale_range now lives in
+# env/curriculum.py STAGES and is the value actually applied via
+# JSBSimFDM.apply_domain_rand(). aero_scale_range below happens to equal
+# Stage 3's range, but changing it here has no effect.
 # ---------------------------------------------------------------------------
 domain_rand:
-  # Applied each episode via JSBSimFDM.apply_domain_rand()
   aero_scale_range:     [0.80,  1.20]  # additive CD0 offset scale (cd0_add = 0.025*(scale-1))
-  # cl_mult and ctrl_eff_mult ranges are hardcoded in env/_sample_domain_rand()
-  # (0.9-1.1 and 0.75-1.10 respectively); move here when curriculum integration added.
+  # cl_mult and ctrl_eff_mult ranges are hardcoded in
+  # env/glider_env.py::_sample_domain_rand() (0.9-1.1 and 0.75-1.10 respectively).
   #
   # NOT used with JSBSim (actuator dynamics fixed in aircraft/rlglider/rlglider.xml):
   #   servo_tau_range, servo_rate_scale, servo_max_scale

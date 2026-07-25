@@ -4,8 +4,8 @@ math_utils.py
 Part of: RL-Guided Return-to-Launch Fixed-Wing Glider
 
 Shared mathematical primitives used across sim/ and env/:
-quaternion arithmetic, frame conversions, airdata, angle utilities,
-and the RK4 integrator.
+quaternion/Euler conversions, frame transforms, angle utilities,
+and the 13-element state vector builder.
 
 Coordinate frames used:
     NED : North-East-Down inertial frame (world)
@@ -71,89 +71,9 @@ def euler_to_quat(roll: float, pitch: float, yaw: float) -> NDArray:
     ], dtype=np.float64)
 
 
-def quat_mult(p: NDArray, q: NDArray) -> NDArray:
-    """Hamilton product p ⊗ q for quaternions [q0,q1,q2,q3]."""
-    p0, p1, p2, p3 = p
-    q0, q1, q2, q3 = q
-    return np.array([
-        p0*q0 - p1*q1 - p2*q2 - p3*q3,
-        p0*q1 + p1*q0 + p2*q3 - p3*q2,
-        p0*q2 - p1*q3 + p2*q0 + p3*q1,
-        p0*q3 + p1*q2 - p2*q1 + p3*q0,
-    ], dtype=np.float64)
-
-
-def quat_kinematics(q: NDArray, omega: NDArray) -> NDArray:
-    """Return q_dot = 0.5 * q ⊗ [0, p, q, r].
-
-    omega: body angular rates [p, q, r] (rad/s, roll/pitch/yaw rate).
-    """
-    return 0.5 * quat_mult(q, np.array([0.0, omega[0], omega[1], omega[2]]))
-
-
 def quat_normalize(q: NDArray) -> NDArray:
     """Return a copy of q scaled to unit length."""
     return q / np.linalg.norm(q)
-
-
-# ---------------------------------------------------------------------------
-# Airdata
-# ---------------------------------------------------------------------------
-
-def airdata(v_air_body: NDArray, v_min: float = 0.5) -> tuple[float, float, float]:
-    """Return (V, alpha, beta) from body-frame air-relative velocity.
-
-    v_air_body = v_body - R @ wind_ned  (m/s in FRD body frame).
-
-    V     : airspeed (m/s), clamped to v_min to avoid singularities
-    alpha : angle of attack (rad) = arctan2(w, u); positive when nose above velocity
-    beta  : sideslip angle (rad) = arcsin(v/V); positive when wind from the right
-    """
-    u, v, w = float(v_air_body[0]), float(v_air_body[1]), float(v_air_body[2])
-    V = max(np.sqrt(u**2 + v**2 + w**2), v_min)
-    alpha = np.arctan2(w, u)
-    beta  = np.arcsin(np.clip(v / V, -1.0, 1.0))
-    return V, float(alpha), float(beta)
-
-
-# ---------------------------------------------------------------------------
-# Wind-to-body force transformation
-# ---------------------------------------------------------------------------
-
-def wind_to_body_matrix(alpha: float, beta: float) -> NDArray:
-    """Exact 3x3 rotation matrix R_wb such that F_body = R_wb @ [-D, Y, -L].
-
-    Columns are body-frame representations of wind-frame basis vectors:
-      col 0 = velocity direction (x_wind)
-      col 1 = y_wind (perpendicular to velocity, rightward in stability frame)
-      col 2 = z_wind (downward perpendicular, completing RH system)
-
-    Derivation: cross-product construction from v_body = V[ca*cb, sb, sa*cb].
-    This is exact for all alpha and beta; the CLAUDE.md per-component formulas
-    are an approximation for small beta (differ only in the ca*sb*Y -> Fx term).
-    """
-    ca, sa = np.cos(alpha), np.sin(alpha)
-    cb, sb = np.cos(beta),  np.sin(beta)
-    return np.array([
-        [ ca*cb, -ca*sb, -sa],
-        [ sb,     cb,    0.0],
-        [ sa*cb, -sa*sb,  ca],
-    ], dtype=np.float64)
-
-
-def wind_to_body_forces(
-    L: float, D: float, Y: float, alpha: float, beta: float
-) -> NDArray:
-    """Transform aerodynamic forces from wind frame to FRD body frame.
-
-    L : lift magnitude (N), positive upward
-    D : drag magnitude (N), positive rearward (opposing motion)
-    Y : side force (N), positive rightward
-
-    In FRD body frame, upward lift produces negative Fz (z points down).
-    Uses the exact wind-to-body rotation: F_body = R_wb @ [-D, Y, -L].
-    """
-    return wind_to_body_matrix(alpha, beta) @ np.array([-D, Y, -L])
 
 
 # ---------------------------------------------------------------------------
@@ -171,28 +91,56 @@ def wrap_2pi(angle: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# RK4 integrator
+# State vector construction
 # ---------------------------------------------------------------------------
 
-def rk4_step(
-    state: NDArray,
-    controls: dict,
-    t: float,
-    dt: float,
-    deriv_fn,
+def _zero_state() -> NDArray:
+    """13-element zero state with a valid identity quaternion."""
+    s = np.zeros(13, dtype=np.float64)
+    s[6] = 1.0  # q0=1 -> body axes aligned with NED, at origin
+    return s
+
+
+def build_state(
+    *,
+    p_ned:  NDArray | None = None,
+    v_body: NDArray | None = None,
+    roll:   float = 0.0,
+    pitch:  float = 0.0,
+    yaw:    float = 0.0,
+    omega:  NDArray | None = None,
 ) -> NDArray:
-    """Fourth-order Runge-Kutta step with quaternion renormalisation.
+    """Build a 13-element state vector from human-readable components.
 
-    deriv_fn(state, controls, t) -> state_dot  (same shape as state)
+    State layout: [0:3] p_ned, [3:6] v_body, [6:10] quat, [10:13] omega.
+    All keyword arguments are optional; omitted quantities default to zero
+    (position at NED origin, body aligned with NED, zero velocities).
 
-    The quaternion slice state[6:10] is renormalised after every step.
-    Mandatory for glider dynamics; Euler integration diverges at 200 Hz.
+    Args:
+        p_ned  : NED position [p_n, p_e, p_d] (m)
+        v_body : body-frame velocity [u, v, w] (m/s)
+        roll   : roll angle (rad, ZYX convention)
+        pitch  : pitch angle (rad)
+        yaw    : yaw angle (rad)
+        omega  : body angular rates [p, q, r] (rad/s)
+
+    Example -- launch state 100 m AGL, 15 m/s nose-up at 15 deg, heading north:
+        state = build_state(
+            p_ned  = np.array([0, 0, -100]),
+            v_body = np.array([15*np.cos(np.radians(15)), 0, -15*np.sin(np.radians(15))]),
+            pitch  = np.radians(15),
+        )
     """
-    k1 = deriv_fn(state,                 controls, t)
-    k2 = deriv_fn(state + 0.5*dt*k1,    controls, t + 0.5*dt)
-    k3 = deriv_fn(state + 0.5*dt*k2,    controls, t + 0.5*dt)
-    k4 = deriv_fn(state + dt*k3,         controls, t + dt)
+    s = _zero_state()
+    if p_ned  is not None:
+        s[0:3]  = np.asarray(p_ned,  dtype=np.float64)
+    if v_body is not None:
+        s[3:6]  = np.asarray(v_body, dtype=np.float64)
+    s[6:10] = euler_to_quat(roll, pitch, yaw)
+    if omega  is not None:
+        s[10:13] = np.asarray(omega, dtype=np.float64)
+    return s
 
-    new_state = state + (dt / 6.0) * (k1 + 2.0*k2 + 2.0*k3 + k4)
-    new_state[6:10] /= np.linalg.norm(new_state[6:10])   # always renormalise
-    return new_state
+
+# Zero-deflection controls — useful as a starting point for tests/trim runs.
+ZERO_CONTROLS: dict = {'aileron': 0.0, 'elevator': 0.0, 'rudder': 0.0}

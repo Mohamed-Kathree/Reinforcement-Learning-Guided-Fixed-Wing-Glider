@@ -372,21 +372,30 @@ No LiDAR is fitted on the hardware — ground proximity is sensed by a short-ran
 
 ## Curriculum Stages
 
-| Stage | Max wind | Noise scale | Home radius | Launch alt | Advance rule |
-|-------|----------|-------------|-------------|------------|--------------|
-| 0 | 0 m/s | 0% | 30 m | 120 m | 80% over 100 eps |
-| 1 | 3 m/s | 10% | 25 m | 110 m | 80% over 100 eps |
-| 2 | 6 m/s | 15% | 20 m | 105 m | 80% over 100 eps |
-| 3 | 9 m/s | 20% | 15 m | 100 m | Final stage |
+Launch altitude and offsets reflect the as-built hardware: the glider is
+hand/ground-launched (peak altitude after the launch zoom-climb ~15-25 m),
+not tow-released at altitude. Home radius is widened versus earlier designs
+to account for the NEO-6M GPS's ~2.5 m CEP. See the as-built electronics
+notes for the full hardware picture.
+
+| Stage | Max wind | Noise scale | Home radius | Launch alt | Launch offset | Advance rule |
+|-------|----------|-------------|-------------|------------|----------------|--------------|
+| 0 | 0 m/s | 0% | 25 m | 25 m | 50–90 m | 80% over 100 eps |
+| 1 | 3 m/s | 10% | 22 m | 23 m | 45–80 m | 80% over 100 eps |
+| 2 | 6 m/s | 15% | 20 m | 21 m | 40–70 m | 80% over 100 eps |
+| 3 | 9 m/s | 20% | 20 m | 20 m | 40–70 m | Final stage |
 
 **Baseline performance:**
 
-| Stage | Conditions | Success rate |
-|-------|------------|-------------|
-| 0 | No wind, no noise | 28–29% |
-| 1 | 0–3 m/s wind, 10% noise | ~22–26% |
-| 2 | 0–6 m/s wind, 15% noise | ~18–22% |
-| 3 | 0–9 m/s wind, 20% noise | 15–25% |
+| Stage | Conditions | Success rate | Crash rate | Timeout rate |
+|-------|------------|---------------|------------|--------------|
+| 0 | No wind, no noise | 29% (measured, n=100) | 71% | 0% |
+| 1–3 | Wind + noise + tighter R_home | Not yet re-benchmarked at the new ground-launch scale | — | — |
+
+At this reduced altitude budget, failures resolve as crashes rather than
+timeouts (the old 100-120 m tow-release scale gave enough altitude margin
+for the baseline to wander for the full episode instead of running out of
+height) -- a more informative failure signature for reward shaping.
 
 **RL target:** > 60% at Stage 3.
 

@@ -7,7 +7,9 @@ Shaped reward function for the RL-guided glider return-to-launch task.
 
 Structure (applied every policy step at 20 Hz):
     Dense rewards  : progress toward home, airtime bonus
-    Safety penalties: AGL too low (lidar-gated), near-stall alpha, excess bank
+    Safety penalties: landing-flare AGL (ultrasonic-gated, only <4.5 m --
+                      NOT a continuous in-flight floor, see as-built notes),
+                      near-stall alpha, excess bank
     Smoothness      : L2 penalty on action change
     Terminal events : large bonus on reaching home, penalty on ground impact
 
@@ -55,7 +57,7 @@ DEFAULT_REWARD_CFG: dict = {
     'dt_rl':       0.05,    # policy step size (s); multiplied by w_airtime
 
     # Safety
-    'w_agl':       50.0,    # AGL violation: quadratic penalty below agl_min
+    'w_agl':       50.0,    # landing-flare violation: quadratic penalty below agl_min
     'w_stall':     30.0,    # stall margin violation: linear penalty
     'w_bank':      5.0,     # excess bank: linear penalty above soft limit
 
@@ -63,8 +65,8 @@ DEFAULT_REWARD_CFG: dict = {
     'w_smooth':    0.01,    # L2 penalty on Δaction (prevents chattering)
 
     # Thresholds
-    'R_home_m':              15.0,              # success radius (m)
-    'agl_min':               8.0,               # minimum safe AGL (m)
+    'R_home_m':              20.0,              # success radius (m); widened for NEO-6M GPS (~2.5 m CEP)
+    'agl_min':               2.5,               # landing flare trigger (m); ultrasonic only valid <4.5 m
     'stall_buffer_rad':      np.radians(2.0),   # penalty starts 2 deg before stall
     'bank_soft_limit_rad':   np.radians(30.0),  # penalty starts at 30 deg bank
 }
@@ -136,7 +138,8 @@ def compute_reward(
     r_airtime = cfg['w_airtime'] * cfg['dt_rl']
     r += r_airtime
 
-    # 3. AGL safety penalty — only when LiDAR reports a valid reading
+    # 3. Landing-flare AGL penalty — only when the ultrasonic reports a valid
+    #    reading (<4.5 m); this is NOT a continuous in-flight altitude floor.
     penalty_agl = 0.0
     agl_violation = False
     if lidar_valid and lidar_agl < cfg['agl_min']:

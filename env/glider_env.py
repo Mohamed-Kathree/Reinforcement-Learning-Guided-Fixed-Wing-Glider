@@ -20,7 +20,7 @@ Each env.step() call:
        c. Safety shield clips servo commands
        d. JSBSimFDM applies actuator lag/rate limits and integrates one step
        e. SensorSuite refreshes sensor buffers
-    3. Build 12-element observation from sensor readings
+    3. Build 11-element observation from sensor readings
     4. Call compute_reward() for reward + termination flags
     5. Return (obs, reward, terminated, truncated, info)
 
@@ -71,7 +71,11 @@ ALPHA_TRIM: float = np.radians(2.5)  # reduced from 4.8°: JSBSim trims lower; 4
 
 # Safety shield thresholds
 SHIELD_MAX_BANK_RAD:    float = np.radians(45.0)   # increased from 40°: gives headroom during nominal ±30° command
-SHIELD_MIN_AGL_M:       float = 8.0
+# Landing flare trigger, not a continuous in-flight AGL floor: the only
+# ground-proximity sensor on the hardware is a short-range ultrasonic
+# (RCWL-1655, valid <4.5 m -- see sim/sensor_models.py), so this can only
+# ever fire in the last couple of seconds before touchdown.
+SHIELD_MIN_AGL_M:       float = 2.5
 SHIELD_PULLUP_ELEV_RAD: float = np.radians(5.0)
 SHIELD_MAX_ALPHA_RAD:   float = np.radians(10.0)  # stall warning margin
 
@@ -88,7 +92,8 @@ BANK_CMD_SCALE_RAD:  float = np.radians(45.0)   # ±45° bank
 SPEED_CMD_CENTRE_MS: float = 9.0
 SPEED_CMD_SCALE_MS:  float = 4.0                # range 5–13 m/s
 
-# Launch parameters
+# Launch parameters (fallback defaults; overridable via cfg['launch_speed_ms'] /
+# cfg['launch_angle_deg'] -- see training/configs/base.yaml launch.speed_ms/angle_deg)
 LAUNCH_SPEED_MS:  float = 15.0
 LAUNCH_ANGLE_DEG: float = 15.0     # nose-up (positive pitch)
 
@@ -166,7 +171,7 @@ class AttitudeController:
 class GliderEnv(gym.Env):
     """Gymnasium environment for the RL-guided fixed-wing glider RTL task.
 
-    Observation space : Box(12,) float32 — see CLAUDE.md Section 10.2
+    Observation space : Box(11,) float32 — see CLAUDE.md Section 10.2
     Action space      : Box(2,)  float32 — normalised [bank_cmd, speed_cmd]
 
     Episode ends when:
@@ -203,7 +208,7 @@ class GliderEnv(gym.Env):
         self.observation_space = spaces.Box(
             low   = -np.inf,
             high  =  np.inf,
-            shape = (12,),
+            shape = (11,),
             dtype = np.float32,
         )
         self.action_space = spaces.Box(
@@ -225,7 +230,7 @@ class GliderEnv(gym.Env):
         self._home_ned: npt.NDArray   = np.zeros(3, dtype=np.float64)
 
         # Cached last observation (built in _build_obs; exposed for reward fn)
-        self._last_obs: npt.NDArray = np.zeros(12, dtype=np.float32)
+        self._last_obs: npt.NDArray = np.zeros(11, dtype=np.float32)
 
         # RNG (seeded properly in reset)
         self._rng: np.random.Generator = np.random.default_rng(seed)
@@ -313,7 +318,7 @@ class GliderEnv(gym.Env):
             action : normalised [bank_cmd, speed_cmd] ∈ [-1, 1]²
 
         Returns:
-            obs        : 12-element float32 observation
+            obs        : 11-element float32 observation
             reward     : scalar shaped reward
             terminated : True when the episode ends (success or crash)
             truncated  : True when the step limit is reached
@@ -342,8 +347,14 @@ class GliderEnv(gym.Env):
             #    actuator lag/rate-limit, advances 6-DOF EOM one dt step
             self._fdm.step(ctrl_cmds, wind_ned, DT_PHYS)
 
-            # 5. Abort substep loop on solver failure
-            if self._fdm.fault:
+            # 5. Abort substep loop on solver failure or ground contact.
+            #    touched_down fires ~0.1 m of AGL before p_d>0 (CG altitude)
+            #    would -- see JSBSimFDM.touched_down. Stopping here, in the
+            #    same physics step contact first occurs, avoids running the
+            #    stiff spring-damper contact model through several more
+            #    compression/release cycles, which was observed to
+            #    numerically diverge (sudden altitude spike -> NaN state).
+            if self._fdm.fault or self._fdm.touched_down:
                 break
 
             # 6. Sensor suite: refresh rate-limited buffers
@@ -364,8 +375,16 @@ class GliderEnv(gym.Env):
             cfg         = self.cfg,
         )
 
-        # JSBSim solver failure: treat as crash
-        if self._fdm.fault:
+        # Ground contact (touched_down) or JSBSim solver/state failure (fault):
+        # treat as an immediate crash, taking priority over success -- mirrors
+        # the "crash checked first" rule in compute_reward's own state[2]>0
+        # branch -- so a landing/fault event is never silently left counted
+        # as neither success nor crash.
+        if self._fdm.fault or self._fdm.touched_down:
+            if not info['crash']:
+                reward -= float(self.cfg.get('w_crash', DEFAULT_REWARD_CFG['w_crash']))
+                info['crash']   = True
+                info['success'] = False
             terminated = True
 
         # Track whether the glider has flown outside R_home_m; success is
@@ -432,12 +451,22 @@ class GliderEnv(gym.Env):
         return dict(cl_mult=cl_mult, cd0_add=cd0_add, ctrl_eff_mult=ctrl_eff_mult)
 
     def _build_launch_state(self) -> npt.NDArray:
-        """Construct the 13-element launch state for a new episode."""
-        jitter = float(self.cfg.get('launch_jitter', 0.0))
-        alt0   = float(self.cfg.get('alt0_m', 100.0))
+        """Construct the 13-element launch state for a new episode.
 
-        V0    = LAUNCH_SPEED_MS * (1.0 + self._rng.uniform(-jitter, jitter))
-        gamma = np.radians(LAUNCH_ANGLE_DEG)
+        alt0_m defaults to the as-built hardware reality: the glider is
+        HAND/GROUND-LAUNCHED, not released from a tow at altitude. Realistic
+        peak altitude after the launch zoom-climb is ~15-25 m -- see the
+        as-built electronics notes. The episode begins at that post-launch
+        peak, not at ground level (the ~2-3 s zoom-climb transient itself is
+        out of scope for the RTL task).
+        """
+        jitter      = float(self.cfg.get('launch_jitter', 0.0))
+        alt0        = float(self.cfg.get('alt0_m', 22.0))
+        speed_ms    = float(self.cfg.get('launch_speed_ms', LAUNCH_SPEED_MS))
+        angle_deg   = float(self.cfg.get('launch_angle_deg', LAUNCH_ANGLE_DEG))
+
+        V0    = speed_ms * (1.0 + self._rng.uniform(-jitter, jitter))
+        gamma = np.radians(angle_deg)
         psi   = self._rng.uniform(0.0, 2.0 * np.pi)   # random heading
 
         # Random horizontal offset ensures dist_home > R_home_m at step 0,
@@ -445,8 +474,11 @@ class GliderEnv(gym.Env):
         # Without an offset the glider starts directly above home (dist_home=0),
         # flies in a random direction, and the 100-second step budget is often
         # exhausted before it can return.
-        offset_lo = float(self.cfg.get('launch_offset_min_m', 80.0))
-        offset_hi = float(self.cfg.get('launch_offset_max_m', 150.0))
+        # Defaults scaled down from the old 80-150 m (which assumed a
+        # 100-120 m tow-release) to fit inside the glide range available
+        # from a ~20-25 m ground-launch peak (L/D ~= 12-14 per validate_glide.py).
+        offset_lo = float(self.cfg.get('launch_offset_min_m', 40.0))
+        offset_hi = float(self.cfg.get('launch_offset_max_m', 70.0))
         offset    = self._rng.uniform(offset_lo, offset_hi)
         bearing   = self._rng.uniform(0.0, 2.0 * np.pi)
         p_north   = offset * np.cos(bearing)
@@ -466,7 +498,7 @@ class GliderEnv(gym.Env):
         )
 
     def _build_obs(self) -> npt.NDArray:
-        """Build the 12-element float32 observation from sensor readings.
+        """Build the 11-element float32 observation from sensor readings.
 
         Index contract (CLAUDE.md Section 10.2):
             [0]  dx_home        m        (GPS North - home North)
@@ -478,10 +510,14 @@ class GliderEnv(gym.Env):
             [6]  yaw            rad      (IMU)
             [7]  baro_alt       m
             [8]  vertical_speed m/s      (GPS vd, positive down -> negated for obs)
-            [9]  lidar_agl      m
-            [10] lidar_valid    binary
-            [11] airspeed       m/s      (body-frame speed magnitude, ground truth
-                                          proxy — pitot not yet modelled)
+            [9]  lidar_agl      m         (ultrasonic; 0 unless <4.5 m, flare-only)
+            [10] lidar_valid    binary    (ultrasonic)
+
+        No airspeed channel: the hardware has no pitot (see as-built
+        electronics notes). An earlier revision fed obs[11] from JSBSim's
+        ground-truth wind-relative airspeed -- a sim-to-real leak, since no
+        real sensor on this airframe can measure that. obs[2] (GPS ground
+        speed) is the closest real signal and is kept as-is.
         """
         gps_pos = self._sensors.gps_pos   # [pn, pe, pd]
         gps_vel = self._sensors.gps_vel   # [vn, ve, vd]
@@ -495,9 +531,6 @@ class GliderEnv(gym.Env):
         course_angle  = float(np.arctan2(ve, vn))
         vertical_speed = -vd   # positive = climbing (negate NED down component)
 
-        # Airspeed: wind-relative true airspeed from JSBSim aerodynamics
-        airspeed = float(self._fdm.airspeed)
-
         obs = np.array([
             dx_home,
             dy_home,
@@ -510,7 +543,6 @@ class GliderEnv(gym.Env):
             vertical_speed,
             float(self._sensors.lidar_agl),
             float(self._sensors.lidar_valid),
-            airspeed,
         ], dtype=np.float32)
 
         return obs
@@ -523,7 +555,9 @@ class GliderEnv(gym.Env):
         """Clip servo commands to enforce hard safety limits.
 
         Hard bank limit: if |roll| > 50°, zero the aileron (flatten).
-        Minimum AGL:     if LiDAR valid and AGL < 8 m, force elevator up.
+        Landing flare:   if ultrasonic valid and AGL < 2.5 m, force elevator up.
+                         Only ever active in the last couple of seconds before
+                         touchdown -- the ultrasonic is invalid above 4.5 m.
         Stall margin:    if alpha > 10°, prevent further pitch-up.
 
         The shield operates on a copy so the original dict is not mutated.
@@ -540,8 +574,9 @@ class GliderEnv(gym.Env):
             recovery_cmd = KP_ROLL * (0.0 - roll) - KD_ROLL * p_rate
             cmds['aileron'] = float(np.clip(recovery_cmd, -np.radians(25), np.radians(25)))
 
-        # Minimum AGL: force nose-UP (negative elevator, since Cm_de=-1.2 means
-        # positive elevator=nose-down) to pull away from terrain.
+        # Landing flare: force nose-UP (negative elevator, since Cm_de=-1.2
+        # means positive elevator=nose-down) to arrest sink rate just before
+        # touchdown.
         if self._sensors.lidar_valid and self._sensors.lidar_agl < SHIELD_MIN_AGL_M:
             cmds['elevator'] = min(
                 float(cmds['elevator']), -SHIELD_PULLUP_ELEV_RAD

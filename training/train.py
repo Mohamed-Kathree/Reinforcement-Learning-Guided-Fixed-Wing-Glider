@@ -106,9 +106,24 @@ def apply_overrides(cfg: dict, overrides: list[str]) -> dict:
     return cfg
 
 
-def flat_reward_cfg(cfg: dict) -> dict:
-    """Extract reward section + R_home_m into a flat dict for GliderEnv."""
-    return dict(cfg['reward'])
+def flat_env_cfg(cfg: dict) -> dict:
+    """Flatten the reward + launch config sections into one dict for GliderEnv.
+
+    Only launch.speed_ms/angle_deg are pulled in here (renamed to the
+    launch_speed_ms/launch_angle_deg keys GliderEnv reads) -- they are hardware
+    constants that don't vary per curriculum stage. launch.alt0_m/jitter are
+    deliberately NOT included: those are curriculum-stage-dependent and are
+    applied via set_stage() (see train(), which applies STAGES[0] immediately
+    after building the environments, then CurriculumCallback applies later
+    stages as training progresses).
+    """
+    flat = dict(cfg['reward'])
+    launch = cfg.get('launch', {})
+    if 'speed_ms' in launch:
+        flat['launch_speed_ms'] = launch['speed_ms']
+    if 'angle_deg' in launch:
+        flat['launch_angle_deg'] = launch['angle_deg']
+    return flat
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +137,7 @@ def make_env(cfg: dict, rank: int, seed: int = 0):
     guaranteeing diverse episode starts across parallel environments.
     """
     def _init() -> Monitor:
-        env = GliderEnv(cfg=flat_reward_cfg(cfg))
+        env = GliderEnv(cfg=flat_env_cfg(cfg))
         env = Monitor(env)
         env.reset(seed=seed + rank)
         return env
@@ -307,6 +322,16 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
         advance_threshold = float(cur_cfg['advance_threshold']),
         rolling_window    = int(cur_cfg['rolling_window']),
     )
+
+    # make_env() only seeds each worker with the reward section (flat_reward_cfg);
+    # it does not know about STAGES[0]. Without this, training silently starts
+    # with none of Stage 0's curriculum settings applied (wind, R_home_m,
+    # alt0_m, launch offsets, domain-rand ranges) until/unless the scheduler
+    # happens to advance past stage 0, at which point set_stage first fires
+    # with Stage 1's config. Apply the initial stage explicitly here, the same
+    # way CurriculumCallback applies every later stage advance.
+    venv.env_method('set_stage', scheduler.current_cfg)
+    eval_venv.env_method('set_stage', scheduler.current_cfg)
 
     # --- Policy ----------------------------------------------------------
     policy_kwargs = dict(net_arch=list(ppo_cfg['net_arch']))
