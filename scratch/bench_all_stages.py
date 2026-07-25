@@ -24,6 +24,7 @@ for stage_idx in range(len(STAGES)):
     dists = []
     for ep in range(N):
         seed = int(rng.integers(0, 2**31))
+        ctrl.reset()   # clear yaw-rate derivative state from the previous episode
         obs, _ = env.reset(seed=seed)
         while True:
             obs, r, terminated, truncated, info = env.step(ctrl.act(obs))
@@ -42,4 +43,7 @@ for stage_idx in range(len(STAGES)):
     print(f"S{stage_idx:<5}{s:>9}{c:>8}{t:>9}"
           f"{np.mean(dists):>9.1f}{np.min(dists):>8.1f}{np.max(dists):>8.1f}")
 
-print("\nReference: Stage 0 was previously measured at ~29% success / 71% crash / 0% timeout.")
+print("\nReference: Stage 0 measured at ~20-22% success with the PD heading controller")
+print("(kp_bank=0.3, kd_bank=5.0) after fixing the position_ned sign bug -- see")
+print("baseline/deterministic_rtl.py's module docstring. The old ~29% figure was")
+print("measured under a since-fixed position_ned bug and should not be trusted.")

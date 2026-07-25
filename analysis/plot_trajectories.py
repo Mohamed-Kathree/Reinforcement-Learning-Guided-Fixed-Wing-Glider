@@ -127,6 +127,12 @@ def collect_trajectory(
     traj = Trajectory(label=label, color=color)
     dt   = 0.05   # policy step size (s)
 
+    # DeterministicRTL is stateful (yaw-rate derivative for its PD heading
+    # controller) and must be reset per episode; SB3 policies have no such
+    # method, hence the guard.
+    if hasattr(policy, 'reset'):
+        policy.reset()
+
     if is_vecenv:
         env.env_method('reset', seed=seed)
         obs = env.reset()

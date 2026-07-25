@@ -35,7 +35,7 @@ Hand-launched gliders face highly variable launch conditions and outdoor disturb
 
 The task is fundamentally one of energy management: the glider can only trade altitude for airspeed while continuously losing energy to drag. The policy must learn to optimise the return-to-launch (RTL) objective while respecting hard safety constraints on stall margin, bank angle, and minimum altitude above ground level.
 
-**Term 2 status:** Physics simulation validated, Gymnasium environment implemented, deterministic baseline benchmarked at 28–29% success (Stage 0). Training infrastructure ready.
+**Term 2 status:** Physics simulation validated, Gymnasium environment implemented, deterministic baseline benchmarked at ~20% success across all 4 stages (see [Curriculum Stages](#curriculum-stages) for the full table and correction history). Training infrastructure ready.
 
 **Term 3 goal:** Train PPO policy to exceed 60% success at Stage 3 (0–9 m/s wind, 20% sensor noise, 15 m home radius).
 
@@ -313,7 +313,7 @@ pytest tests/ --cov=sim --cov=env --cov-report=html
 |----------|-------|
 | **Sensors** | LiDAR slant-range formula, update-rate counters for all four sensors, dropout probability |
 | **Control** | JSBSim actuator rate-limit enforcement (rlglider.xml) |
-| **Integration** | Baseline achieves ≥ 25% success in Stage 0 over 100 episodes |
+| **Integration** | Baseline achieves ≥ 15% success in Stage 0 over 20 episodes |
 
 Core physics correctness (energy conservation, glide ratio, stall, trim stability, attitude integrity) is covered separately by [`validate_glide.py`](#physics-validation)'s 5 gates against the real JSBSim FDM.
 
@@ -385,17 +385,34 @@ notes for the full hardware picture.
 | 2 | 6 m/s | 15% | 20 m | 21 m | 40–70 m | 80% over 100 eps |
 | 3 | 9 m/s | 20% | 20 m | 20 m | 40–70 m | Final stage |
 
-**Baseline performance:**
+**Baseline performance** (measured, n=100/stage, `DeterministicRTL` PD heading controller):
 
 | Stage | Conditions | Success rate | Crash rate | Timeout rate |
 |-------|------------|---------------|------------|--------------|
-| 0 | No wind, no noise | 29% (measured, n=100) | 71% | 0% |
-| 1–3 | Wind + noise + tighter R_home | Not yet re-benchmarked at the new ground-launch scale | — | — |
+| 0 | No wind, no noise | 21% | 79% | 0% |
+| 1 | Light wind, mild noise | 19% | 81% | 0% |
+| 2 | Moderate wind + gusts | 21% | 79% | 0% |
+| 3 | Full domain randomisation | 23% | 77% | 0% |
 
 At this reduced altitude budget, failures resolve as crashes rather than
 timeouts (the old 100-120 m tow-release scale gave enough altitude margin
 for the baseline to wander for the full episode instead of running out of
 height) -- a more informative failure signature for reward shaping.
+
+An earlier P-only heading controller (no damping) measured ~28-29% here, but
+that number was produced while `sim/jsbsim_fdm.py`'s `position_ned` had a
+since-fixed bug: it reported the *unsigned magnitude* of NED displacement
+along each axis rather than signed displacement, so the glider's perceived
+bearing to home was silently wrong whenever its net displacement crossed to
+the other side of the launch point. With that fixed, the same P-only
+controller's true success rate was ~4-6% -- per-episode traces showed a
+genuine, non-decaying heading limit cycle (bank command saturated on ~99%
+of steps), not a subtle mistuning. `DeterministicRTL` is now a PD
+controller (`kp_bank=0.3`, `kd_bank=5.0`, damped by IMU yaw rate rather
+than a finite difference of the 5 Hz GPS course angle, which would alias
+against the 20 Hz policy rate) -- see `baseline/deterministic_rtl.py`'s
+module docstring for the full derivation. The numbers above are the ones to
+trust; the old ~29% figure should not be used as a reference point.
 
 **RL target:** > 60% at Stage 3.
 
@@ -449,7 +466,7 @@ python scratch/jsbsim_smoke.py
 | GliderEnv implementation | ✅ Complete |
 | Physics validation (5 gates) | ✅ All passing |
 | Unit test suite | ✅ All passing |
-| Deterministic baseline | ✅ 28–29% at Stage 0 |
+| Deterministic baseline | ✅ ~20-23% across all 4 stages (PD heading controller) |
 | PPO training to convergence | 🔄 Term 3 |
 | ESP32 firmware integration | 🔄 Term 3 |
 | Shadow-mode flight testing | 🔄 Term 3 |

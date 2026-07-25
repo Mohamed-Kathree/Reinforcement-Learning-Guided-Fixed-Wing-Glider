@@ -68,6 +68,15 @@ from stable_baselines3.common.monitor import Monitor
 from env.glider_env import GliderEnv
 from env.curriculum import CurriculumScheduler, STAGES
 
+# Optional dashboard hook: streams live metrics to data/train_stream.jsonl
+# for the showcase frontend's Training tab (backend/routers/training.py's
+# WebSocket tails it). Additive only -- training must run identically with
+# or without the dashboard backend present, so this never raises.
+try:
+    from backend.callbacks.web_stream_callback import WebStreamCallback
+except ImportError:
+    WebStreamCallback = None
+
 
 # ---------------------------------------------------------------------------
 # Config helpers
@@ -420,7 +429,10 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
         verbose              = 1,
     )
 
-    callbacks = CallbackList([curriculum_cb, checkpoint_cb, vecnorm_cb, eval_cb])
+    callback_list = [curriculum_cb, checkpoint_cb, vecnorm_cb, eval_cb]
+    if WebStreamCallback is not None:
+        callback_list.append(WebStreamCallback(scheduler=scheduler))
+    callbacks = CallbackList(callback_list)
 
     # --- Train -----------------------------------------------------------
     total_steps = int(ppo_cfg['total_timesteps'])

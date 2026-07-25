@@ -161,6 +161,12 @@ def run_episodes(
     for ep_idx in range(n_episodes):
         seed = seeds[ep_idx]
 
+        # DeterministicRTL is stateful (yaw-rate derivative for its PD
+        # heading controller) and must be reset per episode; SB3 policies
+        # have no such method, hence the guard.
+        if hasattr(policy, 'reset'):
+            policy.reset()
+
         if is_vecenv:
             # VecEnv reset doesn't accept seed directly; reset the underlying env
             env.env_method('reset', seed=seed)

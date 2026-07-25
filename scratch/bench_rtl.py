@@ -19,6 +19,7 @@ final_dists = []
 
 for ep in range(N):
     seed = int(rng.integers(0, 2**31))
+    ctrl.reset()   # clear yaw-rate derivative state from the previous episode
     obs, _ = env.reset(seed=seed)
     while True:
         action = ctrl.act(obs)

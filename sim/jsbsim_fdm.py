@@ -30,10 +30,14 @@ Controls format accepted by step():
     The JSBSim FCS then applies actuator lag + rate limit + saturation.
 
 NED position tracking:
-    JSBSim's position/distance-from-start-*-mt properties give displacement
-    from the IC (launch) point.  JSBSimFDM stores the launch NED offset at
-    reset() and adds it to every read so position_ned is always relative to
-    the home/origin of the episode.
+    N/E come from a local tangent-plane projection of JSBSim's true
+    geocentric lat/lon relative to the lat/lon captured at reset() -- NOT
+    from position/distance-from-start-lat/lon-mt, which report unsigned
+    magnitude-only displacement and silently give the wrong direction once
+    net displacement crosses to the other side of the launch point (see
+    position_ned's docstring for the full explanation and validation).
+    JSBSimFDM stores the launch NED offset at reset() and adds it to every
+    read so position_ned is always relative to the home/origin of the episode.
 
 Domain randomisation:
     Call apply_domain_rand() after reset() to write per-episode scale factors
@@ -62,6 +66,11 @@ M2FT   = 3.280839895
 FT2M   = 1.0 / M2FT
 MS2FPS = M2FT            # 1 m/s = M2FT fps
 FPS2MS = FT2M            # 1 fps = FT2M m/s
+
+# WGS84 semi-major axis (m). Used for a local tangent-plane (equirectangular)
+# projection of lat/lon onto NED North/East -- see position_ned's docstring
+# for why this replaced JSBSim's distance-from-start-lat/lon-mt properties.
+R_EARTH_M = 6378137.0
 
 # ---------------------------------------------------------------------------
 # Surface deflection limits (from actuator_models.py — shared source of truth)
@@ -116,6 +125,11 @@ class JSBSimFDM:
 
         # Launch NED offset (set at reset, used to compute position relative to home)
         self._p_ned_launch: NDArray = np.zeros(3, dtype=np.float64)
+
+        # Launch lat/lon reference (radians), captured at reset() -- position_ned
+        # projects current lat/lon onto a local tangent plane relative to this.
+        self._lat0_rad: float = 0.0
+        self._lon0_rad: float = 0.0
 
         # Fault flag: set True if fdm.run() returns False (solver failure)
         self._fault: bool = False
@@ -187,8 +201,9 @@ class JSBSimFDM:
         fdm["aero/ctrl-eff-mult"] = 1.0
 
         # Geographic reference: fixed at equator/prime meridian.
-        # Absolute position does not matter for the RTL task — only relative
-        # displacement (distance-from-start-*-mt) is used.
+        # Absolute position does not matter for the RTL task -- only relative
+        # displacement matters, computed via a local tangent-plane projection
+        # in position_ned (see below).
         fdm["ic/lat-gc-deg"]   = 0.0
         fdm["ic/long-gc-deg"]  = 0.0
 
@@ -214,6 +229,13 @@ class JSBSimFDM:
         fdm["fcs/aileron-cmd-norm"]  = 0.0
         fdm["fcs/elevator-cmd-norm"] = 0.0
         fdm["fcs/rudder-cmd-norm"]   = 0.0
+
+        # Capture the launch lat/lon as the reference point for position_ned's
+        # tangent-plane projection (read back post-run_ic() rather than reusing
+        # the ic/* values above, so this stays correct even if the IC solver
+        # ever nudges them).
+        self._lat0_rad = float(np.radians(fdm["position/lat-gc-deg"]))
+        self._lon0_rad = float(np.radians(fdm["position/long-gc-deg"]))
 
         self._fault = False
 
@@ -311,15 +333,42 @@ class JSBSimFDM:
     def position_ned(self) -> NDArray:
         """[N, E, D] in metres, relative to the episode home/origin.
 
-        JSBSim distance-from-start tracks displacement from the IC (launch)
-        point.  We add the stored launch offset so the returned position is
-        always relative to the home point (NED origin used by the reward fn).
+        N/E are a local tangent-plane (equirectangular) projection of JSBSim's
+        true geocentric lat/lon onto North/East, relative to the lat/lon
+        captured at reset(). We add the stored launch NED offset so the
+        result is relative to the home point (NED origin used by the reward
+        fn), matching position_ned's contract everywhere else in the codebase.
+
+        This does NOT use JSBSim's position/distance-from-start-lat-mt and
+        -lon-mt properties, despite their name suggesting exactly this.
+        Direct verification (see scratch diagnostics run against this
+        aircraft model) showed those two properties report the UNSIGNED
+        magnitude of net displacement along each axis, not signed
+        displacement: e.g. flying due south for 25 m reports
+        distance-from-start-lat-mt = +25, not -25; flying due west reports
+        distance-from-start-lon-mt = +25, not -25. Using them directly as
+        signed North/East meant position_ned silently reported the aircraft
+        moving in the wrong direction whenever its net displacement from
+        launch crossed from one side of the launch point to the other --
+        reproduced with baseline episodes whose recorded ground track
+        reversed direction mid-flight while attitude and body velocity
+        stayed perfectly smooth (i.e. a position-tracking bug, not a real
+        aerodynamic event). The tangent-plane projection used here was
+        checked against independent dead-reckoning (integrating v_body
+        through the attitude DCM) across straight and hard-turning flight,
+        matching to within ~0.2 m over 5 s of sustained turning -- far
+        tighter than the ~2.5 m GPS CEP already assumed for this hardware.
+        Because a real GPS receiver also just reports raw lat/lon, this is
+        the same conversion the real onboard flight computer will need to
+        do, so it's the more sim-to-real-faithful approach as well, not
+        merely a workaround.
         """
         fdm = self._fdm
-        p_n = (self._p_ned_launch[0]
-               + fdm["position/distance-from-start-lat-mt"])
+        lat_rad = np.radians(fdm["position/lat-gc-deg"])
+        lon_rad = np.radians(fdm["position/long-gc-deg"])
+        p_n = self._p_ned_launch[0] + (lat_rad - self._lat0_rad) * R_EARTH_M
         p_e = (self._p_ned_launch[1]
-               + fdm["position/distance-from-start-lon-mt"])
+               + (lon_rad - self._lon0_rad) * R_EARTH_M * np.cos(self._lat0_rad))
         # D derived from current AGL altitude;  p_d > 0 → crashed (below NED origin)
         p_d = -(fdm["position/h-agl-ft"] * FT2M)
         return np.array([p_n, p_e, p_d], dtype=np.float64)
@@ -394,6 +443,20 @@ class JSBSimFDM:
         The env should treat a fault as a crash and end the episode.
         """
         return self._fault
+
+    @property
+    def control_surfaces(self) -> NDArray:
+        """[aileron, elevator, rudder] ACTUAL surface deflection in radians
+        (post actuator-lag/rate-limit, i.e. fcs/*-pos-rad) -- not the raw
+        fcs/*-cmd-norm command. Used by the showcase dashboard's flight
+        recorder to log true control-surface state; not read by training.
+        """
+        fdm = self._fdm
+        return np.array([
+            fdm["fcs/aileron-pos-rad"],
+            fdm["fcs/elevator-pos-rad"],
+            fdm["fcs/rudder-pos-rad"],
+        ], dtype=np.float64)
 
     @property
     def touched_down(self) -> bool:

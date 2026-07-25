@@ -237,3 +237,10 @@ checkpoints/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Showcase dashboard (frontend/backend) -- generated/runtime data only,
+# never the source under frontend/src or backend/*.py
+frontend/node_modules/
+frontend/dist/
+data/episodes/
+data/train_stream.jsonl

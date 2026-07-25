@@ -29,6 +29,7 @@ DT_RL = 0.05   # policy step size (s)
 cfg  = dict(STAGES[STAGE])
 env  = GliderEnv(cfg=cfg)
 ctrl = DeterministicRTL()
+ctrl.reset()  # fresh instance already, but explicit for clarity
 
 print(f"Episode trace — DeterministicRTL  Stage {STAGE}  seed={SEED}")
 obs, _ = env.reset(seed=SEED)
