@@ -96,10 +96,7 @@ rl-glider/
 │   ├── jsbsim_fdm.py             # JSBSim wrapper (SI interface)
 │   ├── sensor_models.py          # GPS, IMU, Baro, LiDAR with noise
 │   ├── wind.py                   # Mean wind + OU gust generator
-│   ├── math_utils.py             # Quaternion, airdata, frame transforms
-│   ├── glider_dynamics.py        # [Legacy] Custom 6-DOF integrator
-│   ├── aerodynamics.py           # [Legacy] Python aero functions
-│   └── actuator_models.py        # [Legacy] Python servo models
+│   └── math_utils.py             # Quaternion/Euler conversions, state builder
 │
 ├── tests/                          # Pytest unit test suite
 │   └── test_dynamics.py          # Physics, sensors, actuators, baseline
@@ -314,10 +311,11 @@ pytest tests/ --cov=sim --cov=env --cov-report=html
 
 | Category | Tests |
 |----------|-------|
-| **Physics** | Energy conservation (CD=0), quaternion norm preservation |
 | **Sensors** | LiDAR slant-range formula, update-rate counters for all four sensors, dropout probability |
-| **Control** | Servo rate-limit enforcement, attitude controller sign conventions |
+| **Control** | JSBSim actuator rate-limit enforcement (rlglider.xml) |
 | **Integration** | Baseline achieves ≥ 25% success in Stage 0 over 100 episodes |
+
+Core physics correctness (energy conservation, glide ratio, stall, trim stability, attitude integrity) is covered separately by [`validate_glide.py`](#physics-validation)'s 5 gates against the real JSBSim FDM.
 
 ---
 
@@ -365,8 +363,10 @@ Stage 0 (no wind, no noise) lets the policy learn the spatial structure of the R
 |--------|------|-------------|
 | GPS | 5 Hz | σ_pos = 1.5 m, σ_vel = 0.3 m/s |
 | IMU | 200 Hz | σ_att = 1°, σ_rate = 0.5°/s |
-| Barometer | 25 Hz | σ_alt = 0.5 m |
-| LiDAR | 50 Hz | σ_range = 0.05 m, 10% dropout |
+| Barometer (BMP280) | 25 Hz | σ_alt = 1.0 m |
+| Ultrasonic (RCWL-1655) | 20 Hz | σ_range = 0.08 m, range-gated [0.2, 4.5] m, 10% dropout |
+
+No LiDAR is fitted on the hardware — ground proximity is sensed by a short-range ultrasonic, valid only on final approach/flare (<4.5 m), not as a continuous in-flight AGL floor. See the as-built electronics notes for the full hardware picture.
 
 ---
 

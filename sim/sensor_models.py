@@ -11,19 +11,23 @@ Key principle: the RL policy NEVER sees ground truth — only the outputs of the
 models.  All noise parameters are domain-randomisation targets; set via reset().
 
 Sensors modelled:
-    GPS    :  5 Hz, 1.5 m / 0.3 m/s position & velocity noise
-    IMU    : 200 Hz, 1 deg attitude / 0.5 deg/s rate noise
-    Baro   :  25 Hz, 0.5 m altitude noise
-    LiDAR  :  50 Hz, 0.05 m range noise, dropout + range gating [0.2, 40] m
+    GPS        :  5 Hz, 1.5 m / 0.3 m/s position & velocity noise
+    IMU        : 200 Hz, 1 deg attitude / 0.5 deg/s rate noise
+    Baro       :  25 Hz, 1.0 m altitude noise (BMP280)
+    Ultrasonic :  20 Hz, ~0.08 m range noise, dropout + range gating [0.2, 4.5] m
+                  (RCWL-1655; landing-flare-only ground-proximity sensor, no LiDAR
+                  is fitted on the hardware -- see as-built electronics notes.
+                  Python identifiers below are still named lidar_*/LIDAR_* for
+                  historical reasons; they carry the ultrasonic reading.)
 
 Update-rate model (zero-order hold):
     SensorSuite.step() is called at the 200 Hz physics rate.  Each sensor
     refreshes its internal buffer at its own Hz; between refreshes the last
     valid reading is held unchanged.  This means a 20 Hz policy step sees:
-        GPS    : same sample for 4 consecutive policy steps (refreshes every 40 physics steps)
-        IMU    : fresh sample every step (200 Hz == physics rate)
-        Baro   : same sample for ~1-2 policy steps (refreshes every 8 physics steps)
-        LiDAR  : same sample for 2 consecutive policy steps (refreshes every 4 physics steps)
+        GPS        : same sample for 4 consecutive policy steps (refreshes every 40 physics steps)
+        IMU        : fresh sample every step (200 Hz == physics rate)
+        Baro       : same sample for ~1-2 policy steps (refreshes every 8 physics steps)
+        Ultrasonic : fresh sample every policy step (refreshes every 10 physics steps)
 
 Coordinate frames used:
     NED : North-East-Down inertial frame (world)
@@ -51,8 +55,8 @@ from sim.math_utils import euler_from_quat, quat_to_rotmat
 GPS_HZ   = 5
 IMU_HZ   = 200
 BARO_HZ  = 25
-LIDAR_HZ = 50
-PHYS_HZ  = 200   # physics integration rate; must match GliderDynamics usage
+LIDAR_HZ = 20    # ultrasonic (RCWL-1655), ~50 ms cycle -- see module docstring
+PHYS_HZ  = 200   # physics integration rate; must match JSBSimFDM's dt_phys
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +122,7 @@ def _baro_noise(
     Returns:
         Noisy altitude measurement (m)
     """
-    return float(altitude_m + rng.normal(0.0, 0.5 * noise_scale))
+    return float(altitude_m + rng.normal(0.0, 1.0 * noise_scale))
 
 
 def _lidar_noise(
@@ -129,15 +133,19 @@ def _lidar_noise(
     dropout_prob: float = 0.10,
     noise_scale:  float = 1.0,
 ) -> tuple[float, bool]:
-    """Compute slant-range-corrected LiDAR AGL measurement with dropout.
+    """Compute slant-range-corrected ultrasonic AGL measurement with dropout.
 
-    The LiDAR measures slant range to the ground; this is corrected to
-    vertical AGL using:
+    The ultrasonic (RCWL-1655) measures slant range to the ground; this is
+    corrected to vertical AGL using:
         h_agl ≈ r_slant · cos(roll) · cos(pitch)
 
     The measurement is invalid when:
-      - corrected AGL is outside [0.2, 40.0] m  (sensor range limits), OR
-      - a random dropout event occurs.
+      - corrected AGL is outside [0.2, 4.5] m  (sensor range limits -- 5 m max
+        range, unusable this close to the noise floor near the top), OR
+      - a random dropout event occurs (bank angle / wind sensitive in reality).
+
+    Only ever valid on final approach / flare, not as a continuous in-flight
+    AGL floor -- see as-built electronics notes.
 
     Args:
         true_agl     : true vertical AGL (m) = -state[2] when on flat terrain
@@ -153,12 +161,12 @@ def _lidar_noise(
             valid  : bool; True when the reading can be trusted
     """
     h_corrected = true_agl * np.cos(roll) * np.cos(pitch)
-    in_range    = 0.2 < h_corrected < 40.0
+    in_range    = 0.2 < h_corrected < 4.5
     not_dropout = rng.random() > dropout_prob
     valid       = bool(in_range and not_dropout)
     if not valid:
         return 0.0, False
-    return float(h_corrected + rng.normal(0.0, 0.05 * noise_scale)), True
+    return float(h_corrected + rng.normal(0.0, 0.08 * noise_scale)), True
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +196,7 @@ class SensorSuite:
     _GPS_PERIOD   = PHYS_HZ // GPS_HZ    # 40
     _IMU_PERIOD   = PHYS_HZ // IMU_HZ    # 1
     _BARO_PERIOD  = PHYS_HZ // BARO_HZ   # 8
-    _LIDAR_PERIOD = PHYS_HZ // LIDAR_HZ  # 4
+    _LIDAR_PERIOD = PHYS_HZ // LIDAR_HZ  # 10
 
     def __init__(self) -> None:
         # Initialise with safe zero defaults; always call reset() before use.
@@ -281,7 +289,7 @@ class SensorSuite:
             self._baro_ctr = self._BARO_PERIOD
         self._baro_ctr -= 1
 
-        # LiDAR (50 Hz: refresh every 4 physics steps)
+        # Ultrasonic (20 Hz: refresh every 10 physics steps)
         if self._lidar_ctr <= 0:
             self._refresh_lidar(state, rng)
             self._lidar_ctr = self._LIDAR_PERIOD

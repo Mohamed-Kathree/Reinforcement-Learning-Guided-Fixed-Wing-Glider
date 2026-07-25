@@ -148,12 +148,15 @@ activemq-data/
 *.sage.py
 
 # Environments
+# NOTE: bare "env/"/"ENV/" are intentionally NOT ignored here — this
+# project's Gymnasium environment package lives at ./env/ (glider_env.py,
+# reward.py, curriculum.py), and git on Windows matches gitignore patterns
+# case-insensitively (core.ignorecase=true), so "ENV/" would also hide it.
+# The virtualenv used for this project is ./venv/.
 .env
 .envrc
 .venv
-env/
 venv/
-ENV/
 env.bak/
 venv.bak/
 
