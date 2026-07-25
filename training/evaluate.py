@@ -73,20 +73,27 @@ class Policy(Protocol):
 # Environment helpers
 # ---------------------------------------------------------------------------
 
+_LAUNCH_KEY_MAP = {
+    'speed_min_ms':  'launch_speed_min_ms',
+    'speed_max_ms':  'launch_speed_max_ms',
+    'pitch_min_deg': 'launch_pitch_min_deg',
+    'pitch_max_deg': 'launch_pitch_max_deg',
+}
+
+
 def _build_eval_env(cfg: dict, stage_idx: int) -> GliderEnv:
     """Return a plain (un-vectorised) GliderEnv at the given curriculum stage."""
     stage_cfg = dict(STAGES[stage_idx])
     reward_cfg = dict(DEFAULT_REWARD_CFG)
     reward_cfg.update(cfg.get('reward', {}))
-    # launch.speed_ms/angle_deg are hardware constants, not curriculum-varied
-    # (see train.flat_env_cfg for the same mapping) -- alt0_m/jitter are NOT
-    # pulled from here since stage_cfg (below) already carries the correct
-    # per-stage values.
+    # launch.speed_{min,max}_ms / pitch_{min,max}_deg are a fixed hardware
+    # uncertainty, not curriculum-varied (see train.flat_env_cfg for the same
+    # mapping) -- alt0_m is NOT pulled from here since stage_cfg (below)
+    # already carries the correct per-stage value.
     launch = cfg.get('launch', {})
-    if 'speed_ms' in launch:
-        reward_cfg['launch_speed_ms'] = launch['speed_ms']
-    if 'angle_deg' in launch:
-        reward_cfg['launch_angle_deg'] = launch['angle_deg']
+    for yaml_key, cfg_key in _LAUNCH_KEY_MAP.items():
+        if yaml_key in launch:
+            reward_cfg[cfg_key] = launch[yaml_key]
     reward_cfg.update(stage_cfg)
     return GliderEnv(cfg=reward_cfg)
 

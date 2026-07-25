@@ -106,23 +106,32 @@ def apply_overrides(cfg: dict, overrides: list[str]) -> dict:
     return cfg
 
 
+_LAUNCH_KEY_MAP = {
+    'speed_min_ms':  'launch_speed_min_ms',
+    'speed_max_ms':  'launch_speed_max_ms',
+    'pitch_min_deg': 'launch_pitch_min_deg',
+    'pitch_max_deg': 'launch_pitch_max_deg',
+}
+
+
 def flat_env_cfg(cfg: dict) -> dict:
     """Flatten the reward + launch config sections into one dict for GliderEnv.
 
-    Only launch.speed_ms/angle_deg are pulled in here (renamed to the
-    launch_speed_ms/launch_angle_deg keys GliderEnv reads) -- they are hardware
-    constants that don't vary per curriculum stage. launch.alt0_m/jitter are
-    deliberately NOT included: those are curriculum-stage-dependent and are
-    applied via set_stage() (see train(), which applies STAGES[0] immediately
-    after building the environments, then CurriculumCallback applies later
-    stages as training progresses).
+    Only launch.speed_{min,max}_ms / launch.pitch_{min,max}_deg are pulled in
+    here (renamed to the launch_speed_min_ms/etc. keys GliderEnv reads) --
+    they represent a fixed hardware uncertainty (the not-yet-built ESP32
+    apex-detection firmware's unknown hand-off energy state), not something
+    curriculum-stage-dependent. launch.alt0_m is deliberately NOT included:
+    that IS curriculum-stage-dependent and is applied via set_stage() (see
+    train(), which applies STAGES[0] immediately after building the
+    environments, then CurriculumCallback applies later stages as training
+    progresses).
     """
     flat = dict(cfg['reward'])
     launch = cfg.get('launch', {})
-    if 'speed_ms' in launch:
-        flat['launch_speed_ms'] = launch['speed_ms']
-    if 'angle_deg' in launch:
-        flat['launch_angle_deg'] = launch['angle_deg']
+    for yaml_key, cfg_key in _LAUNCH_KEY_MAP.items():
+        if yaml_key in launch:
+            flat[cfg_key] = launch[yaml_key]
     return flat
 
 

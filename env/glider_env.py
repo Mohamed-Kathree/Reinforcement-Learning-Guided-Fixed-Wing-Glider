@@ -92,10 +92,23 @@ BANK_CMD_SCALE_RAD:  float = np.radians(45.0)   # ±45° bank
 SPEED_CMD_CENTRE_MS: float = 9.0
 SPEED_CMD_SCALE_MS:  float = 4.0                # range 5–13 m/s
 
-# Launch parameters (fallback defaults; overridable via cfg['launch_speed_ms'] /
-# cfg['launch_angle_deg'] -- see training/configs/base.yaml launch.speed_ms/angle_deg)
-LAUNCH_SPEED_MS:  float = 15.0
-LAUNCH_ANGLE_DEG: float = 15.0     # nose-up (positive pitch)
+# Launch state randomisation (fallback defaults; overridable via cfg -- see
+# training/configs/base.yaml launch.speed_{min,max}_ms / pitch_{min,max}_deg).
+#
+# The episode start represents whatever energy state the (not-yet-built)
+# ESP32 apex-detection firmware hands control over at. Since that firmware
+# doesn't exist yet, the real hand-off state is unknown -- it could be close
+# to a true apex (near-level pitch, ~trim speed) or closer to the original
+# sim assumption of releasing near launch speed while still pitched up. This
+# range is deliberately wide to cover both ends rather than betting on one:
+# training on a single fixed start risks an out-of-distribution hand-off
+# state once real apex-detection is characterised, whereas this costs
+# nothing now (it's the same domain-randomisation strategy already used for
+# wind/sensors, just applied to the initial condition instead of the dynamics).
+LAUNCH_SPEED_MIN_MS: float = 8.0
+LAUNCH_SPEED_MAX_MS: float = 15.0
+LAUNCH_PITCH_MIN_DEG: float = 0.0
+LAUNCH_PITCH_MAX_DEG: float = 15.0     # nose-up (positive pitch)
 
 
 # ---------------------------------------------------------------------------
@@ -182,8 +195,12 @@ class GliderEnv(gym.Env):
     Args:
         cfg : dict of overrides merged into DEFAULT_REWARD_CFG. Also accepts
               curriculum stage keys (wind_speed, gust_intensity, sensor_noise,
-              dropout_prob, R_home_m, alt0_m, launch_jitter, aero_scale_range,
-              mass_range) — these are applied at each reset().
+              dropout_prob, R_home_m, alt0_m, launch_offset_min_m,
+              launch_offset_max_m, aero_scale_range, mass_range) — these are
+              applied at each reset(). launch_speed_min_ms/max_ms and
+              launch_pitch_min_deg/max_deg are accepted too but are NOT
+              curriculum-stage-dependent (same range at every stage; see
+              env/curriculum.py's module docstring).
         seed: passed to reset() if provided at construction time.
     """
 
@@ -460,13 +477,18 @@ class GliderEnv(gym.Env):
         peak, not at ground level (the ~2-3 s zoom-climb transient itself is
         out of scope for the RTL task).
         """
-        jitter      = float(self.cfg.get('launch_jitter', 0.0))
-        alt0        = float(self.cfg.get('alt0_m', 22.0))
-        speed_ms    = float(self.cfg.get('launch_speed_ms', LAUNCH_SPEED_MS))
-        angle_deg   = float(self.cfg.get('launch_angle_deg', LAUNCH_ANGLE_DEG))
+        alt0 = float(self.cfg.get('alt0_m', 22.0))
 
-        V0    = speed_ms * (1.0 + self._rng.uniform(-jitter, jitter))
-        gamma = np.radians(angle_deg)
+        # Launch speed/pitch are randomised per episode across the plausible
+        # range of real apex-hand-off states (see LAUNCH_SPEED_MIN_MS etc.
+        # above) -- not just a small jitter around one nominal release state.
+        speed_lo = float(self.cfg.get('launch_speed_min_ms', LAUNCH_SPEED_MIN_MS))
+        speed_hi = float(self.cfg.get('launch_speed_max_ms', LAUNCH_SPEED_MAX_MS))
+        pitch_lo = float(self.cfg.get('launch_pitch_min_deg', LAUNCH_PITCH_MIN_DEG))
+        pitch_hi = float(self.cfg.get('launch_pitch_max_deg', LAUNCH_PITCH_MAX_DEG))
+
+        V0    = self._rng.uniform(speed_lo, speed_hi)
+        gamma = np.radians(self._rng.uniform(pitch_lo, pitch_hi))
         psi   = self._rng.uniform(0.0, 2.0 * np.pi)   # random heading
 
         # Random horizontal offset ensures dist_home > R_home_m at step 0,

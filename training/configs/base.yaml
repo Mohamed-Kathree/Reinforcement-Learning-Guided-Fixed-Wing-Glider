@@ -14,9 +14,11 @@
 #                   (env/reward.py DEFAULT_REWARD_CFG is the fallback used
 #                   when GliderEnv is constructed without an explicit cfg,
 #                   e.g. in tests/scratch scripts)
-#   launch.speed_ms / launch.angle_deg
-#                -- same flat_env_cfg()/_build_eval_env() path; hardware
-#                   constants, not curriculum-stage-dependent
+#   launch.speed_min_ms / speed_max_ms / pitch_min_deg / pitch_max_deg
+#                -- same flat_env_cfg()/_build_eval_env() path; per-episode
+#                   randomisation range for the (unknown) real apex-hand-off
+#                   energy state -- a fixed hardware uncertainty, not
+#                   curriculum-stage-dependent (same range at every stage)
 #   ppo:         -- training/train.py train()
 #   eval:        -- training/train.py train() (EvalCallback), training/evaluate.py
 #   curriculum:  -- training/train.py train() -> CurriculumScheduler
@@ -31,11 +33,11 @@
 #                   constants together, not a safe single cfg override.
 #   glider:      -- aircraft/rlglider/rlglider.xml (JSBSim owns mass, inertia,
 #                   aerodynamics, actuator dynamics)
-#   launch.alt0_m / launch.jitter
-#                -- these ARE curriculum-stage-dependent; the real per-stage
+#   launch.alt0_m
+#                -- this IS curriculum-stage-dependent; the real per-stage
 #                   values live in env/curriculum.py STAGES, applied via
-#                   env.set_stage(). The values here are just Stage-0-ish
-#                   nominal defaults for eyeballing.
+#                   env.set_stage(). The value here is just a Stage-0-ish
+#                   nominal default for eyeballing.
 #   domain_rand: -- per-stage aero_scale_range now lives in env/curriculum.py
 #                   STAGES (superseding this flat section); cl_mult and
 #                   ctrl_eff_mult ranges are hardcoded in
@@ -74,12 +76,22 @@ glider:
 # alt0_m reflects the as-built hardware: hand/ground-launched, not a tow
 # release. Realistic peak altitude after the launch zoom-climb is ~15-25 m
 # (see as-built electronics notes).
+#
+# speed_*_ms / pitch_*_deg are randomised PER EPISODE across this full range
+# (not jittered around one nominal value) to cover the plausible energy
+# states the not-yet-built ESP32 apex-detection firmware might hand control
+# over at -- anywhere from a true apex (near-level, ~trim speed) to the
+# original release-state assumption (nose-up, near launch speed). Same value
+# at every curriculum stage on purpose: this is a fixed hardware uncertainty
+# to be robust to, not something that should get easier/harder with
+# curriculum progress the way wind/noise/R_home do.
 # ---------------------------------------------------------------------------
 launch:
-  speed_ms:   15.0        # initial airspeed at hand-launch (m/s) -- LIVE (flat_env_cfg)
-  angle_deg:  15.0        # nose-up launch angle (deg)            -- LIVE (flat_env_cfg)
-  alt0_m:     22.0        # REFERENCE ONLY -- real per-stage values are env/curriculum.py STAGES
-  jitter:     0.0         # REFERENCE ONLY -- real per-stage values are env/curriculum.py STAGES
+  speed_min_ms:  8.0       # m/s -- LIVE (flat_env_cfg)
+  speed_max_ms:  15.0      # m/s -- LIVE (flat_env_cfg)
+  pitch_min_deg: 0.0       # deg, nose-up -- LIVE (flat_env_cfg)
+  pitch_max_deg: 15.0      # deg, nose-up -- LIVE (flat_env_cfg)
+  alt0_m:        22.0      # REFERENCE ONLY -- real per-stage values are env/curriculum.py STAGES
 
 # ---------------------------------------------------------------------------
 # Reward weights  (mirrors DEFAULT_REWARD_CFG in env/reward.py)

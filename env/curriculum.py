@@ -24,6 +24,21 @@ Launch altitude and horizontal offset (as-built hardware notes):
     R_home_m is widened versus the original design to account for the
     NEO-6M GPS's ~2.5 m CEP (vs the ~1.5 m originally assumed).
 
+Launch speed/pitch randomisation (deliberately NOT a per-stage key here):
+    Launch speed and pitch are randomised per episode across a wide range
+    (see LAUNCH_SPEED_MIN_MS etc. in env/glider_env.py, or launch.speed_*_ms
+    / launch.pitch_*_deg in training/configs/base.yaml) to cover the range of
+    energy states the not-yet-built ESP32 apex-detection firmware might hand
+    control over at -- a true apex (near-level, ~trim speed) vs. something
+    closer to the original release-state assumption (nose-up, near launch
+    speed). Unlike wind/noise/R_home/altitude, this does NOT vary by stage:
+    it represents a fixed hardware uncertainty to be robust to at every
+    difficulty level, not something that gets easier/harder with curriculum
+    progress. It replaces the old flat `launch_jitter` scalar (a small
+    multiplicative jitter around one fixed release-state value), which
+    covered a much narrower and less realistic range and has been removed
+    from STAGES.
+
 Advance rule (CLAUDE.md Section 15):
     advance_threshold = 0.80  (80 % success rate)
     rolling_window    = 100   episodes
@@ -70,7 +85,6 @@ STAGES: list[dict] = [
         alt0_m              = 25.0,
         launch_offset_min_m = 50.0,
         launch_offset_max_m = 90.0,
-        launch_jitter       = 0.0,
         aero_scale_range    = (1.0,  1.0),
         mass_range          = (1.1,  1.1),
     ),
@@ -84,7 +98,6 @@ STAGES: list[dict] = [
         alt0_m              = 23.0,
         launch_offset_min_m = 45.0,
         launch_offset_max_m = 80.0,
-        launch_jitter       = 0.1,
         aero_scale_range    = (0.9,  1.1),
         mass_range          = (1.0,  1.2),
     ),
@@ -98,7 +111,6 @@ STAGES: list[dict] = [
         alt0_m              = 21.0,
         launch_offset_min_m = 40.0,
         launch_offset_max_m = 70.0,
-        launch_jitter       = 0.2,
         aero_scale_range    = (0.85, 1.15),
         mass_range          = (0.9,  1.3),
     ),
@@ -112,7 +124,6 @@ STAGES: list[dict] = [
         alt0_m              = 20.0,
         launch_offset_min_m = 40.0,
         launch_offset_max_m = 70.0,
-        launch_jitter       = 0.3,
         aero_scale_range    = (0.8,  1.2),
         mass_range          = (0.85, 1.35),
     ),
