@@ -20,7 +20,7 @@ Each env.step() call:
        c. Safety shield clips servo commands
        d. JSBSimFDM applies actuator lag/rate limits and integrates one step
        e. SensorSuite refreshes sensor buffers
-    3. Build 11-element observation from sensor readings
+    3. Build 12-element observation from sensor readings
     4. Call compute_reward() for reward + termination flags
     5. Return (obs, reward, terminated, truncated, info)
 
@@ -80,12 +80,17 @@ ALPHA_TRIM: float = np.radians(2.5)  # reduced from 4.8°: JSBSim trims lower; 4
 
 # Safety shield thresholds
 SHIELD_MAX_BANK_RAD:    float = np.radians(45.0)   # increased from 40°: gives headroom during nominal ±30° command
-# Landing flare trigger, not a continuous in-flight AGL floor: the only
-# ground-proximity sensor on the hardware is a short-range ultrasonic
-# (RCWL-1655, valid <4.5 m -- see sim/sensor_models.py), so this can only
-# ever fire in the last couple of seconds before touchdown.
-SHIELD_MIN_AGL_M:       float = 2.5
-SHIELD_PULLUP_ELEV_RAD: float = np.radians(5.0)
+# NOTE: the open-loop landing-flare pull-up (fixed nose-up elevator below
+# SHIELD_MIN_AGL_M) that used to live here was DELETED in the Phase 4
+# precision-landing redefinition. Measurement (RLGlider_Phase4_Landing_Task_
+# Spec.md §0.2) showed this fixed pull-up, applied at whatever speed the
+# aircraft happened to be doing, was what caused stalled touchdowns (26-28 deg
+# alpha, 3+ m/s sink) in 4/5 tested speed commands -- with the shield removed,
+# the same conditions land clean (0.4-0.8 m/s sink, 4-8.5 deg alpha) because
+# the aircraft's own trimmed glide already flares reasonably on its own. The
+# policy (or, for the baseline, DeterministicRTL's own closed-loop flare —
+# see baseline/deterministic_rtl.py) now owns the flare entirely, using
+# obs[9]/obs[10] (ultrasonic AGL/validity) same as before.
 # Stall-margin proxy: a nose-up PITCH ATTITUDE ceiling, not a true angle-of-
 # attack limit. The physical ESP32 has no AoA vane/pitot (see as-built
 # electronics notes) so the shield -- which mirrors ESP32 firmware -- must
@@ -250,15 +255,21 @@ class AttitudeController:
 # ---------------------------------------------------------------------------
 
 class GliderEnv(gym.Env):
-    """Gymnasium environment for the RL-guided fixed-wing glider RTL task.
+    """Gymnasium environment for the RL-guided fixed-wing glider precision-
+    landing task (Phase 4 redefinition -- see RLGlider_Phase4_Landing_Task_
+    Spec.md; supersedes the earlier "cross R_home_m and stop" RTL task).
 
-    Observation space : Box(11,) float32 — see CLAUDE.md Section 10.2
+    Observation space : Box(12,) float32 — see _build_obs()'s index contract
     Action space      : Box(2,)  float32 — normalised [bank_cmd, speed_cmd]
 
     Episode ends when:
-        - Glider reaches home (dist < R_home_m) -> success, terminated=True
-        - Ground impact (state[2] > 0)          -> crash,   terminated=True
-        - Step limit (MAX_STEPS)                -> truncated=True
+        - Ground contact (touched_down) or JSBSim solver fault -> terminated=True.
+          compute_reward() grades the touchdown quality continuously (see
+          env/reward.py); info['success'] / info['crash'] reflect that grade,
+          not a radius check -- R_home_m is now a precision-scoring parameter
+          only, it no longer terminates the episode by itself.
+        - Step limit (MAX_STEPS) without touchdown -> truncated=True (penalised,
+          see step()'s truncation backstop).
 
     Args:
         cfg : dict of overrides merged into DEFAULT_REWARD_CFG. Also accepts
@@ -293,7 +304,7 @@ class GliderEnv(gym.Env):
         self.observation_space = spaces.Box(
             low   = -np.inf,
             high  =  np.inf,
-            shape = (11,),
+            shape = (12,),
             dtype = np.float32,
         )
         self.action_space = spaces.Box(
@@ -315,7 +326,11 @@ class GliderEnv(gym.Env):
         self._home_ned: npt.NDArray   = np.zeros(3, dtype=np.float64)
 
         # Cached last observation (built in _build_obs; exposed for reward fn)
-        self._last_obs: npt.NDArray = np.zeros(11, dtype=np.float32)
+        self._last_obs: npt.NDArray = np.zeros(12, dtype=np.float32)
+
+        # Cumulative ground-track distance flown this episode (m); diagnostic
+        # only (info['track_length']), not read by the reward function itself.
+        self._track_length_m: float = 0.0
 
         # Observation/action transport-delay state (sampled per episode in
         # reset(); see OBS_DELAY_MAX_STEPS / ACTION_DELAY_*_SUBSTEPS above).
@@ -366,7 +381,18 @@ class GliderEnv(gym.Env):
         # routinely once there's any wind at all (mechanical turbulence off
         # terrain/obstacles, or thermal activity). NED convention: positive
         # wd = downdraft.
-        vertical_wind_ms = float(self._rng.uniform(-0.3, 0.3)) * wind_speed
+        #
+        # Clipped to +/-0.25 m/s (below the ~0.39 m/s measured minimum sink,
+        # see RLGlider_Phase4_Landing_Task_Spec.md §0.3): a SUSTAINED updraft
+        # anywhere near or above min-sink is a permanent thermal the glider
+        # can never descend out of. Harmless under the old radius-crossing
+        # task, but under the Phase 4 path-length reward this is free,
+        # unbounded score that PPO would find -- capping it below min-sink
+        # closes the exploit while leaving the (zero-mean, bounded-energy) OU
+        # gust channel as the sole source of vertical turbulence energy.
+        vertical_wind_ms = float(np.clip(
+            self._rng.uniform(-0.3, 0.3) * wind_speed, -0.25, 0.25
+        ))
         mean_ned   = np.array([
             wind_speed * np.cos(wind_dir),
             wind_speed * np.sin(wind_dir),
@@ -399,10 +425,10 @@ class GliderEnv(gym.Env):
         )
 
         # Episode bookkeeping
-        self._step_count    = 0
-        self._prev_state    = self._fdm.state.copy()
-        self._prev_action   = np.zeros(2, dtype=np.float32)
-        self._has_left_home = False   # must move > R_home_m away before success counts
+        self._step_count      = 0
+        self._prev_state      = self._fdm.state.copy()
+        self._prev_action     = np.zeros(2, dtype=np.float32)
+        self._track_length_m  = 0.0
 
         # Sample this episode's fixed transport delays (held constant for the
         # whole episode, not resampled every step -- real transport latency
@@ -433,9 +459,9 @@ class GliderEnv(gym.Env):
             action : normalised [bank_cmd, speed_cmd] ∈ [-1, 1]²
 
         Returns:
-            obs        : 11-element float32 observation
+            obs        : 12-element float32 observation
             reward     : scalar shaped reward
-            terminated : True when the episode ends (success or crash)
+            terminated : True when the episode ends (touchdown or fault)
             truncated  : True when the step limit is reached
             info       : per-component reward breakdown + diagnostics
         """
@@ -506,7 +532,18 @@ class GliderEnv(gym.Env):
         obs = self._obs_buffer.popleft()
         self._last_obs = obs.copy()
 
+        # Ground-track distance flown this step (diagnostic; info['track_length']).
+        self._track_length_m += float(np.linalg.norm(
+            self._fdm.state[0:2] - prev_state[0:2]
+        ))
+
         # --- Reward + termination ----------------------------------------
+        # touched_down / fault are read now (right after the substep loop,
+        # before compute_reward) and passed IN rather than checked post-hoc --
+        # compute_reward() is the single owner of terminal-outcome logic
+        # (graded landing quality on touchdown, forced worst-case on a solver
+        # fault). See env/reward.py's module docstring for the full terminal
+        # design (Phase 4 precision-landing redefinition).
         reward, terminated, truncated_r, info = compute_reward(
             state         = self._fdm.state,
             prev_state    = prev_state,
@@ -517,34 +554,18 @@ class GliderEnv(gym.Env):
             cfg           = self.cfg,
             alpha_true    = self._fdm.alpha,
             airspeed_true = self._fdm.airspeed,
+            touched_down  = self._fdm.touched_down,
+            fault         = self._fdm.fault,
         )
+        info['track_length'] = self._track_length_m
 
-        # Ground contact (touched_down) or JSBSim solver/state failure (fault):
-        # treat as an immediate crash, taking priority over success -- mirrors
-        # the "crash checked first" rule in compute_reward's own state[2]>0
-        # branch -- so a landing/fault event is never silently left counted
-        # as neither success nor crash.
-        if self._fdm.fault or self._fdm.touched_down:
-            if not info['crash']:
-                reward -= float(self.cfg.get('w_crash', DEFAULT_REWARD_CFG['w_crash']))
-                info['crash']   = True
-                info['success'] = False
-            terminated = True
-
-        # Track whether the glider has flown outside R_home_m; success is
-        # only valid after the glider has genuinely departed from the launch
-        # point — prevents step-0 false success when dist_home_2D == 0.
-        r_home = float(self.cfg.get('R_home_m', DEFAULT_REWARD_CFG['R_home_m']))
-        if info['dist_home'] > r_home:
-            self._has_left_home = True
-        if info['success'] and not self._has_left_home:
-            reward  -= float(self.cfg.get('w_terminal', DEFAULT_REWARD_CFG['w_terminal']))
-            terminated = False
-            info['success'] = False
-
-        # Step-limit truncation (handled here, not in reward)
+        # Step-limit truncation (handled here, not in reward). Penalised as a
+        # backstop -- never-landing must be strictly dominated by landing
+        # badly, so PPO can't prefer running out the clock over touching down.
         self._step_count += 1
         truncated = truncated_r or (self._step_count >= MAX_STEPS)
+        if truncated and not terminated:
+            reward -= float(self.cfg.get('w_truncate', DEFAULT_REWARD_CFG['w_truncate']))
 
         # Update previous step cache
         self._prev_state  = self._fdm.state.copy()
@@ -657,9 +678,9 @@ class GliderEnv(gym.Env):
         )
 
     def _build_obs(self) -> npt.NDArray:
-        """Build the 11-element float32 observation from sensor readings.
+        """Build the 12-element float32 observation from sensor readings.
 
-        Index contract (CLAUDE.md Section 10.2):
+        Index contract:
             [0]  dx_home        m        (GPS North - home North)
             [1]  dy_home        m        (GPS East  - home East)
             [2]  ground_speed   m/s
@@ -671,12 +692,22 @@ class GliderEnv(gym.Env):
             [8]  vertical_speed m/s      (GPS vd, positive down -> negated for obs)
             [9]  lidar_agl      m         (ultrasonic; 0 unless <4.5 m, flare-only)
             [10] lidar_valid    binary    (ultrasonic)
+            [11] req_glide_ratio unitless (dist_home / baro_alt, normalised /15)
 
         No airspeed channel: the hardware has no pitot (see as-built
         electronics notes). An earlier revision fed obs[11] from JSBSim's
         ground-truth wind-relative airspeed -- a sim-to-real leak, since no
         real sensor on this airframe can measure that. obs[2] (GPS ground
         speed) is the closest real signal and is kept as-is.
+
+        obs[11] (added for the Phase 4 precision-landing task): the glide
+        ratio the glider would need to sustain to reach home from its current
+        sensed position/altitude, normalised by /15 so it's O(1) across the
+        curriculum. This is exactly the quantity env/reward.py's reachability
+        barrier (w_unreach) penalises, computed here from noisy GPS/baro
+        rather than ground truth so the policy has a direct observed input
+        for the constraint instead of having to infer it from 3 separate
+        noisy channels (dx_home, dy_home, baro_alt) itself.
         """
         gps_pos = self._sensors.gps_pos   # [pn, pe, pd]
         gps_vel = self._sensors.gps_vel   # [vn, ve, vd]
@@ -690,6 +721,10 @@ class GliderEnv(gym.Env):
         course_angle  = float(np.arctan2(ve, vn))
         vertical_speed = -vd   # positive = climbing (negate NED down component)
 
+        baro_alt = float(self._sensors.baro_alt)
+        dist_home_sensed  = float(np.hypot(dx_home, dy_home))
+        req_glide_ratio   = dist_home_sensed / max(baro_alt, 1.0) / 15.0
+
         obs = np.array([
             dx_home,
             dy_home,
@@ -698,10 +733,11 @@ class GliderEnv(gym.Env):
             float(euler[0]),              # roll
             float(euler[1]),              # pitch
             float(euler[2]),              # yaw
-            float(self._sensors.baro_alt),
+            baro_alt,
             vertical_speed,
             float(self._sensors.lidar_agl),
             float(self._sensors.lidar_valid),
+            req_glide_ratio,
         ], dtype=np.float32)
 
         return obs
@@ -715,9 +751,6 @@ class GliderEnv(gym.Env):
         """Clip servo commands to enforce hard safety limits.
 
         Hard bank limit: if |roll| > 50°, zero the aileron (flatten).
-        Landing flare:   if ultrasonic valid and AGL < 2.5 m, force elevator up.
-                         Only ever active in the last couple of seconds before
-                         touchdown -- the ultrasonic is invalid above 4.5 m.
         Stall margin:    if pitch attitude exceeds a bank-derated ceiling,
                          prevent further pitch-up. Uses PITCH (IMU-measurable),
                          not true angle-of-attack -- the physical ESP32 has no
@@ -740,14 +773,6 @@ class GliderEnv(gym.Env):
         if abs(roll) > SHIELD_MAX_BANK_RAD:
             recovery_cmd = KP_ROLL * (0.0 - roll) - KD_ROLL * p_rate
             cmds['aileron'] = float(np.clip(recovery_cmd, -np.radians(25), np.radians(25)))
-
-        # Landing flare: force nose-UP (negative elevator, since Cm_de=-1.2
-        # means positive elevator=nose-down) to arrest sink rate just before
-        # touchdown.
-        if self._sensors.lidar_valid and self._sensors.lidar_agl < SHIELD_MIN_AGL_M:
-            cmds['elevator'] = min(
-                float(cmds['elevator']), -SHIELD_PULLUP_ELEV_RAD
-            )
 
         # Stall margin: block nose-UP elevator (negative) once pitch attitude
         # exceeds a ceiling that derates with bank (a banked turn needs more

@@ -269,8 +269,12 @@ def plot_timeseries(trajectories: list[Trajectory], fig: plt.Figure) -> None:
     ax_alt.set_title('Altitude')
     ax_alt.set_xlabel('Time (s)')
     ax_alt.set_ylabel('Alt AGL (m)')
-    ax_alt.axhline(DEFAULT_REWARD_CFG['agl_min'], color='red',
-                   linestyle='--', linewidth=0.8, label=f"agl_min={DEFAULT_REWARD_CFG['agl_min']:.0f} m")
+    # Ultrasonic validity gate (sim/sensor_models.py: valid only in [0.2, 4.5] m)
+    # -- no longer a reward-penalised "agl_min" threshold since Phase 4
+    # deleted the open-loop flare shield and the AGL reward penalty; this
+    # line just marks where the flare-relevant sensor starts reporting.
+    ax_alt.axhline(4.5, color='red', linestyle='--', linewidth=0.8,
+                   label="ultrasonic valid <4.5 m")
     ax_alt.grid(True, alpha=0.3)
     for traj in trajectories:
         ax_alt.plot(traj.time, traj.alt, color=traj.color,

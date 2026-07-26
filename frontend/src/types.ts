@@ -40,7 +40,13 @@ export interface TestRunResult {
 // ---------------------------------------------------------------------------
 
 export type Controller = "baseline" | "rl";
-export type Outcome = "success" | "crash" | "timeout";
+
+// "soft_landing" reflects the Phase 4 precision-landing task (env/reward.py):
+// dist_home < R_home no longer ends the episode by itself, and most episodes
+// that don't hit the strict "success" bar (quality > 0.5 and centred) still
+// land cleanly, just off-centre -- they are NOT timeouts. "timeout" means
+// what it says: truncated without ever touching down.
+export type Outcome = "success" | "soft_landing" | "crash" | "timeout";
 
 export interface TrajectoryMeta {
   stage: number;
@@ -51,6 +57,8 @@ export interface TrajectoryMeta {
   seed: number;
   n_frames: number;
   duration_s: number;
+  quality: number;           // landing-quality grade [0,1]; 0 for a real timeout
+  final_dist_home: number;   // dist_home (m) at the final frame
 }
 
 export interface ControlSurfaces {
@@ -83,15 +91,18 @@ export interface Trajectory {
 export interface EpisodeSummary {
   episode_id: string;
   outcome: Outcome;
+  quality: number;
 }
 
 export interface StageBaselineResult {
   stage: number;
   n_episodes: number;
   n_success: number;
+  n_soft_landing: number;
   n_crash: number;
   n_timeout: number;
   success_rate: number;
+  mean_quality: number;
   episodes: EpisodeSummary[];
 }
 

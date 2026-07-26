@@ -28,15 +28,23 @@ def run_baseline(n_episodes: int = 20, seed_base: int = 0) -> BaselineRunResult:
     stage_results: list[StageBaselineResult] = []
 
     for stage in range(N_STAGES):
-        n_success = n_crash = n_timeout = 0
+        n_success = n_soft_landing = n_crash = n_timeout = 0
+        qualities: list[float] = []
         episodes: list[EpisodeSummary] = []
 
         for i in range(n_episodes):
             seed = seed_base + stage * 10_000 + i
             traj = recorder.record_episode(controller="baseline", stage=stage, seed=seed)
-            episodes.append(EpisodeSummary(episode_id=traj.episode_id, outcome=traj.meta.outcome))
+            episodes.append(EpisodeSummary(
+                episode_id=traj.episode_id,
+                outcome=traj.meta.outcome,
+                quality=traj.meta.quality,
+            ))
+            qualities.append(traj.meta.quality)
             if traj.meta.outcome == "success":
                 n_success += 1
+            elif traj.meta.outcome == "soft_landing":
+                n_soft_landing += 1
             elif traj.meta.outcome == "crash":
                 n_crash += 1
             else:
@@ -46,9 +54,11 @@ def run_baseline(n_episodes: int = 20, seed_base: int = 0) -> BaselineRunResult:
             stage=stage,
             n_episodes=n_episodes,
             n_success=n_success,
+            n_soft_landing=n_soft_landing,
             n_crash=n_crash,
             n_timeout=n_timeout,
             success_rate=n_success / n_episodes,
+            mean_quality=sum(qualities) / n_episodes,
             episodes=episodes,
         ))
 

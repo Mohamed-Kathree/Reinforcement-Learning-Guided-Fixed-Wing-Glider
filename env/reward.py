@@ -3,27 +3,48 @@ reward.py
 =========
 Part of: RL-Guided Return-to-Launch Fixed-Wing Glider
 
-Shaped reward function for the RL-guided glider return-to-launch task.
+Shaped reward function for the Phase 4 precision-landing task (see
+RLGlider_Phase4_Landing_Task_Spec.md; supersedes the earlier "cross R_home_m
+and stop" RTL task). The glider must actually LAND at the launch point, as
+close to centre as possible, while flying the longest route it can.
 
-Structure (applied every policy step at 20 Hz):
-    Dense rewards  : progress toward home, airtime bonus
-    Safety penalties: landing-flare AGL (ultrasonic-gated, only <4.5 m --
-                      NOT a continuous in-flight floor, see as-built notes),
-                      near-stall alpha, excess bank
-    Smoothness      : L2 penalty on action change
-    Terminal events : large bonus on reaching home, penalty on ground impact
+Structure -- lexicographic (land safely >> land centred >> fly long), because
+a plain weighted sum lets the optimiser trade a hard landing for a longer
+track, which is exactly the failure mode to avoid:
 
-Returns a 4-tuple (r, terminated, truncated, info) where info contains
-per-component breakdowns and violation flags for TensorBoard logging.
+    Terminal (on touchdown/fault only):
+        r_terminal = quality * (r_precision + r_bullseye) - (1-quality) * w_crash
+        where quality in [0,1] is the PRODUCT of four graded landing-quality
+        factors (sink rate, roll, airspeed, alpha at touchdown) -- the
+        multiplicative form means precision credit is always scaled by how
+        clean the touchdown was, so 2 m closer at the cost of a worse
+        touchdown can never win.
+    Dense (every step):
+        r_path     : reward per metre of ACTUAL ground track flown (replaces
+                     the old airtime bonus, which rewarded loitering in place
+                     rather than route length)
+        w_unreach  : one-sided barrier, zero during normal flight, penalising
+                     only once the glider has flown itself out of glide range
+                     of home (replaces the old progress-toward-home term,
+                     which directly opposed "take the longest route")
+        w_stall / w_bank / w_smooth : unchanged safety/regularisation terms
 
-Default weights come from training/configs/base.yaml (reproduced in
-DEFAULT_REWARD_CFG below). Override any key in the cfg dict passed to
-compute_reward() to tune the shaping.
+Deleted vs. the pre-Phase-4 version: w_progress (opposed the new objective),
+w_airtime (rewarded loitering, double-counted against r_path), w_agl /
+agl_min (penalised being below the flare altitude, which under the new task
+is a MANDATORY part of every successful landing -- the open-loop shield that
+used to enforce this was also deleted, see env/glider_env.py::_safety_shield).
+
+Termination: `dist_home < R_home_m` no longer ends the episode -- R_home_m is
+now purely a precision-scoring parameter (curriculum-scaled via
+`sigma_centre_m`). The episode ends only on ground contact (`touched_down`,
+passed in from JSBSimFDM.touched_down via GliderEnv.step()) or a JSBSim
+solver/state fault (`fault`, from JSBSimFDM.fault) -- or the legacy
+`state[2] > 0.0` raw-position check as a backstop in case the contact model
+ever misses the WOW transition.
 
 Observation vector index contract (must match env/glider_env.py):
     obs[4]  : roll           (rad)
-    obs[9]  : lidar_agl      (m,   0 when invalid)
-    obs[10] : lidar_valid    (0 or 1)
 
 Coordinate frames used:
     NED : North-East-Down inertial frame (world)
@@ -41,38 +62,69 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
+from sim.math_utils import quat_to_rotmat, euler_from_quat
+
 
 # ---------------------------------------------------------------------------
 # Default reward weights (mirrors training/configs/base.yaml reward section)
 # ---------------------------------------------------------------------------
 
 DEFAULT_REWARD_CFG: dict = {
-    # Terminal
-    'w_terminal':  500.0,   # bonus on reaching home radius (must dominate)
-    'w_crash':     100.0,   # penalty on ground impact
+    # Terminal landing grade
+    'w_land':          500.0,   # centre-precision bonus, scaled by landing quality
+    'w_bullseye':      150.0,   # narrow secondary precision bonus (also quality-scaled)
+    'w_crash':         200.0,   # penalty on a bad landing / fault, scaled by (1 - quality)
+    'sigma_centre_m':    8.0,   # Gaussian width for r_precision; curriculum-overridden
 
-    # Dense
-    'w_progress':  1.0,     # reward per metre of progress toward home
-    'w_airtime':   0.1,     # reward per second of sustained flight
-    'dt_rl':       0.05,    # policy step size (s); multiplied by w_airtime
+    # Landing-quality grading bands: OK = full credit, BAD = zero credit,
+    # linear ramp between (see _grade()). Fixed across the curriculum on
+    # purpose -- only sigma_centre_m/sink_bad/roll_bad_deg widen at easy
+    # stages (env/curriculum.py STAGES), so the SHAPE of "clean landing"
+    # never changes, only how strictly distance-from-centre is scored.
+    'sink_ok':           0.8,   # m/s; measured clean landings are 0.43-0.78 m/s
+    'sink_bad':          2.5,   # m/s; curriculum-overridden (widens at easy stages)
+    'roll_ok_deg':      10.0,   # deg; wingtip geometry allows ~6 deg before contact
+    'roll_bad_deg':     35.0,   # deg; curriculum-overridden
+    'vtd_ok':            9.0,   # m/s; ~1.4x V_stall (6.35 m/s)
+    'vtd_bad':          13.0,   # m/s; ~2.0x V_stall
+    'alpha_ok_deg':     10.0,   # deg; brackets the 12 deg stall angle
+    'alpha_bad_deg':    14.0,   # deg
 
-    # Safety
-    'w_agl':       50.0,    # landing-flare violation: quadratic penalty below agl_min
-    'w_stall':     30.0,    # stall margin violation: linear penalty
-    'w_bank':      5.0,     # excess bank: linear penalty above soft limit
+    # Dense (every step, terminal or not)
+    'w_path':            0.10,  # reward per metre of ACTUAL ground track flown
+    'w_unreach':         2.0,   # one-sided reachability-barrier penalty
+    'glide_ratio_usable': 8.0,  # conservative vs. measured best L/D ~16.7 (12.9 trimmed)
+    'dt_rl':             0.05,  # policy step size (s); multiplied by w_path
+
+    # Safety (unchanged from the pre-Phase-4 reward)
+    'w_stall':          30.0,   # stall margin violation: linear penalty
+    'w_bank':            5.0,   # excess bank: linear penalty above soft limit
 
     # Smoothness
-    'w_smooth':    0.01,    # L2 penalty on Δaction (prevents chattering)
+    'w_smooth':          0.01,  # L2 penalty on Δaction (prevents chattering)
+
+    # Truncation backstop (applied by GliderEnv.step(), not here -- only the
+    # env knows about MAX_STEPS) -- listed here so training/configs/base.yaml
+    # has one place to tune it, and GliderEnv reads cfg['w_truncate'].
+    'w_truncate':      300.0,
 
     # Thresholds
-    'R_home_m':              20.0,              # success radius (m); widened for NEO-6M GPS (~2.5 m CEP)
-    'agl_min':               2.5,               # landing flare trigger (m); ultrasonic only valid <4.5 m
+    'R_home_m':               20.0,             # precision-scoring radius (m); no longer terminal
     'stall_buffer_rad':      np.radians(2.0),   # penalty starts 2 deg before stall
     'bank_soft_limit_rad':   np.radians(30.0),  # penalty starts at 30 deg bank
 }
 
 # Stall angle from GliderParams (hard-coded here to avoid a circular import)
 _ALPHA_STALL: float = np.radians(12.0)
+
+
+# ---------------------------------------------------------------------------
+# Grading helper
+# ---------------------------------------------------------------------------
+
+def _grade(x: float, ok: float, bad: float) -> float:
+    """Linear landing-quality ramp: 1.0 at x<=ok, 0.0 at x>=bad, clipped."""
+    return float(np.clip((bad - x) / (bad - ok), 0.0, 1.0))
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +141,8 @@ def compute_reward(
     cfg:        dict,
     alpha_true:    float,
     airspeed_true: float,
+    touched_down: bool = False,
+    fault:        bool = False,
     sensors_valid: bool = True,
 ) -> tuple[float, bool, bool, dict]:
     """Compute the shaped reward for one policy step.
@@ -97,31 +151,53 @@ def compute_reward(
         state       : current 13-element physics state
         prev_state  : physics state at the previous policy step
         obs         : current 12-element normalised observation vector
-                      (obs[4]=roll, obs[9]=lidar_agl, obs[10]=lidar_valid)
+                      (obs[4]=roll)
         action      : current normalised action [bank_cmd, speed_cmd] ∈ [-1,1]²
         prev_action : action from the previous step (for smoothness penalty)
         home_ned    : NED position of the home/launch point, shape (3,) or (2,)
         cfg         : reward weight dict (see DEFAULT_REWARD_CFG for keys)
         alpha_true  : true wind-relative angle of attack (rad), from
-                      JSBSimFDM.alpha -- NOT arctan2(state[5], state[3]),
-                      which is only correct in still air (see
-                      scratch/audit1.py TEST 2). Rewards are privileged
-                      information so using ground-truth alpha here is
-                      correct, unlike in the safety shield (see
-                      env/glider_env.py::_safety_shield).
+                      JSBSimFDM.alpha -- ground truth, safety-critical.
         airspeed_true : true wind-relative airspeed (m/s), from
-                      JSBSimFDM.airspeed -- reported in info['airspeed']
-                      (previously mislabelled ground-truth inertial speed).
-        sensors_valid: overall sensor health flag; reserved for future use
-                      (LiDAR validity is read from obs[10])
+                      JSBSimFDM.airspeed.
+        touched_down: True the step the belly-skid contact model first
+                      engages (JSBSimFDM.touched_down, read by GliderEnv
+                      right after the substep loop exits -- see its
+                      docstring for why this fires before state[2]>0).
+        fault       : True on a JSBSim solver failure or non-finite state
+                      (JSBSimFDM.fault). Forces the worst-case grade
+                      regardless of the (possibly corrupted) state, since a
+                      fault means the physics can no longer be trusted.
+        sensors_valid: overall sensor health flag; reserved for future use.
 
     Returns:
         r           : scalar reward for this step
-        terminated  : True when the episode ends (success or crash)
+        terminated  : True when the episode ends (touchdown or fault)
         truncated   : always False — step limits are handled by the env
-        info        : dict with per-component contributions and violation flags
+        info        : dict with per-component contributions, violation
+                      flags, and (on termination) landing-quality diagnostics
                       for TensorBoard logging
     """
+    # A fault means the physics state may be non-finite/corrupted -- grade
+    # the worst case immediately and do not touch `state` for anything else.
+    if fault:
+        r = -float(cfg['w_crash'])
+        info: dict = {
+            'r_path': 0.0, 'penalty_unreach': 0.0,
+            'penalty_stall': 0.0, 'penalty_bank': 0.0, 'penalty_smooth': 0.0,
+            'stall_violation': False, 'bank_violation': False,
+            'unreach_violation': False,
+            'success': False, 'crash': True, 'outcome': 'crashed',
+            'quality': 0.0, 'r_terminal': -float(cfg['w_crash']),
+            'dist_home': float('nan'), 'vs_td': float('nan'),
+            'roll_td_deg': float('nan'), 'V_td': float('nan'),
+            'alpha_td_deg': float('nan'),
+            'alpha_deg': float(np.degrees(alpha_true)),
+            'roll_deg': float(obs[4]),
+            'airspeed': float(airspeed_true),
+        }
+        return float(r), True, False, info
+
     # --- Unpack positions -----------------------------------------------
     pos_ne      = state[0:2]          # North, East (ground truth)
     prev_pos_ne = prev_state[0:2]
@@ -131,38 +207,39 @@ def compute_reward(
     prev_dist_home = float(np.linalg.norm(prev_pos_ne - home_ne))
 
     # --- Sensor-derived quantities (from corrupted observation) ---------
-    roll        = float(obs[4])
-    lidar_agl   = float(obs[9])
-    lidar_valid = bool(obs[10])
+    roll = float(obs[4])
 
     # --- Ground-truth quantities (safety-critical; not sensor-limited) --
-    # True wind-relative alpha/airspeed from JSBSim -- NOT arctan2(state[5],
-    # state[3])/norm(state[3:6]), which are inertial-velocity-derived and
-    # wrong by up to ~19 deg / several m/s whenever wind is present.
     V     = float(airspeed_true)
     alpha = float(alpha_true)
+
+    vel_ned           = quat_to_rotmat(state[6:10]) @ state[3:6]
+    ground_speed_true = float(np.linalg.norm(vel_ned[0:2]))
 
     # --- Reward accumulator --------------------------------------------
     r = 0.0
 
-    # 1. Progress toward home (positive when closing distance)
-    r_progress = cfg['w_progress'] * (prev_dist_home - dist_home)
-    r += r_progress
+    # 1. Route-length reward: metres of ACTUAL ground track flown this step.
+    #    Replaces the old airtime bonus (which rewarded loitering in place,
+    #    not distance) -- see module docstring.
+    r_path = float(cfg['w_path']) * ground_speed_true * float(cfg['dt_rl'])
+    r += r_path
 
-    # 2. Airtime bonus (encourages staying aloft)
-    r_airtime = cfg['w_airtime'] * cfg['dt_rl']
-    r += r_airtime
+    # 2. Reachability barrier: zero during normal flight, penalising only
+    #    once the glider has flown itself further than it can glide back --
+    #    a constraint, not "hurry home" (replaces w_progress, which directly
+    #    opposed the new "take the longest route" objective).
+    altitude_agl    = float(-state[2])
+    glide_needed    = dist_home / max(altitude_agl, 1.0)
+    glide_usable    = float(cfg['glide_ratio_usable'])
+    penalty_unreach = 0.0
+    unreach_violation = False
+    if glide_needed > glide_usable:
+        penalty_unreach   = float(cfg['w_unreach']) * (glide_needed - glide_usable)
+        unreach_violation = True
+        r -= penalty_unreach
 
-    # 3. Landing-flare AGL penalty — only when the ultrasonic reports a valid
-    #    reading (<4.5 m); this is NOT a continuous in-flight altitude floor.
-    penalty_agl = 0.0
-    agl_violation = False
-    if lidar_valid and lidar_agl < cfg['agl_min']:
-        penalty_agl   = cfg['w_agl'] * (cfg['agl_min'] - lidar_agl) ** 2
-        agl_violation = True
-        r -= penalty_agl
-
-    # 4. Stall margin penalty (ground truth alpha, safety-critical)
+    # 3. Stall margin penalty (ground truth alpha, safety-critical)
     penalty_stall = 0.0
     stall_violation = False
     stall_margin = _ALPHA_STALL - alpha
@@ -171,7 +248,7 @@ def compute_reward(
         stall_violation = True
         r -= penalty_stall
 
-    # 5. Excess bank penalty (sensor roll from obs to match the Pi's view)
+    # 4. Excess bank penalty (sensor roll from obs to match the Pi's view)
     penalty_bank = 0.0
     bank_violation = False
     if abs(roll) > cfg['bank_soft_limit_rad']:
@@ -179,54 +256,85 @@ def compute_reward(
         bank_violation = True
         r -= penalty_bank
 
-    # 6. Smoothness regularisation — penalise large action changes
+    # 5. Smoothness regularisation — penalise large action changes
     action_arr      = np.asarray(action,      dtype=np.float64)
     prev_action_arr = np.asarray(prev_action, dtype=np.float64)
     penalty_smooth  = cfg['w_smooth'] * float(np.sum((action_arr - prev_action_arr) ** 2))
     r -= penalty_smooth
 
     # --- Terminal conditions --------------------------------------------
+    # Ground contact (touched_down, or the legacy state[2]>0.0 raw-position
+    # check as a backstop) ends the episode with a GRADED landing quality --
+    # dist_home < R_home_m no longer terminates anything by itself.
     terminated = False
     success    = False
     crash      = False
+    quality    = 0.0
+    outcome    = None
+    r_terminal = 0.0
+    vs_td      = 0.0
+    roll_td_deg  = 0.0
+    V_td       = V
+    alpha_td_deg = float(np.degrees(alpha))
 
-    # Crash is checked first: ground impact takes priority over success so
-    # that a glider that hits the ground inside R_home_m is scored as a crash,
-    # not a successful return. state[2] = p_d; positive means below the NED
-    # origin (ground level), i.e. crashed.
-    if state[2] > 0.0:
-        r         -= cfg['w_crash']
+    if touched_down or state[2] > 0.0:
+        vs_td = float(vel_ned[2])   # NED down velocity; + = descending
+        roll_td, _, _ = euler_from_quat(state[6:10])
+        roll_td_deg   = float(np.degrees(roll_td))
+        V_td          = V
+        alpha_td_deg  = float(np.degrees(alpha))
+
+        q_sink  = _grade(abs(vs_td),      float(cfg['sink_ok']),      float(cfg['sink_bad']))
+        q_roll  = _grade(abs(roll_td_deg),float(cfg['roll_ok_deg']),  float(cfg['roll_bad_deg']))
+        q_speed = _grade(V_td,            float(cfg['vtd_ok']),      float(cfg['vtd_bad']))
+        q_alpha = _grade(alpha_td_deg,    float(cfg['alpha_ok_deg']), float(cfg['alpha_bad_deg']))
+        quality = q_sink * q_roll * q_speed * q_alpha
+
+        sigma_centre = float(cfg['sigma_centre_m'])
+        r_precision  = float(cfg['w_land'])     * float(np.exp(-(dist_home / sigma_centre) ** 2))
+        # r_bullseye is ALSO gated by quality (not just r_precision) -- the
+        # spec's formula only shows r_precision scaled, but leaving a narrow
+        # bonus unscaled would let a stalled-but-centred landing beat a
+        # clean off-centre one, breaking the lexicographic guarantee the
+        # whole multiplicative design exists to provide.
+        r_bullseye   = float(cfg['w_bullseye']) * float(np.exp(-(dist_home / 2.0) ** 2))
+        r_terminal   = quality * (r_precision + r_bullseye) - (1.0 - quality) * float(cfg['w_crash'])
+        r += r_terminal
+
         terminated = True
-        crash      = True
-    elif dist_home < cfg['R_home_m']:
-        r         += cfg['w_terminal']
-        terminated = True
-        success    = True
+        crash      = quality <= 0.0
+        success    = (quality > 0.5) and (dist_home < float(cfg['R_home_m']))
+        outcome    = 'landed' if quality > 0.0 else 'crashed'
 
     truncated = False   # step-limit truncation is handled by the env
 
     # --- Info dict for TensorBoard / episode statistics -----------------
-    info: dict = {
+    info = {
         # Per-component reward contributions (signed)
-        'r_progress':     r_progress,
-        'r_airtime':      r_airtime,
-        'penalty_agl':    -penalty_agl,
-        'penalty_stall':  -penalty_stall,
-        'penalty_bank':   -penalty_bank,
-        'penalty_smooth': -penalty_smooth,
+        'r_path':          r_path,
+        'penalty_unreach': -penalty_unreach,
+        'penalty_stall':   -penalty_stall,
+        'penalty_bank':    -penalty_bank,
+        'penalty_smooth':  -penalty_smooth,
+        'r_terminal':       r_terminal,
         # Violation flags (for counting events per episode)
-        'agl_violation':   agl_violation,
-        'stall_violation': stall_violation,
-        'bank_violation':  bank_violation,
+        'unreach_violation': unreach_violation,
+        'stall_violation':   stall_violation,
+        'bank_violation':    bank_violation,
         # Terminal outcome
         'success': success,
         'crash':   crash,
+        'outcome': outcome,
+        'quality': quality,
         # Diagnostic scalars
-        'dist_home':  dist_home,
-        'alpha_deg':  float(np.degrees(alpha)),
-        'roll_deg':   float(np.degrees(roll)),
-        'airspeed':   V,
-        'lidar_agl':  lidar_agl,
+        'dist_home':    dist_home,
+        'vs_td':        vs_td,
+        'roll_td_deg':  roll_td_deg,
+        'V_td':         V_td,
+        'alpha_td_deg': alpha_td_deg,
+        'alpha_deg':    float(np.degrees(alpha)),
+        'roll_deg':     float(np.degrees(roll)),
+        'airspeed':     V,
     }
 
     return float(r), terminated, truncated, info

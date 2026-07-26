@@ -98,7 +98,7 @@ def apply_overrides(cfg: dict, overrides: list[str]) -> dict:
     """Apply 'section.key=value' overrides to a nested config dict.
 
     Example:
-        apply_overrides(cfg, ['ppo.n_envs=4', 'reward.w_terminal=600'])
+        apply_overrides(cfg, ['ppo.n_envs=4', 'reward.w_land=600'])
     """
     for item in overrides:
         key_path, _, raw_value = item.partition('=')

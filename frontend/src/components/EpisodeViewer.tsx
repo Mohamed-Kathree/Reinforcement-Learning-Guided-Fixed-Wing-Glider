@@ -119,8 +119,10 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
           <div className="replay-meta">
             <span>Stage {trajectory.meta.stage}</span>
             <span className={`outcome outcome-${trajectory.meta.outcome}`}>
-              {trajectory.meta.outcome}
+              {trajectory.meta.outcome.replace("_", " ")}
             </span>
+            <span>quality {trajectory.meta.quality.toFixed(2)}</span>
+            <span>final dist {trajectory.meta.final_dist_home.toFixed(1)} m</span>
             <span>{trajectory.meta.controller}</span>
             <span>seed {trajectory.meta.seed}</span>
           </div>

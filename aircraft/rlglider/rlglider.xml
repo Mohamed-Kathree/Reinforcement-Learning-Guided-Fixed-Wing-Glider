@@ -252,6 +252,55 @@
       </sum>
     </function>
 
+    <!-- Ground-effect induced-drag reduction (Wieselsberger factor):
+           phi = (16h/b)^2 / (1 + (16h/b)^2)
+         phi approaches 1 far from the ground (no reduction) and 0 near
+         the ground (induced drag largely cancelled): a 2 m-span glider
+         at h=0.2 m AGL (h/b=0.1) sees CDi fall roughly 35 to 40 percent,
+         which meaningfully extends the float during the last couple of
+         metres before touchdown. Added for the Phase 4 precision-landing
+         task, where that last 2 m is now the highest-stakes, most-scored
+         part of every episode (see RLGlider_Phase4_Landing_Task_Spec.md,
+         ground effect section). Defined here, outside any axis block, same
+         as CLtotal above: these three chained functions are purely
+         reusable named values, referenced as a property inside CDi's DRAG
+         axis block below. A function nested directly inside an axis
+         element is instead summed into that axis's actual force or moment,
+         so defining a helper function like this inside an axis (a bug
+         this file briefly had while under development) adds its raw
+         numeric value, potentially in the thousands, as if it were
+         literal drag force in lbf, which diverges the simulation within a
+         handful of physics steps. Built as three chained functions
+         (self-product squaring, same idiom as CLtotal) rather than an
+         untested pow element. -->
+    <function name="aero/misc/ratio16hb">
+      <product>
+        <value>16.0</value>
+        <property>position/h-agl-ft</property>
+        <quotient>
+          <value>1.0</value>
+          <property>metrics/bw-ft</property>
+        </quotient>
+      </product>
+    </function>
+
+    <function name="aero/misc/ratio16hb-sq">
+      <product>
+        <property>aero/misc/ratio16hb</property>
+        <property>aero/misc/ratio16hb</property>
+      </product>
+    </function>
+
+    <function name="aero/coefficient/ground-effect-phi">
+      <quotient>
+        <property>aero/misc/ratio16hb-sq</property>
+        <sum>
+          <value>1.0</value>
+          <property>aero/misc/ratio16hb-sq</property>
+        </sum>
+      </quotient>
+    </function>
+
     <!-- ============================================================
          LIFT  (positive = upward; JSBSim applies sign internally)
          ============================================================ -->
@@ -317,7 +366,7 @@
         </product>
       </function>
 
-      <!-- Induced drag: CDi = k*CL^2, using JSBSim's own instantaneous
+      <!-- Induced drag: CDi = phi*k*CL^2, using JSBSim's own instantaneous
            CLtotal (defined above, outside the axes) instead of a fixed
            alpha-indexed table, so CDi tracks the ACTUAL lift coefficient,
            including domain-randomised cl-mult and elevator lift, rather
@@ -328,6 +377,7 @@
           <property>aero/qbar-psf</property>
           <property>metrics/Sw-sqft</property>
           <property>aero/cd-mult</property>
+          <property>aero/coefficient/ground-effect-phi</property>
           <value>0.03566</value>
           <property>aero/coefficient/CLtotal</property>
           <property>aero/coefficient/CLtotal</property>

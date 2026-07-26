@@ -624,6 +624,7 @@ button, select, input {
 }
 
 .outcome-success { color: var(--success); }
+.outcome-soft_landing { color: var(--accent); }
 .outcome-crash { color: var(--danger); }
 .outcome-timeout { color: var(--warning); }
 
@@ -717,6 +718,7 @@ button, select, input {
 }
 
 .bar-success { background: var(--success); }
+.bar-soft_landing { background: var(--accent); }
 .bar-crash { background: var(--danger); }
 .bar-timeout { background: var(--warning); }
 
@@ -748,6 +750,12 @@ button, select, input {
   color: var(--success);
 }
 
+.chip-soft_landing {
+  background: rgba(79, 140, 255, 0.12);
+  border-color: rgba(79, 140, 255, 0.4);
+  color: var(--accent);
+}
+
 .chip-crash {
   background: rgba(244, 84, 60, 0.12);
   border-color: rgba(244, 84, 60, 0.4);
@@ -760,7 +768,7 @@ button, select, input {
   color: var(--warning);
 }
 
-.chip-success:hover, .chip-crash:hover, .chip-timeout:hover {
+.chip-success:hover, .chip-soft_landing:hover, .chip-crash:hover, .chip-timeout:hover {
   filter: brightness(1.25);
 }
 

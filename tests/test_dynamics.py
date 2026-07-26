@@ -27,6 +27,10 @@ Tests:
     test_alpha_matches_jsbsim_in_wind            -- reward's stall penalty must use true alpha
     test_env_passes_sb3_checker                  -- GliderEnv satisfies the SB3 API contract
     test_reward_components_sum_to_total          -- info's breakdown must reconcile with the total
+    test_no_open_loop_flare              -- Phase 4: straight glide lands clean without the shield
+    test_vertical_wind_bounded            -- Phase 4: sustained vertical wind never exceeds min sink
+    test_landing_quality_lexicographic    -- Phase 4: clean-but-further beats close-but-stalled
+    test_episode_terminates_on_touchdown  -- Phase 4: crossing R_home_m alone doesn't end the episode
     test_baseline_fixed_seed_regression          -- 20-episode fixed-seed hash regression guard
 
 Coordinate frames: NED inertial, BODY (FRD), WIND (stability).
@@ -199,23 +203,28 @@ def test_servo_rate_limit():
 # ---------------------------------------------------------------------------
 
 def test_baseline_reaches_home():
-    """DeterministicRTL must succeed in at least 85% of Stage 0 episodes.
+    """DeterministicRTL must reliably LAND clean at Stage 0, and hit the full
+    precision "success" bar (quality > 0.5 and centred) often enough to be a
+    meaningful reference point.
 
-    Threshold history: this test's threshold was lowered twice (25% -> 15%)
-    to accommodate a controller that was broken both times -- a threshold
-    that ratchets downward to match observed behaviour is not a test, it's
-    a record of surrender. The actual root cause was a sign bug in
-    sim/sensor_models.py::_refresh_gps() (quat_to_rotmat(q).T instead of
-    quat_to_rotmat(q); see that function's corrected docstring), which
-    mirrored the GPS course-angle observation and made every "correction"
-    this controller issued push the glider further off course -- the
-    "limit cycle" and "20-22% is as good as it gets" narratives in prior
-    revisions were both downstream of this bug, not evidence the P-only law
-    needed detuning. With the GPS fix in place, a plain P-only law
-    (kp_bank=1.5, no derivative term) reaches ~100% at Stage 0 (n=40, see
-    baseline/deterministic_rtl.py's module docstring). If this ever drops
-    again, suspect the GPS/IMU sign conventions before touching the gain --
-    do NOT lower this threshold to make a broken controller pass.
+    Phase 4 redefinition (RLGlider_Phase4_Landing_Task_Spec.md): "success" no
+    longer means "crossed R_home_m" -- it means a graded, continuous landing
+    QUALITY (sink rate / roll / speed / alpha at touchdown) combined with
+    centre precision (see env/reward.py's module docstring). The three-phase
+    pattern controller (baseline/deterministic_rtl.py) is deliberately a
+    simple scripted heuristic that the spec expects to "leave clear headroom"
+    for a learned policy -- so a modest success rate here is not a
+    regression, and this test does NOT re-litigate the old 85%-crossing bar.
+    What WOULD be a regression: crashes/stalls (a fundamental control or
+    physics break) or a collapse in landing quality (the wings-level flare
+    blend / trim schedule breaking). Those are the properties asserted here;
+    if this test ever needs its thresholds loosened to pass, suspect an
+    actual physics/control regression before touching the numbers -- do NOT
+    silently ratchet them down to match broken behaviour (see git history for
+    why that specific failure mode is called out explicitly).
+
+    Empirically (n=20, seed=0, post-Phase-4 tuning): crash_rate=0%,
+    mean_quality=1.0, success_rate=35%.
     """
     from env.glider_env import GliderEnv
     from baseline.deterministic_rtl import DeterministicRTL
@@ -227,6 +236,8 @@ def test_baseline_reaches_home():
 
     n_episodes = 20
     successes  = 0
+    crashes    = 0
+    qualities: list[float] = []
 
     for _ in range(n_episodes):
         seed = int(rng.integers(0, 2**31))
@@ -238,13 +249,30 @@ def test_baseline_reaches_home():
             if terminated or truncated:
                 if info.get('success'):
                     successes += 1
+                if info.get('crash'):
+                    crashes += 1
+                qualities.append(float(info.get('quality', 0.0)))
                 break
 
     success_rate = successes / n_episodes
-    assert success_rate >= 0.85, (
+    crash_rate   = crashes / n_episodes
+    mean_quality = float(np.mean(qualities))
+
+    assert crash_rate <= 0.10, (
+        f"DeterministicRTL Stage 0 crash rate too high: {crash_rate:.0%} "
+        f"({crashes}/{n_episodes}) -- suspect a control or physics regression "
+        f"(trim schedule, wings-level flare blend, ground-effect model)."
+    )
+    assert mean_quality >= 0.7, (
+        f"DeterministicRTL Stage 0 mean landing quality too low: "
+        f"{mean_quality:.2f} -- suspect a regression in the flare/trim "
+        f"schedule (sink/roll/speed/alpha at touchdown)."
+    )
+    assert success_rate >= 0.15, (
         f"DeterministicRTL Stage 0 success rate too low: "
-        f"{success_rate:.0%} ({successes}/{n_episodes}) -- if this regresses, "
-        f"suspect the GPS/IMU sign conventions before the controller gain."
+        f"{success_rate:.0%} ({successes}/{n_episodes}) -- suspect a "
+        f"centre-precision regression in the pattern controller's Phase "
+        f"2->3 energy-management transition."
     )
 
 
@@ -431,12 +459,12 @@ def test_env_passes_sb3_checker():
 
 def test_reward_components_sum_to_total():
     """info's per-component breakdown must sum to the returned scalar reward
-    for the common (non-terminal) case."""
+    for the common (non-terminal, no ground contact) case."""
     from env.reward import compute_reward, DEFAULT_REWARD_CFG
 
     state      = build_state(p_ned=np.array([50.0, 0.0, -50.0]), v_body=np.array([10.0, 0.0, 0.0]))
     prev_state = build_state(p_ned=np.array([55.0, 0.0, -50.0]), v_body=np.array([10.0, 0.0, 0.0]))
-    obs         = np.zeros(11, dtype=np.float32)   # roll=0, lidar_agl=0, lidar_valid=0 (no AGL penalty)
+    obs         = np.zeros(12, dtype=np.float32)   # roll=0 (no bank penalty)
     action      = np.array([0.1, 0.0], dtype=np.float32)
     prev_action = np.array([0.0, 0.0], dtype=np.float32)
 
@@ -444,13 +472,144 @@ def test_reward_components_sum_to_total():
         state=state, prev_state=prev_state, obs=obs, action=action,
         prev_action=prev_action, home_ned=np.zeros(3), cfg=dict(DEFAULT_REWARD_CFG),
         alpha_true=np.radians(3.0), airspeed_true=10.0,
+        touched_down=False, fault=False,
     )
 
     assert not terminated and not truncated
-    component_sum = (info['r_progress'] + info['r_airtime'] + info['penalty_agl']
-                      + info['penalty_stall'] + info['penalty_bank'] + info['penalty_smooth'])
+    assert info['r_terminal'] == 0.0   # not a ground-contact step
+    component_sum = (info['r_path'] + info['penalty_unreach'] + info['penalty_stall']
+                      + info['penalty_bank'] + info['penalty_smooth'] + info['r_terminal'])
     assert abs(r - component_sum) < 1e-9, (
         f"reward {r} does not reconcile with component sum {component_sum}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 precision-landing task tests (RLGlider_Phase4_Landing_Task_Spec.md)
+# ---------------------------------------------------------------------------
+
+def test_no_open_loop_flare():
+    """A straight glide, calm air, must touch down clean (below SINK_BAD, not
+    stalled) now that the open-loop flare shield is deleted -- the aircraft's
+    own trimmed glide already flares reasonably on its own (see
+    RLGlider_Phase4_Landing_Task_Spec.md §0.2's measurements: with the shield
+    removed, touchdowns were 0.43-0.78 m/s sink at 4-8.5 deg alpha, well
+    inside a clean landing, whereas the deleted shield's fixed nose-up pull
+    caused 4/5 tested speed commands to arrive stalled at 3+ m/s sink)."""
+    from env.glider_env import GliderEnv
+    from env.reward import DEFAULT_REWARD_CFG
+
+    env = GliderEnv(cfg=dict(
+        wind_speed=0.0, gust_intensity=0.0, sensor_noise=0.0, dropout_prob=0.0,
+        alt0_m=25.0, launch_offset_min_m=50.0, launch_offset_max_m=50.0,
+        launch_speed_min_ms=10.0, launch_speed_max_ms=10.0,
+        launch_pitch_min_deg=0.0, launch_pitch_max_deg=0.0,
+    ))
+    obs, _ = env.reset(seed=0)
+    action = np.array([0.0, -0.5], dtype=np.float32)   # ~7 m/s command, spec's cleanest case
+    while True:
+        obs, r, terminated, truncated, info = env.step(action)
+        if terminated or truncated:
+            break
+
+    assert not truncated, "straight glide must reach touchdown, not time out"
+    assert abs(info['vs_td']) < DEFAULT_REWARD_CFG['sink_bad'], (
+        f"touchdown sink {info['vs_td']:.2f} m/s at/above SINK_BAD -- "
+        f"suspect a regression in the ground-effect model or trim schedule"
+    )
+    assert info['alpha_td_deg'] < 12.0, (
+        f"touchdown alpha {info['alpha_td_deg']:.1f} deg at/above the 12 deg stall angle"
+    )
+
+
+def test_vertical_wind_bounded():
+    """Sustained per-episode vertical wind must never exceed the ~0.39 m/s
+    measured minimum sink, even at Stage 3's maximum wind speed -- otherwise
+    a path-length reward lets PPO discover a free, unbounded-airtime thermal
+    (RLGlider_Phase4_Landing_Task_Spec.md §0.3)."""
+    from env.glider_env import GliderEnv
+
+    env = GliderEnv(cfg=dict(STAGES[3]))
+    max_abs = 0.0
+    for seed in range(200):
+        env.reset(seed=seed)
+        max_abs = max(max_abs, abs(float(env._wind.mean_ned[2])))
+
+    assert max_abs <= 0.25 + 1e-9, (
+        f"sustained vertical wind {max_abs:.3f} m/s exceeds the 0.25 m/s cap"
+    )
+
+
+def test_landing_quality_lexicographic():
+    """A clean-but-further-from-centre landing must always score higher than
+    a closer-but-stalled/hard one -- the multiplicative quality gate
+    (quality * (r_precision + r_bullseye)) exists specifically to guarantee
+    this; a plain additive sum would let the optimiser trade a hard landing
+    for a slightly better position, which is exactly the failure mode the
+    Phase 4 reward redesign exists to avoid."""
+    from env.reward import compute_reward, DEFAULT_REWARD_CFG
+
+    def touchdown_state(d_home, vs, roll_deg):
+        return build_state(
+            p_ned=np.array([d_home, 0.0, 0.0]),
+            v_body=np.array([10.0, 0.0, vs]),
+            roll=np.radians(roll_deg),
+        )
+
+    obs = np.zeros(12, dtype=np.float32)
+    zero_action = np.zeros(2, dtype=np.float32)
+
+    close_but_bad = touchdown_state(2.0, vs=3.0, roll_deg=40.0)
+    far_but_clean = touchdown_state(15.0, vs=0.5, roll_deg=5.0)
+
+    r_bad, _, _, info_bad = compute_reward(
+        state=close_but_bad, prev_state=close_but_bad, obs=obs,
+        action=zero_action, prev_action=zero_action, home_ned=np.zeros(3),
+        cfg=dict(DEFAULT_REWARD_CFG), alpha_true=np.radians(13.5),
+        airspeed_true=10.0, touched_down=True,
+    )
+    r_clean, _, _, info_clean = compute_reward(
+        state=far_but_clean, prev_state=far_but_clean, obs=obs,
+        action=zero_action, prev_action=zero_action, home_ned=np.zeros(3),
+        cfg=dict(DEFAULT_REWARD_CFG), alpha_true=np.radians(3.0),
+        airspeed_true=10.0, touched_down=True,
+    )
+
+    assert info_bad['quality'] < info_clean['quality']
+    assert r_clean > r_bad, (
+        f"lexicographic property violated: close-but-bad ({r_bad:.1f}, "
+        f"quality={info_bad['quality']:.2f}) beat far-but-clean "
+        f"({r_clean:.1f}, quality={info_clean['quality']:.2f})"
+    )
+
+
+def test_episode_terminates_on_touchdown():
+    """Crossing R_home_m no longer ends the episode by itself -- only ground
+    contact (touched_down) or a JSBSim fault does. Run the baseline past the
+    point where dist_home first drops below R_home_m and confirm the episode
+    is still running there."""
+    from env.glider_env import GliderEnv
+    from baseline.deterministic_rtl import DeterministicRTL
+
+    cfg = dict(STAGES[0])
+    env = GliderEnv(cfg=cfg)
+    ctrl = DeterministicRTL()
+    ctrl.reset()
+    obs, _ = env.reset(seed=0)
+
+    r_home = float(cfg['R_home_m'])
+    crossed_radius_while_airborne = False
+    while True:
+        action = ctrl.act(obs)
+        obs, r, terminated, truncated, info = env.step(action)
+        if info['dist_home'] < r_home and not terminated:
+            crossed_radius_while_airborne = True
+        if terminated or truncated:
+            break
+
+    assert crossed_radius_while_airborne, (
+        "expected the glider to fly inside R_home_m for at least one step "
+        "before touchdown, without that alone ending the episode"
     )
 
 
@@ -461,14 +620,22 @@ def test_reward_components_sum_to_total():
 # ---------------------------------------------------------------------------
 
 def test_baseline_fixed_seed_regression():
+    """Reference array regenerated for the Phase 4 precision-landing task
+    (touchdown-based termination, three-phase pattern controller with the
+    glide_slope=10/margin=1/r_pattern_m=40 tuning and wings-level flare
+    blend -- see baseline/deterministic_rtl.py's tuning notes). The old
+    ~24.7-25.0 m values were all clustered near R_home_m because they were
+    the position at the moment the episode ended by CROSSING that radius;
+    under the new task the episode runs to touchdown, so final distances
+    vary with wherever the controller actually lands."""
     from env.glider_env import GliderEnv
     from baseline.deterministic_rtl import DeterministicRTL
 
     expected_final_dist = np.array([
-        24.84167786, 24.7809178,  24.95905871, 24.73729723, 24.89262113,
-        24.59941355, 24.70637026, 24.87729638, 24.65468331, 24.62146575,
-        24.96790705, 24.72530198, 24.78938522, 24.78997205, 24.73732294,
-        24.68687485, 24.99141709, 24.76786655, 24.99820917, 24.66255639,
+        47.12624594, 39.17500110, 43.15555920, 25.45874363, 11.64544601,
+        41.07336285, 26.22067733, 48.45388996, 21.37594191,  9.86971285,
+         1.81280433, 36.07644867, 41.39158878, 21.42766124, 48.03224165,
+        16.71123792,  3.52328116, 11.81277227,  5.59599839, 18.44716598,
     ])
 
     env  = GliderEnv(cfg=dict(STAGES[0]))

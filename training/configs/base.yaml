@@ -95,28 +95,60 @@ launch:
 
 # ---------------------------------------------------------------------------
 # Reward weights  (mirrors DEFAULT_REWARD_CFG in env/reward.py)
+#
+# Phase 4 precision-landing task (RLGlider_Phase4_Landing_Task_Spec.md):
+# dist_home < R_home_m no longer terminates the episode -- only ground
+# contact (touched_down) or a JSBSim fault does. R_home_m is now purely a
+# precision-scoring parameter, overridden per curriculum stage alongside
+# sigma_centre_m/sink_bad/roll_bad_deg (env/curriculum.py STAGES).
+# w_progress/w_airtime/w_agl/agl_min are REMOVED (not zeroed): w_progress
+# directly opposed the new "longest route" objective (replaced by the
+# one-sided w_unreach reachability barrier), w_airtime rewarded loitering
+# rather than route length (replaced by w_path), and w_agl/agl_min penalised
+# being below the flare altitude, which is now a MANDATORY part of every
+# successful landing (the open-loop flare shield that used to enforce it was
+# also deleted -- see env/glider_env.py::_safety_shield).
 # ---------------------------------------------------------------------------
 reward:
-  # Terminal
-  w_terminal:   500.0     # bonus on reaching home radius (must dominate all dense terms)
-  w_crash:      100.0     # penalty on ground impact
+  # Terminal landing grade (see env/reward.py's module docstring for the
+  # full quality*(precision+bullseye) - (1-quality)*crash formula)
+  w_land:       500.0     # centre-precision bonus, scaled by landing quality
+  w_bullseye:   150.0     # narrow secondary precision bonus (also quality-scaled)
+  w_crash:      200.0     # penalty on a bad landing / fault, scaled by (1 - quality)
+  sigma_centre_m: 8.0     # Gaussian width for r_precision; overridden per curriculum stage
 
-  # Dense
-  w_progress:   1.0       # reward per metre of horizontal progress toward home
-  w_airtime:    0.1       # reward per second of sustained flight
-  dt_rl:        0.050     # policy step size (s); multiplied by w_airtime each step
+  # Landing-quality grading bands: OK = full credit, BAD = zero credit,
+  # linear ramp between. Only sink_bad/roll_bad_deg widen per curriculum
+  # stage (env/curriculum.py STAGES) -- the rest stay fixed so "clean
+  # landing" never changes definition, only how strictly it's enforced.
+  sink_ok:       0.8      # m/s; measured clean landings are 0.43-0.78 m/s
+  sink_bad:      2.5      # m/s; overridden per curriculum stage
+  roll_ok_deg:   10.0     # deg; wingtip geometry allows ~6 deg before contact
+  roll_bad_deg:  35.0     # deg; overridden per curriculum stage
+  vtd_ok:        9.0      # m/s; ~1.4x V_stall (6.35 m/s)
+  vtd_bad:       13.0     # m/s; ~2.0x V_stall
+  alpha_ok_deg:  10.0     # deg; brackets the 12 deg stall angle
+  alpha_bad_deg: 14.0     # deg
 
-  # Safety penalties
-  w_agl:        50.0      # landing-flare violation: quadratic penalty below agl_min
+  # Dense (every step, terminal or not)
+  w_path:        0.10     # reward per metre of ACTUAL ground track flown
+  w_unreach:     2.0      # one-sided reachability-barrier penalty
+  glide_ratio_usable: 8.0 # conservative vs. measured best L/D ~16.7 (12.9 trimmed)
+  dt_rl:         0.050    # policy step size (s); multiplied by w_path each step
+
+  # Safety penalties (unchanged from the pre-Phase-4 reward)
   w_stall:      30.0      # stall margin violation: linear penalty
   w_bank:       5.0       # excess bank: linear penalty above soft limit
 
   # Smoothness regularisation
   w_smooth:     0.01      # L2 penalty on action change (prevents chattering)
 
+  # Truncation backstop (read by GliderEnv.step(), not env/reward.py -- only
+  # the env knows about MAX_STEPS)
+  w_truncate:   300.0
+
   # Thresholds
-  R_home_m:             20.0    # success radius (m); widened for NEO-6M GPS (~2.5 m CEP); overridden by curriculum
-  agl_min:               2.5    # landing flare trigger (m); ultrasonic only valid <4.5 m, not a continuous floor
+  R_home_m:             20.0    # precision-scoring radius (m); NOT terminal; overridden by curriculum
   stall_buffer_rad:      0.0349 # ~2 deg before stall alpha (rad)
   bank_soft_limit_rad:   0.5236 # 30 deg bank soft limit (rad)
 
@@ -130,14 +162,24 @@ ppo:
   batch_size:       256             # minibatch size for gradient updates
   n_epochs:         10              # gradient update passes per rollout
   gae_lambda:       0.95            # GAE lambda for advantage estimation
-  gamma:            0.999           # discount factor (high: glide episodes are long)
+  gamma:            0.999           # discount factor -- KEEP at 0.999 under Phase 4: episodes
+                                     # are now ~900-1200 steps (touchdown-based termination, not
+                                     # radius-crossing), ~7x longer than the old ~125-150-step
+                                     # episodes. 0.999 matches this longer horizon; an earlier
+                                     # review recommendation to drop to 0.99 was calibrated
+                                     # against the old short episodes and is now superseded --
+                                     # do not apply it.
   ent_coef:         0.005           # entropy bonus (keeps policy exploratory early)
   vf_coef:          0.5             # value function loss coefficient
   max_grad_norm:    0.5             # gradient clipping norm
   learning_rate:    3.0e-4          # Adam learning rate
   clip_range:       0.2             # PPO clipping epsilon
   net_arch:         [128, 128]      # shared MLP hidden layer sizes
-  total_timesteps:  20_000_000      # total environment steps for the full run
+  total_timesteps:  20_000_000      # smoke-check / initial-run budget. At ~7x longer episodes
+                                     # this buys ~7x fewer episodes than pre-Phase-4 for the same
+                                     # step count (~150k -> ~20k); RLGlider_Phase4_Landing_Task_
+                                     # Spec.md §6 recommends 40_000_000 for a real full run --
+                                     # deliberately not set here, raise explicitly when ready.
   normalize_obs:    true            # use VecNormalize on observations
   normalize_reward: true            # use VecNormalize on rewards
   clip_obs:         10.0            # VecNormalize observation clip bound
@@ -157,7 +199,12 @@ eval:
 # ---------------------------------------------------------------------------
 curriculum:
   advance_threshold: 0.80           # rolling success rate required to advance stage
-  rolling_window:    100            # number of recent episodes for rolling rate
+  rolling_window:    50             # number of recent episodes for rolling rate -- lowered from
+                                     # 100 under Phase 4: ~7x fewer episodes per run at a fixed
+                                     # timestep budget (see ppo.total_timesteps's note) means a
+                                     # 100-episode window makes stage advancement very slow.
+                                     # success here is env/reward.py's new definition:
+                                     # quality > 0.5 and d_td < R_home_m -- not a radius crossing.
 
 # ---------------------------------------------------------------------------
 # Logging and checkpointing

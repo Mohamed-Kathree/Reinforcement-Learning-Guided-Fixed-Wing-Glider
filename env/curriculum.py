@@ -24,6 +24,16 @@ Launch altitude and horizontal offset (as-built hardware notes):
     R_home_m is widened versus the original design to account for the
     NEO-6M GPS's ~2.5 m CEP (vs the ~1.5 m originally assumed).
 
+Phase 4 precision-landing keys (sigma_centre_m, sink_bad, roll_bad_deg):
+    R_home_m no longer TERMINATES the episode (see env/reward.py's module
+    docstring -- only ground contact/fault does); it and these three new keys
+    are purely scoring-strictness parameters that widen at easy stages and
+    tighten to the final Stage 3 values, same spirit as wind/noise. sink_ok /
+    roll_ok_deg / alpha_ok_deg / alpha_bad_deg stay FIXED across all stages
+    (in env/reward.py's DEFAULT_REWARD_CFG) so the definition of "clean
+    landing" never changes -- only how strictly distance-from-centre and the
+    sink/roll BAD thresholds are graded.
+
 Launch speed/pitch randomisation (deliberately NOT a per-stage key here):
     Launch speed and pitch are randomised per episode across a wide range
     (see LAUNCH_SPEED_MIN_MS etc. in env/glider_env.py, or launch.speed_*_ms
@@ -87,6 +97,9 @@ STAGES: list[dict] = [
         launch_offset_max_m = 90.0,
         aero_scale_range    = (1.0,  1.0),
         mass_range          = (1.1,  1.1),
+        sigma_centre_m      = 12.0,
+        sink_bad            = 3.5,
+        roll_bad_deg        = 45.0,
     ),
     # Stage 1 — light wind, mild noise: add first disturbances
     dict(
@@ -100,6 +113,9 @@ STAGES: list[dict] = [
         launch_offset_max_m = 80.0,
         aero_scale_range    = (0.9,  1.1),
         mass_range          = (1.0,  1.2),
+        sigma_centre_m      = 10.0,
+        sink_bad            = 3.0,
+        roll_bad_deg        = 40.0,
     ),
     # Stage 2 — moderate wind + gusts, meaningful noise
     dict(
@@ -113,6 +129,9 @@ STAGES: list[dict] = [
         launch_offset_max_m = 70.0,
         aero_scale_range    = (0.85, 1.15),
         mass_range          = (0.9,  1.3),
+        sigma_centre_m      = 9.0,
+        sink_bad            = 2.75,
+        roll_bad_deg        = 37.0,
     ),
     # Stage 3 — full domain randomisation: deployment difficulty
     dict(
@@ -126,6 +145,9 @@ STAGES: list[dict] = [
         launch_offset_max_m = 70.0,
         aero_scale_range    = (0.8,  1.2),
         mass_range          = (0.85, 1.35),
+        sigma_centre_m      = 8.0,
+        sink_bad            = 2.5,
+        roll_bad_deg        = 35.0,
     ),
 ]
 

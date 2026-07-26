@@ -102,6 +102,7 @@ def record_episode(
 
     t = 0.0
     info: dict = {}
+    terminated = truncated = False
     while True:
         action = policy.act(obs)
         obs, _reward, terminated, truncated, info = env.step(action)
@@ -121,12 +122,26 @@ def record_episode(
         if terminated or truncated:
             break
 
+    # Four-way outcome, matching env/reward.py's Phase 4 quality-graded
+    # landing model -- NOT the old 3-way success/crash/timeout bucketing.
+    # A "timeout" is specifically an episode that was truncated WITHOUT
+    # ever touching down (real MAX_STEPS exhaustion); an episode that
+    # touched down but missed the strict success bar (quality > 0.5 and
+    # centred) is a "soft_landing", not a timeout -- under this task most
+    # non-crash episodes land clean, just off-centre, so conflating the two
+    # (as this function used to) mislabelled the majority of Stage 0-2
+    # episodes as timeouts.
     if info.get("success"):
-        outcome = "success"
+        outcome: str = "success"
+    elif truncated and not terminated:
+        outcome = "timeout"
     elif info.get("crash"):
         outcome = "crash"
     else:
-        outcome = "timeout"
+        outcome = "soft_landing"
+
+    quality = float(info.get("quality", 0.0))
+    final_dist_home = float(info.get("dist_home", 0.0))
 
     episode_id = f"{controller}-s{stage}-{uuid.uuid4().hex[:8]}"
     trajectory = Trajectory(
@@ -140,6 +155,8 @@ def record_episode(
             seed=seed,
             n_frames=len(frames),
             duration_s=t,
+            quality=quality,
+            final_dist_home=final_dist_home,
         ),
         home_ned=[0.0, 0.0, 0.0],
         frames=frames,
