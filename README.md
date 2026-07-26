@@ -35,7 +35,7 @@ Hand-launched gliders face highly variable launch conditions and outdoor disturb
 
 The task is fundamentally one of energy management: the glider can only trade altitude for airspeed while continuously losing energy to drag. The policy must learn to optimise the return-to-launch (RTL) objective while respecting hard safety constraints on stall margin, bank angle, and minimum altitude above ground level.
 
-**Term 2 status:** Physics simulation validated, Gymnasium environment implemented, deterministic baseline benchmarked at ~20% success across all 4 stages (see [Curriculum Stages](#curriculum-stages) for the full table and correction history). Training infrastructure ready.
+**Term 2 status:** Physics simulation validated, Gymnasium environment implemented, deterministic baseline benchmarked at 100% (Stage 0) down to 84% (Stage 3) success (see [Curriculum Stages](#curriculum-stages) for the full table and correction history). Training infrastructure ready.
 
 **Term 3 goal:** Train PPO policy to exceed 60% success at Stage 3 (0–9 m/s wind, 20% sensor noise, 15 m home radius).
 
@@ -312,10 +312,11 @@ pytest tests/ --cov=sim --cov=env --cov-report=html
 | Category | Tests |
 |----------|-------|
 | **Sensors** | LiDAR slant-range formula, update-rate counters for all four sensors, dropout probability |
-| **Control** | JSBSim actuator rate-limit enforcement (rlglider.xml) |
-| **Integration** | Baseline achieves ≥ 15% success in Stage 0 over 20 episodes |
+| **Control** | JSBSim actuator rate-limit enforcement (rlglider.xml), control-surface sign directions (AVL-transcription guard) |
+| **Frame/sign correctness** | GPS course matches IMU yaw in still air, vertical-speed sign, dead-reckoning position check, gust std matches configured intensity, true (JSBSim) alpha used for the stall penalty |
+| **Integration** | Baseline achieves ≥ 85% success in Stage 0 over 20 episodes; SB3 env-checker compliance; reward component reconciliation; fixed-seed 20-episode regression guard |
 
-Core physics correctness (energy conservation, glide ratio, stall, trim stability, attitude integrity) is covered separately by [`validate_glide.py`](#physics-validation)'s 5 gates against the real JSBSim FDM.
+17 tests total (see `tests/test_dynamics.py`'s module docstring for the full list). Core physics correctness (energy conservation, glide ratio, stall, trim stability, attitude integrity) is covered separately by [`validate_glide.py`](#physics-validation)'s 5 gates against the real JSBSim FDM.
 
 ---
 
@@ -337,18 +338,27 @@ Stage 0 (no wind, no noise) lets the policy learn the spatial structure of the R
 
 ## Interface Contracts
 
-### Observation Vector (12 elements, float32, normalised)
+### Observation Vector (11 elements, float32)
+
+No airspeed/pitot channel -- the as-built hardware has no pitot tube; see
+`env/glider_env.py::GliderEnv._build_obs`'s docstring for the full contract.
 
 | Index | Signal | Source |
 |-------|--------|--------|
-| 0, 1 | Δx, Δy to home (m) | GPS |
-| 2 | Δz to home (m) | Barometer |
-| 3 | Course angle χ (rad) | GPS velocity |
-| 4, 5, 6 | Body velocity [u, v, w] (m/s) | GPS |
-| 7, 8 | Roll φ, pitch θ (rad) | IMU |
-| 9 | Yaw rate r (rad/s) | IMU |
-| 10 | LiDAR AGL (m); 0 if invalid | LiDAR |
-| 11 | Airspeed (m/s) | Pitot |
+| 0, 1 | dx, dy to home (m), NED North/East | GPS |
+| 2 | Ground speed (m/s) | GPS velocity |
+| 3 | Course angle χ (rad), atan2(ve, vn) | GPS velocity |
+| 4, 5, 6 | Roll φ, pitch θ, yaw ψ (rad) | IMU |
+| 7 | Barometric altitude (m) | Barometer |
+| 8 | Vertical speed (m/s), + = climbing | GPS velocity |
+| 9 | Ultrasonic AGL (m); 0 if invalid | Ultrasonic (flare-only, <4.5 m) |
+| 10 | Ultrasonic reading valid (0/1) | Ultrasonic |
+
+Observation and action both pass through a fixed per-episode transport delay
+(0-4 policy steps for observations, 1-3 physics substeps for actions) and
+GPS/IMU readings carry a fixed per-episode correlated bias in addition to
+white noise -- see `env/glider_env.py`'s `OBS_DELAY_MAX_STEPS` /
+`ACTION_DELAY_*_SUBSTEPS` and `sim/sensor_models.py`'s bias constants.
 
 ### Action Vector (2 elements, float32, ∈ [−1, 1])
 
@@ -385,36 +395,43 @@ notes for the full hardware picture.
 | 2 | 6 m/s | 15% | 20 m | 21 m | 40–70 m | 80% over 100 eps |
 | 3 | 9 m/s | 20% | 20 m | 20 m | 40–70 m | Final stage |
 
-**Baseline performance** (measured, n=100/stage, `DeterministicRTL` PD heading controller):
+**Baseline performance** (measured, n=100/stage, `DeterministicRTL` P-only heading controller, `kp_bank=1.5`):
 
 | Stage | Conditions | Success rate | Crash rate | Timeout rate |
 |-------|------------|---------------|------------|--------------|
-| 0 | No wind, no noise | 21% | 79% | 0% |
-| 1 | Light wind, mild noise | 19% | 81% | 0% |
-| 2 | Moderate wind + gusts | 21% | 79% | 0% |
-| 3 | Full domain randomisation | 23% | 77% | 0% |
+| 0 | No wind, no noise | 100% | 0% | 0% |
+| 1 | Light wind, mild noise | 99% | 1% | 0% |
+| 2 | Moderate wind + gusts | 94% | 6% | 0% |
+| 3 | Full domain randomisation | 84% | 16% | 0% |
 
-At this reduced altitude budget, failures resolve as crashes rather than
-timeouts (the old 100-120 m tow-release scale gave enough altitude margin
-for the baseline to wander for the full episode instead of running out of
-height) -- a more informative failure signature for reward shaping.
+Degrades gracefully with stage difficulty, as expected. Failures resolve as
+crashes rather than timeouts (the ~15-25 m ground-launch altitude budget
+gives the baseline no room to wander for the full episode before running
+out of height) -- a more informative failure signature for reward shaping.
 
-An earlier P-only heading controller (no damping) measured ~28-29% here, but
-that number was produced while `sim/jsbsim_fdm.py`'s `position_ned` had a
-since-fixed bug: it reported the *unsigned magnitude* of NED displacement
-along each axis rather than signed displacement, so the glider's perceived
-bearing to home was silently wrong whenever its net displacement crossed to
-the other side of the launch point. With that fixed, the same P-only
-controller's true success rate was ~4-6% -- per-episode traces showed a
-genuine, non-decaying heading limit cycle (bank command saturated on ~99%
-of steps), not a subtle mistuning. `DeterministicRTL` is now a PD
-controller (`kp_bank=0.3`, `kd_bank=5.0`, damped by IMU yaw rate rather
-than a finite difference of the 5 Hz GPS course angle, which would alias
-against the 20 Hz policy rate) -- see `baseline/deterministic_rtl.py`'s
-module docstring for the full derivation. The numbers above are the ones to
-trust; the old ~29% figure should not be used as a reference point.
+**Correction history (independent code review, see `RLGlider_Code_Review_V8.md`):**
+Every prior figure quoted for this baseline (21-23% for a "PD heading
+controller," ~4-6% for an untuned P-only law, and an even earlier ~28-29%)
+was measured against a P0 coordinate-frame bug: `sim/sensor_models.py`'s
+`_refresh_gps()` computed GPS velocity as `quat_to_rotmat(q).T @ v_body`
+instead of `quat_to_rotmat(q) @ v_body` (see that function's corrected
+docstring), which mirrored the GPS course-angle observation about North and
+inverted vertical speed. Every "correction" the controller issued from a
+mirrored course reading pushed the glider further off course -- the
+divergent heading limit cycle that motivated adding a derivative/damping
+term was a symptom of this bug, not evidence the plain P-only law needed
+detuning. With the GPS fix in place (plus the OU gust discretisation, pitch
+schedule, rudder-coordination sign, and ground-contact geometry fixes -- see
+`RLGlider_Code_Review_V8.md` Sections 1-2 for the full list), a plain
+`kp_bank=1.5` P-only law reaches the numbers above. Do not lower
+`tests/test_dynamics.py::test_baseline_reaches_home`'s threshold to
+accommodate a regression here -- suspect the GPS/IMU sign conventions first.
 
-**RL target:** > 60% at Stage 3.
+**RL target:** now that the baseline itself clears 84% at Stage 3, a ">60%"
+bar is no longer a meaningful target for the RL policy -- see
+`RLGlider_Code_Review_V8.md` Section 4 for the task-redefinition plan
+("arrival in a landable state" rather than "cross the home radius") that
+the next work phase should apply before setting a new numeric target.
 
 ---
 
@@ -466,7 +483,7 @@ python scratch/jsbsim_smoke.py
 | GliderEnv implementation | ✅ Complete |
 | Physics validation (5 gates) | ✅ All passing |
 | Unit test suite | ✅ All passing |
-| Deterministic baseline | ✅ ~20-23% across all 4 stages (PD heading controller) |
+| Deterministic baseline | ✅ 100%→84% across Stages 0-3 (P-only heading controller) |
 | PPO training to convergence | 🔄 Term 3 |
 | ESP32 firmware integration | 🔄 Term 3 |
 | Shadow-mode flight testing | 🔄 Term 3 |

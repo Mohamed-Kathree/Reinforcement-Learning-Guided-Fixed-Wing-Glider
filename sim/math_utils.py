@@ -13,7 +13,7 @@ Coordinate frames used:
     WIND: Stability/wind frame (x into relative wind)
 
 Quaternion convention: [q0, q1, q2, q3] where q0 is the scalar component.
-Rotation R maps NED -> BODY: v_body = R @ v_ned
+Rotation quat_to_rotmat(q) maps BODY -> NED: v_ned = R @ v_body
 
 Units: SI throughout (m, m/s, rad, rad/s, kg, N, N*m)
 """
@@ -29,9 +29,11 @@ from numpy.typing import NDArray
 # ---------------------------------------------------------------------------
 
 def quat_to_rotmat(q: NDArray) -> NDArray:
-    """3x3 rotation matrix R such that v_body = R @ v_ned.
+    """3x3 rotation matrix C_n/b such that v_ned = R @ v_body (body -> NED).
 
-    q = [q0, q1, q2, q3], q0 is scalar (ZYX Euler, NED->body).
+    q = [q0, q1, q2, q3], q0 is scalar (ZYX Euler, NED->body convention for
+    the quaternion itself). To go the other way (v_body = R_inv @ v_ned),
+    use R.T (R is orthonormal).
     """
     q0, q1, q2, q3 = q
     return np.array([

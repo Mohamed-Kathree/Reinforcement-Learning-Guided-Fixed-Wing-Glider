@@ -11,14 +11,22 @@ Key principle: the RL policy NEVER sees ground truth — only the outputs of the
 models.  All noise parameters are domain-randomisation targets; set via reset().
 
 Sensors modelled:
-    GPS        :  5 Hz, 1.5 m / 0.3 m/s position & velocity noise
-    IMU        : 200 Hz, 1 deg attitude / 0.5 deg/s rate noise
+    GPS        :  5 Hz, 1.5 m / 0.3 m/s position & velocity white noise, plus
+                  a per-episode correlated position bias (multipath/
+                  ionospheric-like; see GPS_POS_BIAS_STD_M)
+    IMU        : 200 Hz, 1 deg attitude / 0.5 deg/s rate white noise, plus a
+                  per-episode correlated attitude bias -- larger on yaw
+                  (magnetometer-like; see IMU_ATT_BIAS_STD_RAD / IMU_YAW_BIAS_STD_RAD)
     Baro       :  25 Hz, 1.0 m altitude noise (BMP280)
     Ultrasonic :  20 Hz, ~0.08 m range noise, dropout + range gating [0.2, 4.5] m
                   (RCWL-1655; landing-flare-only ground-proximity sensor, no LiDAR
                   is fitted on the hardware -- see as-built electronics notes.
                   Python identifiers below are still named lidar_*/LIDAR_* for
                   historical reasons; they carry the ultrasonic reading.)
+
+    White noise is the easy case -- a policy learns to average it out in a
+    couple of steps. The per-episode bias is what actually stresses sim-to-
+    real transfer: it cannot be averaged away, only made robust to.
 
 Update-rate model (zero-order hold):
     SensorSuite.step() is called at the 200 Hz physics rate.  Each sensor
@@ -35,7 +43,7 @@ Coordinate frames used:
     WIND: Stability/wind frame (x into relative wind)
 
 Quaternion convention: [q0, q1, q2, q3] where q0 is the scalar component.
-Rotation R maps NED -> BODY: v_body = R @ v_ned
+Rotation quat_to_rotmat(q) maps BODY -> NED: v_ned = R @ v_body
 
 Units: SI throughout (m, m/s, rad, rad/s, kg, N, N*m)
 """
@@ -57,6 +65,18 @@ IMU_HZ   = 200
 BARO_HZ  = 25
 LIDAR_HZ = 20    # ultrasonic (RCWL-1655), ~50 ms cycle -- see module docstring
 PHYS_HZ  = 200   # physics integration rate; must match JSBSimFDM's dt_phys
+
+# ---------------------------------------------------------------------------
+# Per-episode correlated bias std-devs (Hz-independent constants)
+# ---------------------------------------------------------------------------
+# Real GPS multipath/ionospheric error and IMU (accelerometer/gyro/mag) bias
+# are correlated over tens of seconds, not white -- a policy can learn to
+# average white noise out in a couple of steps, but it cannot average away
+# a persistent per-episode offset; it must be robust to it instead. Sampled
+# once at reset(), held constant for the whole episode (see SensorSuite.reset()).
+GPS_POS_BIAS_STD_M    = 1.5              # multipath/ionospheric-like position offset
+IMU_ATT_BIAS_STD_RAD  = np.radians(1.0)  # roll/pitch: accelerometer-tilt-like bias
+IMU_YAW_BIAS_STD_RAD  = np.radians(7.0)  # yaw: magnetometer bias near carbon fibre/servo current is much larger (real hardware: ~5-15 deg)
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +238,11 @@ class SensorSuite:
         self._lidar_agl:  float   = 0.0
         self._lidar_valid: bool   = False
 
+        # Per-episode correlated bias (sampled once in reset(), held constant
+        # for the episode; see GPS_POS_BIAS_STD_M etc. above).
+        self._gps_pos_bias: NDArray = np.zeros(3)
+        self._imu_att_bias: NDArray = np.zeros(3)   # [roll, pitch, yaw] bias (rad)
+
     # ------------------------------------------------------------------
     # Episode reset
     # ------------------------------------------------------------------
@@ -242,6 +267,16 @@ class SensorSuite:
         """
         self._noise_scale  = float(noise_scale)
         self._dropout_prob = float(dropout_prob)
+
+        # Sample this episode's correlated bias (held constant until the next
+        # reset()) -- BEFORE _refresh_all() so the first observation already
+        # reflects it, same as the real receiver/IMU would from power-on.
+        self._gps_pos_bias = rng.normal(0.0, GPS_POS_BIAS_STD_M * self._noise_scale, 3)
+        self._imu_att_bias = np.array([
+            rng.normal(0.0, IMU_ATT_BIAS_STD_RAD * self._noise_scale),
+            rng.normal(0.0, IMU_ATT_BIAS_STD_RAD * self._noise_scale),
+            rng.normal(0.0, IMU_YAW_BIAS_STD_RAD * self._noise_scale),
+        ])
 
         # Stagger initial counters so all sensors don't update simultaneously
         self._gps_ctr   = 0
@@ -346,17 +381,25 @@ class SensorSuite:
         self._refresh_lidar(state, rng)
 
     def _refresh_gps(self, state: NDArray, rng: np.random.Generator) -> None:
-        R     = quat_to_rotmat(state[6:10])
-        v_ned = R.T @ state[3:6]          # body -> NED velocity
-        self._gps_pos, self._gps_vel = _gps_noise(
+        R     = quat_to_rotmat(state[6:10])   # body -> NED DCM
+        v_ned = R @ state[3:6]                # body -> NED velocity (no transpose)
+        gps_pos, self._gps_vel = _gps_noise(
             state[0:3], v_ned, rng, self._noise_scale
         )
+        # Per-episode correlated position bias (multipath/ionospheric-like),
+        # on top of the white noise _gps_noise already added. Velocity is
+        # left unbiased -- Doppler-derived GPS velocity is not subject to the
+        # same slow-drifting position bias.
+        self._gps_pos = gps_pos + self._gps_pos_bias
 
     def _refresh_imu(self, state: NDArray, rng: np.random.Generator) -> None:
         euler = np.array(euler_from_quat(state[6:10]))
-        self._imu_euler, self._imu_omega = _imu_noise(
+        imu_euler, self._imu_omega = _imu_noise(
             euler, state[10:13], rng, self._noise_scale
         )
+        # Per-episode correlated attitude bias (accelerometer-tilt/magnetometer
+        # -like), on top of the white noise _imu_noise already added.
+        self._imu_euler = imu_euler + self._imu_att_bias
 
     def _refresh_baro(self, state: NDArray, rng: np.random.Generator) -> None:
         altitude = float(-state[2])       # altitude = -p_d

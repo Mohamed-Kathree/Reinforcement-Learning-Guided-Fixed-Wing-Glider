@@ -43,7 +43,8 @@ for stage_idx in range(len(STAGES)):
     print(f"S{stage_idx:<5}{s:>9}{c:>8}{t:>9}"
           f"{np.mean(dists):>9.1f}{np.min(dists):>8.1f}{np.max(dists):>8.1f}")
 
-print("\nReference: Stage 0 measured at ~20-22% success with the PD heading controller")
-print("(kp_bank=0.3, kd_bank=5.0) after fixing the position_ned sign bug -- see")
-print("baseline/deterministic_rtl.py's module docstring. The old ~29% figure was")
-print("measured under a since-fixed position_ned bug and should not be trusted.")
+print("\nReference: Stage 0 measured at ~100% / Stage 3 at ~90% success with the")
+print("P-only heading controller (kp_bank=1.5) after fixing the GPS velocity")
+print("transpose bug in sim/sensor_models.py::_refresh_gps -- see")
+print("baseline/deterministic_rtl.py's module docstring. Earlier PD-gain figures")
+print("(~20-22%) were measured against mirrored GPS course feedback and are stale.")

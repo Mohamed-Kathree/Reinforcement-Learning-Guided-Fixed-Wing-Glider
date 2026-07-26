@@ -66,6 +66,13 @@ M2FT   = 3.280839895
 FT2M   = 1.0 / M2FT
 MS2FPS = M2FT            # 1 m/s = M2FT fps
 FPS2MS = FT2M            # 1 fps = FT2M m/s
+KG2LBS = 2.20462
+M2IN   = 39.3701
+
+# Nominal empty weight (must match aircraft/rlglider/rlglider.xml's <emptywt>).
+# apply_domain_rand()'s mass_kg is achieved via the BALLAST point mass rather
+# than by editing this, so it stays a fixed, documented reference point.
+EMPTYWT_KG = 1.1
 
 # WGS84 semi-major axis (m). Used for a local tangent-plane (equirectangular)
 # projection of lat/lon onto NED North/East -- see position_ned's docstring
@@ -308,6 +315,8 @@ class JSBSimFDM:
         cl_mult:       float = 1.0,
         cd0_add:       float = 0.0,
         ctrl_eff_mult: float = 1.0,
+        mass_kg:       float = EMPTYWT_KG,
+        cg_offset_m:   float = 0.0,
     ) -> None:
         """Write per-episode domain-randomisation scale factors to JSBSim.
 
@@ -319,11 +328,31 @@ class JSBSimFDM:
             cl_mult       : CL table multiplier (nominal 1.0; range 0.9–1.1)
             cd0_add       : additive CD0 offset (nominal 0.0; range −0.005–0.010)
             ctrl_eff_mult : control-effectiveness scale (nominal 1.0; range 0.75–1.10)
+            mass_kg       : total aircraft mass (nominal EMPTYWT_KG=1.1). Achieved
+                            via the BALLAST point mass (signed: mass_kg < 1.1
+                            gives negative ballast), representing build-to-build
+                            mass variance (battery choice, airframe tolerance).
+            cg_offset_m   : CG shift along the body X axis (m), FRD convention
+                            (positive = forward), nominal 0.0. Representing
+                            build tolerance in ballast/component placement.
+
+        Mass/CG changes require a second run_ic() to take effect -- JSBSim
+        only recomputes total mass/inertia at run_ic() time, and reset()
+        already called it once (with the ballast still at its default 0)
+        before this method runs. The second call is a no-op for position/
+        velocity/attitude since none of the ic/* properties have changed
+        since reset() set them; verified empirically that state is
+        preserved bit-for-bit across the extra call.
         """
         fdm = self._fdm
         fdm["aero/cl-mult"]       = float(cl_mult)
         fdm["aero/cd0-add"]       = float(cd0_add)
         fdm["aero/ctrl-eff-mult"] = float(ctrl_eff_mult)
+
+        ballast_kg = float(mass_kg) - EMPTYWT_KG
+        fdm["inertia/pointmass-weight-lbs[0]"]      = ballast_kg * KG2LBS
+        fdm["inertia/pointmass-location-X-inches[0]"] = -float(cg_offset_m) * M2IN
+        fdm.run_ic()
 
     # ------------------------------------------------------------------
     # State read-outs  (SI, NED/FRD frames)
@@ -421,6 +450,26 @@ class JSBSimFDM:
     def airspeed(self) -> float:
         """True airspeed in m/s (wind-relative, from JSBSim aerodynamics)."""
         return float(self._fdm["velocities/vt-fps"] * FPS2MS)
+
+    @property
+    def alpha(self) -> float:
+        """True aerodynamic angle of attack (rad), wind-relative.
+
+        NOT the same as arctan2(state[5], state[3]) -- that quantity is
+        derived from INERTIAL body velocity and is only correct in still
+        air; in wind it can be off by >15 deg (see scratch/audit1.py TEST 2).
+        Use this for anything that needs the real aerodynamic condition
+        (reward stall penalty, analysis). The safety shield deliberately
+        does NOT use this -- see env/glider_env.py::_safety_shield, since
+        the physical ESP32 has no AoA vane and must not depend on a
+        quantity it cannot measure.
+        """
+        return float(self._fdm["aero/alpha-rad"])
+
+    @property
+    def beta(self) -> float:
+        """True aerodynamic sideslip angle (rad), wind-relative."""
+        return float(self._fdm["aero/beta-rad"])
 
     @property
     def state(self) -> NDArray:

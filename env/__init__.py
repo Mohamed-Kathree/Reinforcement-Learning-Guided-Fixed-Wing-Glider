@@ -30,7 +30,7 @@ Coordinate frames used:
     WIND: Stability/wind frame (x into relative wind)
 
 Quaternion convention: [q0, q1, q2, q3] where q0 is the scalar component.
-Rotation R maps NED -> BODY: v_body = R @ v_ned
+Rotation quat_to_rotmat(q) maps BODY -> NED: v_ned = R @ v_body
 
 Units: SI throughout (m, m/s, rad, rad/s, kg, N, N*m)
 """

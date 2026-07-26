@@ -39,7 +39,7 @@ Coordinate frames used:
     WIND: Stability/wind frame (x into relative wind)
 
 Quaternion convention: [q0, q1, q2, q3] where q0 is the scalar component.
-Rotation R maps NED -> BODY: v_body = R @ v_ned
+Rotation quat_to_rotmat(q) maps BODY -> NED: v_ned = R @ v_body
 
 Units: SI throughout (m, m/s, rad, rad/s, kg, N, N*m)
 """
@@ -67,6 +67,12 @@ from stable_baselines3.common.monitor import Monitor
 
 from env.glider_env import GliderEnv
 from env.curriculum import CurriculumScheduler, STAGES
+
+# eval_venv is held at the FINAL curriculum stage for the entire run (see
+# train()) so that best_model.zip -- the artefact actually deployed -- is
+# selected at deployment difficulty, not whatever stage training happens to
+# be on. Do not call eval_venv.env_method('set_stage', ...) with anything
+# other than STAGES[-1]; CurriculumCallback only advances the training venv.
 
 # Optional dashboard hook: streams live metrics to data/train_stream.jsonl
 # for the showcase frontend's Training tab (backend/routers/training.py's
@@ -349,7 +355,13 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
     # with Stage 1's config. Apply the initial stage explicitly here, the same
     # way CurriculumCallback applies every later stage advance.
     venv.env_method('set_stage', scheduler.current_cfg)
-    eval_venv.env_method('set_stage', scheduler.current_cfg)
+
+    # eval_venv is held PERMANENTLY at the final (hardest) stage -- not the
+    # scheduler's current stage. CurriculumCallback only ever calls set_stage
+    # on `venv` (the training env); if eval_venv started at Stage 0 it would
+    # stay there for the whole run, so best_model.zip would be selected on
+    # the easiest difficulty forever instead of deployment difficulty.
+    eval_venv.env_method('set_stage', dict(STAGES[-1]))
 
     # --- Policy ----------------------------------------------------------
     policy_kwargs = dict(net_arch=list(ppo_cfg['net_arch']))

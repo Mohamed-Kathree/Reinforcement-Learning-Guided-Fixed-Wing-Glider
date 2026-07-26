@@ -30,12 +30,14 @@ Coordinate frames used:
     WIND: Stability/wind frame (x into relative wind)
 
 Quaternion convention: [q0, q1, q2, q3] where q0 is the scalar component.
-Rotation R maps NED -> BODY: v_body = R @ v_ned
+Rotation quat_to_rotmat(q) maps BODY -> NED: v_ned = R @ v_body
 
 Units: SI throughout (m, m/s, rad, rad/s, kg, N, N*m)
 """
 
 from __future__ import annotations
+
+from collections import deque
 
 import numpy as np
 import numpy.typing as npt
@@ -45,7 +47,7 @@ from gymnasium import spaces
 from sim.jsbsim_fdm import JSBSimFDM
 from sim.wind import WindModel
 from sim.sensor_models import SensorSuite
-from sim.math_utils import build_state, euler_from_quat, wrap_pi
+from sim.math_utils import build_state, wrap_pi
 from env.reward import compute_reward, DEFAULT_REWARD_CFG
 
 
@@ -60,7 +62,14 @@ KD_ROLL:  float = 0.3   # reduced from 1.5: 1.5 caused limit-cycle where derivat
 # Pitch channel: trim-schedule maps speed command to pitch target
 KP_PITCH: float = 3.0
 KD_PITCH: float = 0.4
-KV_PITCH: float = 0.05    # pitch offset per m/s above/below trim speed
+# Pitch offset per m/s above/below trim speed. Rescaled down from the old
+# 0.05 rad/(m/s) (~2.9 deg/(m/s)), which -- combined with the pre-offset
+# clip bug (see AttitudeController.update()) -- pushed the sum tens of
+# degrees outside the sane pitch-attitude band across the +/-4 m/s command
+# range. At this scale the full command range maps to roughly a 10 deg
+# spread, verified monotonic and distinct across all 5 held-action values
+# with scratch/audit3.py's sweep.
+KV_PITCH: float = 0.015
 
 # Yaw / coordinated-turn: rudder proportional to roll rate
 KR_RUDDER: float = 0.05
@@ -77,7 +86,16 @@ SHIELD_MAX_BANK_RAD:    float = np.radians(45.0)   # increased from 40°: gives 
 # ever fire in the last couple of seconds before touchdown.
 SHIELD_MIN_AGL_M:       float = 2.5
 SHIELD_PULLUP_ELEV_RAD: float = np.radians(5.0)
-SHIELD_MAX_ALPHA_RAD:   float = np.radians(10.0)  # stall warning margin
+# Stall-margin proxy: a nose-up PITCH ATTITUDE ceiling, not a true angle-of-
+# attack limit. The physical ESP32 has no AoA vane/pitot (see as-built
+# electronics notes) so the shield -- which mirrors ESP32 firmware -- must
+# only depend on quantities the IMU can actually supply (pitch + roll).
+# True alpha is used for the REWARD's stall penalty (env/reward.py, via
+# JSBSimFDM.alpha) since rewards are privileged information; this shield
+# deliberately does not switch to it. Set above the AttitudeController's
+# normal commanded pitch band so it only fires on genuine upsets (gusts,
+# actuator saturation, launch transients), not routine commanded flight.
+SHIELD_MAX_PITCH_RAD:   float = np.radians(20.0)
 
 # Physics / policy rates
 DT_PHYS:  float = 0.005   # 200 Hz
@@ -110,6 +128,22 @@ LAUNCH_SPEED_MAX_MS: float = 15.0
 LAUNCH_PITCH_MIN_DEG: float = 0.0
 LAUNCH_PITCH_MAX_DEG: float = 15.0     # nose-up (positive pitch)
 
+# CG placement uncertainty (m), FRD convention (+ = forward of nominal CG).
+# Like launch speed/pitch, this is a fixed hardware build-tolerance
+# uncertainty, not a per-stage difficulty knob: every curriculum stage
+# samples within +/- this range regardless of mass_range (which sets the
+# TOTAL mass sampled via the ballast point mass; see _sample_domain_rand()).
+CG_OFFSET_RANGE_M: float = 0.01
+
+# Transport latency (sim-to-real gap: zero latency here vs. ~60-150 ms on
+# the real GPS-fix-age + Pi<->ESP32 link + servo command path in real life,
+# i.e. 1-3 whole policy steps). Sampled once per episode at reset() -- a
+# fixed delay for the whole episode, not resampled every step, since real
+# transport latency doesn't change step-to-step.
+OBS_DELAY_MAX_STEPS:        int = 4   # 0-4 policy steps (0-200 ms @ 20 Hz)
+ACTION_DELAY_MIN_SUBSTEPS:  int = 1
+ACTION_DELAY_MAX_SUBSTEPS:  int = 3   # 1-3 physics substeps (5-15 ms @ 200 Hz)
+
 
 # ---------------------------------------------------------------------------
 # Inner attitude controller
@@ -119,34 +153,47 @@ class AttitudeController:
     """Simulated ESP32 inner-loop controller.
 
     Converts bank and speed setpoints into servo deflection commands.
-    Runs at every 200 Hz physics substep inside env.step().
+    Runs at every 200 Hz physics substep inside env.step(), reading attitude
+    and body rates from the noisy, biased 200 Hz IMU channel (SensorSuite)
+    rather than ground-truth physics state -- this is what makes the
+    "mirrors ESP32 firmware" claim actually true: the real firmware has no
+    way to read exact roll/pitch/rates either. V_actual remains a ground-
+    truth quantity (there is no pitot on this airframe -- see
+    env/glider_env.py::GliderEnv._build_obs's "No airspeed channel" note);
+    closing that gap requires a GPS-groundspeed-based estimate, which is
+    Phase 4+ observation-redesign scope, not this fix.
     """
 
     def update(
         self,
-        state:        npt.NDArray,
+        imu_euler:    npt.NDArray,
+        imu_omega:    npt.NDArray,
+        V_actual:     float,
         bank_cmd_rad: float,
         speed_cmd_ms: float,
     ) -> dict:
         """Compute aileron/elevator/rudder commands.
 
         Args:
-            state        : 13-element physics state
+            imu_euler    : noisy, biased [roll, pitch, yaw] (rad) from SensorSuite.imu_euler
+            imu_omega    : noisy, biased [p, q, r] (rad/s) from SensorSuite.imu_omega
+            V_actual     : true airspeed (m/s) -- ground truth, see class docstring
             bank_cmd_rad : desired roll angle (rad), ±π/2
             speed_cmd_ms : desired airspeed (m/s)
 
         Returns:
             dict with keys 'aileron', 'elevator', 'rudder' (rad)
         """
-        roll, pitch, _ = euler_from_quat(state[6:10])
-        p_rate, q_rate, r_rate = float(state[10]), float(state[11]), float(state[12])
+        roll, pitch, _ = float(imu_euler[0]), float(imu_euler[1]), float(imu_euler[2])
+        p_rate, q_rate, r_rate = float(imu_omega[0]), float(imu_omega[1]), float(imu_omega[2])
 
         # Roll PD — wrap_pi ensures shortest-path recovery at any bank angle
         roll_err     = wrap_pi(bank_cmd_rad - roll)
         aileron_cmd  = KP_ROLL * roll_err - KD_ROLL * p_rate
 
         # Pitch: speed-scheduled pitch-angle controller.
-        # Target pitch = ALPHA_TRIM * (V_TRIM/V)^2 / cos(roll).
+        # Base target pitch = ALPHA_TRIM * (V_TRIM/V_cmd)^2 / cos(roll) -- the
+        # trim attitude for the COMMANDED speed, not the current one.
         # Rationale: CL for level flight scales as 1/V^2, and CL ≈ a0*alpha ≈
         # a0*pitch at small angles in steady glide.  Dividing by cos(roll)
         # restores the reduced vertical lift component in banked turns.
@@ -154,12 +201,28 @@ class AttitudeController:
         # alpha-only controller causes due to the Cm0>0 nose-down tendency.
         # Negate sign: Cm_de=-1.2 means positive elevator=nose-down, so a
         # positive pitch_err (need nose-down) drives a negative elevator cmd.
-        V_actual     = float(np.linalg.norm(state[3:6]))
-        V_clamp      = max(V_actual, 6.0)
+        #
+        # NOTE on an earlier bug: a previous version keyed this base term to
+        # the CURRENT airspeed (not the command) and then added an unclipped
+        # speed-command offset on top of an already-clipped base -- two
+        # competing feedback paths (one pulling attitude toward whatever
+        # holds V_actual near V_TRIM regardless of command, the other an
+        # oversized command bias) that collapsed all 5 points of
+        # scratch/audit3.py's speed_cmd sweep to nearly the same
+        # elevator-saturated, near-stall flight condition instead of 5
+        # distinct, monotonically-ordered trim speeds. Keying the schedule
+        # directly to speed_cmd_ms removes the competing path: the target IS
+        # the trim attitude for the desired speed, and KV_PITCH now supplies
+        # only a small closed-loop correction (from the gap between actual
+        # and commanded speed) to keep tracking sane once wind/domain-rand
+        # perturb the true trim point away from the nominal polar.
         cos_roll     = float(np.cos(roll))
-        pitch_target = (ALPHA_TRIM * (V_TRIM / V_clamp) ** 2) / max(abs(cos_roll), 0.5)
-        pitch_target = float(np.clip(pitch_target, np.radians(1.0), np.radians(10.0)))
-        pitch_target -= KV_PITCH * (speed_cmd_ms - V_TRIM)
+        cos_factor   = max(abs(cos_roll), 0.5)
+        V_cmd_clamp  = max(float(speed_cmd_ms), 4.0)
+        pitch_base   = (ALPHA_TRIM * (V_TRIM / V_cmd_clamp) ** 2) / cos_factor
+        pitch_corr   = -KV_PITCH * (speed_cmd_ms - V_actual)
+        pitch_target = float(np.clip(pitch_base + pitch_corr,
+                                      np.radians(-8.0), np.radians(12.0)))
         pitch_err    = pitch_target - pitch
         # Use Euler pitch rate θ_dot = q·cos(φ) − r·sin(φ) as the derivative
         # term. Body pitch rate q alone is blind to the turn-coupling disturbance
@@ -167,8 +230,13 @@ class AttitudeController:
         theta_dot_est = q_rate * np.cos(roll) - r_rate * np.sin(roll)
         elevator_cmd = -(KP_PITCH * pitch_err - KD_PITCH * theta_dot_est)
 
-        # Coordinated turn: rudder follows roll rate
-        rudder_cmd = KR_RUDDER * p_rate
+        # Coordinated turn: rudder opposes roll rate.
+        # rlglider.xml's Cn_dr = -0.05 (positive rudder -> nose LEFT, verified
+        # with scratch/audit1.py TEST 3). A right roll (p>0) needs a nose-
+        # RIGHT yaw moment to coordinate, i.e. NEGATIVE rudder. The old
+        # +KR_RUDDER*p_rate commanded positive rudder in a right roll --
+        # nose-left, adverse yaw, the opposite of coordination.
+        rudder_cmd = -KR_RUDDER * p_rate
 
         return {
             'aileron':  float(np.clip(aileron_cmd,  -np.radians(25), np.radians(25))),
@@ -249,6 +317,13 @@ class GliderEnv(gym.Env):
         # Cached last observation (built in _build_obs; exposed for reward fn)
         self._last_obs: npt.NDArray = np.zeros(11, dtype=np.float32)
 
+        # Observation/action transport-delay state (sampled per episode in
+        # reset(); see OBS_DELAY_MAX_STEPS / ACTION_DELAY_*_SUBSTEPS above).
+        self._obs_delay_steps:       int = 0
+        self._action_delay_substeps: int = 1
+        self._obs_buffer:    deque = deque()
+        self._action_buffer: deque = deque()
+
         # RNG (seeded properly in reset)
         self._rng: np.random.Generator = np.random.default_rng(seed)
 
@@ -283,10 +358,19 @@ class GliderEnv(gym.Env):
         # Wind: random direction + speed up to curriculum maximum
         wind_dir   = self._rng.uniform(0.0, 2.0 * np.pi)
         wind_speed = self._rng.uniform(0.0, float(self.cfg.get('wind_speed', 0.0)))
+        # Modest vertical component (thermal lift / mechanical sink), scaled
+        # by this episode's horizontal wind speed so it's zero in Stage 0's
+        # "no wind" condition and grows with the same curriculum knob rather
+        # than being a separate one -- an unpowered aircraft operating
+        # entirely within 0-25 m AGL sees vertical motion on this order
+        # routinely once there's any wind at all (mechanical turbulence off
+        # terrain/obstacles, or thermal activity). NED convention: positive
+        # wd = downdraft.
+        vertical_wind_ms = float(self._rng.uniform(-0.3, 0.3)) * wind_speed
         mean_ned   = np.array([
             wind_speed * np.cos(wind_dir),
             wind_speed * np.sin(wind_dir),
-            0.0,
+            vertical_wind_ms,
         ], dtype=np.float64)
         gust_intensity = float(self._rng.uniform(
             0.0, float(self.cfg.get('gust_intensity', 0.0))
@@ -320,8 +404,22 @@ class GliderEnv(gym.Env):
         self._prev_action   = np.zeros(2, dtype=np.float32)
         self._has_left_home = False   # must move > R_home_m away before success counts
 
+        # Sample this episode's fixed transport delays (held constant for the
+        # whole episode, not resampled every step -- real transport latency
+        # doesn't change step-to-step). Pre-fill each buffer with the initial
+        # value so early steps see a defined (if stale) reading rather than
+        # an undefined default.
+        self._obs_delay_steps = int(self._rng.integers(0, OBS_DELAY_MAX_STEPS + 1))
+        self._action_delay_substeps = int(self._rng.integers(
+            ACTION_DELAY_MIN_SUBSTEPS, ACTION_DELAY_MAX_SUBSTEPS + 1
+        ))
+
         obs = self._build_obs()
         self._last_obs = obs.copy()
+        self._obs_buffer = deque([obs.copy() for _ in range(self._obs_delay_steps)])
+        self._action_buffer = deque(
+            [(0.0, SPEED_CMD_CENTRE_MS)] * self._action_delay_substeps
+        )
 
         return obs, {}
 
@@ -349,16 +447,37 @@ class GliderEnv(gym.Env):
 
         # --- 10 physics substeps (200 Hz inner loop) --------------------
         for _ in range(N_SUBSTEPS):
-            # 1. Advance wind gust
-            wind_ned = self._wind.step()
+            # 1. Advance wind gust; log-profile-scale the horizontal mean
+            # component by current AGL altitude (see WindModel.step()).
+            wind_ned = self._wind.step(self._fdm.altitude)
 
-            # 2. Inner controller: bank + speed setpoints -> servo commands
+            # 1b. Action transport delay: push this step's command onto the
+            # FIFO and pop the command from action_delay_substeps ago -- a
+            # fixed-length delay line modelling the real command-path
+            # latency (Pi -> ESP32 link, servo transport lag) that a
+            # zero-latency sim would otherwise not have at all. The buffer
+            # persists across policy steps (not reset each call), so a delay
+            # spanning a step boundary correctly carries commands over from
+            # the previous step, same as a real transport delay would.
+            self._action_buffer.append((bank_cmd_rad, speed_cmd_ms))
+            delayed_bank_cmd_rad, delayed_speed_cmd_ms = self._action_buffer.popleft()
+
+            # 2. Inner controller: bank + speed setpoints -> servo commands.
+            # Reads attitude/rates from the 200 Hz IMU channel (noisy +
+            # per-episode biased -- see SensorSuite), not ground truth, so
+            # the "mirrors ESP32 firmware" claim is actually true. V_actual
+            # is the one exception (no pitot on this airframe -- see
+            # AttitudeController's class docstring).
+            imu_euler = self._sensors.imu_euler
+            imu_omega = self._sensors.imu_omega
+            V_actual  = float(np.linalg.norm(self._fdm.state[3:6]))
             ctrl_cmds = self._ctrl.update(
-                self._fdm.state, bank_cmd_rad, speed_cmd_ms
+                imu_euler, imu_omega, V_actual,
+                delayed_bank_cmd_rad, delayed_speed_cmd_ms,
             )
 
-            # 3. Safety shield: clip dangerous commands
-            ctrl_cmds = self._safety_shield(self._fdm.state, ctrl_cmds)
+            # 3. Safety shield: clip dangerous commands (also IMU-driven)
+            ctrl_cmds = self._safety_shield(imu_euler, imu_omega, ctrl_cmds)
 
             # 4. JSBSim step: normalises radian commands internally, applies
             #    actuator lag/rate-limit, advances 6-DOF EOM one dt step
@@ -378,18 +497,26 @@ class GliderEnv(gym.Env):
             self._sensors.step(self._fdm.state, self._rng)
 
         # --- Build observation -------------------------------------------
-        obs = self._build_obs()
+        # Observation transport delay: same FIFO pattern as the action delay
+        # above, but at policy-step granularity (0-4 steps @ 20 Hz). With
+        # obs_delay_steps == 0 the buffer starts empty and this is a no-op
+        # (append then immediately popleft the same array).
+        fresh_obs = self._build_obs()
+        self._obs_buffer.append(fresh_obs.copy())
+        obs = self._obs_buffer.popleft()
         self._last_obs = obs.copy()
 
         # --- Reward + termination ----------------------------------------
         reward, terminated, truncated_r, info = compute_reward(
-            state       = self._fdm.state,
-            prev_state  = prev_state,
-            obs         = obs,
-            action      = action,
-            prev_action = self._prev_action,
-            home_ned    = self._home_ned,
-            cfg         = self.cfg,
+            state         = self._fdm.state,
+            prev_state    = prev_state,
+            obs           = obs,
+            action        = action,
+            prev_action   = self._prev_action,
+            home_ned      = self._home_ned,
+            cfg           = self.cfg,
+            alpha_true    = self._fdm.alpha,
+            airspeed_true = self._fdm.airspeed,
         )
 
         # Ground contact (touched_down) or JSBSim solver/state failure (fault):
@@ -465,7 +592,17 @@ class GliderEnv(gym.Env):
         # Convert multiplicative CD0 factor to additive offset (CD0_nominal = 0.025)
         cd0_add = 0.025 * (cd0_scale - 1.0)
 
-        return dict(cl_mult=cl_mult, cd0_add=cd0_add, ctrl_eff_mult=ctrl_eff_mult)
+        # Mass/CG: previously dead config -- STAGES declared mass_range per
+        # stage but nothing read it, so mass and CG were fixed at 1.1 kg /
+        # nominal for every episode despite being the two largest build-to-
+        # build uncertainties on a hand-built airframe. Wired to the BALLAST
+        # point mass in rlglider.xml via JSBSimFDM.apply_domain_rand().
+        mass_lo, mass_hi = self.cfg.get('mass_range', (1.1, 1.1))
+        mass_kg     = float(self._rng.uniform(mass_lo, mass_hi))
+        cg_offset_m = float(self._rng.uniform(-CG_OFFSET_RANGE_M, CG_OFFSET_RANGE_M))
+
+        return dict(cl_mult=cl_mult, cd0_add=cd0_add, ctrl_eff_mult=ctrl_eff_mult,
+                    mass_kg=mass_kg, cg_offset_m=cg_offset_m)
 
     def _build_launch_state(self) -> npt.NDArray:
         """Construct the 13-element launch state for a new episode.
@@ -571,7 +708,8 @@ class GliderEnv(gym.Env):
 
     def _safety_shield(
         self,
-        state:     npt.NDArray,
+        imu_euler: npt.NDArray,
+        imu_omega: npt.NDArray,
         cmds:      dict,
     ) -> dict:
         """Clip servo commands to enforce hard safety limits.
@@ -580,18 +718,25 @@ class GliderEnv(gym.Env):
         Landing flare:   if ultrasonic valid and AGL < 2.5 m, force elevator up.
                          Only ever active in the last couple of seconds before
                          touchdown -- the ultrasonic is invalid above 4.5 m.
-        Stall margin:    if alpha > 10°, prevent further pitch-up.
+        Stall margin:    if pitch attitude exceeds a bank-derated ceiling,
+                         prevent further pitch-up. Uses PITCH (IMU-measurable),
+                         not true angle-of-attack -- the physical ESP32 has no
+                         AoA vane, so this shield must mirror what firmware can
+                         actually see (see SHIELD_MAX_PITCH_RAD's docstring).
+
+        Reads attitude/rates from the noisy, biased 200 Hz IMU channel
+        (SensorSuite), not ground truth -- same rationale as
+        AttitudeController.update().
 
         The shield operates on a copy so the original dict is not mutated.
         """
         cmds = dict(cmds)   # shallow copy
 
-        roll, _, _ = euler_from_quat(state[6:10])
-        alpha = float(np.arctan2(state[5], state[3]))
+        roll, pitch = float(imu_euler[0]), float(imu_euler[1])
 
         # Hard bank limit: actively level wings rather than just zeroing aileron,
         # so angular momentum doesn't carry the glider past inverted.
-        p_rate = float(state[10])
+        p_rate = float(imu_omega[0])
         if abs(roll) > SHIELD_MAX_BANK_RAD:
             recovery_cmd = KP_ROLL * (0.0 - roll) - KD_ROLL * p_rate
             cmds['aileron'] = float(np.clip(recovery_cmd, -np.radians(25), np.radians(25)))
@@ -604,9 +749,13 @@ class GliderEnv(gym.Env):
                 float(cmds['elevator']), -SHIELD_PULLUP_ELEV_RAD
             )
 
-        # Stall margin: block nose-UP elevator (negative) to stop alpha growing.
+        # Stall margin: block nose-UP elevator (negative) once pitch attitude
+        # exceeds a ceiling that derates with bank (a banked turn needs more
+        # pitch for the same alpha at a given speed -- same reasoning as the
+        # nominal pitch schedule in AttitudeController.update()).
         # Positive elevator is nose-down (recovery direction) so allow it through.
-        if alpha > SHIELD_MAX_ALPHA_RAD:
+        pitch_ceiling = SHIELD_MAX_PITCH_RAD / max(abs(np.cos(roll)), 0.5)
+        if pitch > pitch_ceiling:
             cmds['elevator'] = max(float(cmds['elevator']), 0.0)
 
         return cmds

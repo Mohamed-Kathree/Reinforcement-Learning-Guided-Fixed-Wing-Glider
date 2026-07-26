@@ -52,36 +52,61 @@
     <ixz unit="KG*M2">0.01</ixz>   <!-- roll-yaw cross term -->
     <emptywt unit="KG">1.1</emptywt>
     <location name="CG" unit="M"><x>0.0</x><y>0.0</y><z>0.0</z></location>
+    <!-- Movable ballast point mass: the per-episode hook for mass/CG domain
+         randomisation (JSBSimFDM.apply_domain_rand()'s mass_kg/cg_offset_m).
+         Weight is signed: a build lighter than the nominal 1.1 kg airframe
+         is represented as negative ballast rather than by editing emptywt,
+         so the nominal mass stays a fixed, documented reference point. This
+         is the single largest build-to-build uncertainty on a hand-built
+         airframe (mass and CG position) and was previously not randomised
+         at all despite STAGES declaring a mass_range per curriculum stage.
+         Location is in the STRUCTURAL frame (X aft, Z up; see the
+         ground_reactions comment above); nominal at the CG. -->
+    <pointmass name="BALLAST">
+      <weight unit="KG">0.0</weight>
+      <location name="POINTMASS" unit="M"><x>0.0</x><y>0.0</y><z>0.0</z></location>
+    </pointmass>
   </mass_balance>
 
   <!-- ================================================================
        GROUND REACTIONS  (belly-lander; 4 skid contact points)
        spring / damping in English units as required by JSBSim
+
+       IMPORTANT: JSBSim location elements use the STRUCTURAL frame
+       (X positive AFT, Z positive UP), NOT the FRD body frame (X fwd,
+       Z down) used everywhere else in this codebase. The skids sit
+       ~0.1 m BELOW the CG: in this frame that is NEGATIVE z. NOSE is
+       forward of the CG: in this frame that is NEGATIVE x (since +x is
+       aft). An earlier revision had both signs backwards (NOSE at +0.5,
+       TAIL at -0.5, z at +0.1), which put the contact points 0.1 m ABOVE
+       the CG and swapped which skid was which; verified with
+       scratch/audit1.py TEST 4 (WOW fired at h_agl=-0.062 m, i.e. AFTER
+       the CG had already crossed ground level, not before as intended).
        ================================================================ -->
   <ground_reactions>
     <contact type="STRUCTURE" name="NOSE">
-      <location unit="M"><x>0.5</x><y>0.0</y><z>0.1</z></location>
+      <location unit="M"><x>-0.5</x><y>0.0</y><z>-0.1</z></location>
       <static_friction>0.8</static_friction>
       <dynamic_friction>0.5</dynamic_friction>
       <spring_coeff  unit="LBS/FT">300</spring_coeff>
       <damping_coeff unit="LBS/FT/SEC">100</damping_coeff>
     </contact>
     <contact type="STRUCTURE" name="TAIL">
-      <location unit="M"><x>-0.5</x><y>0.0</y><z>0.1</z></location>
+      <location unit="M"><x>0.5</x><y>0.0</y><z>-0.1</z></location>
       <static_friction>0.8</static_friction>
       <dynamic_friction>0.5</dynamic_friction>
       <spring_coeff  unit="LBS/FT">300</spring_coeff>
       <damping_coeff unit="LBS/FT/SEC">100</damping_coeff>
     </contact>
     <contact type="STRUCTURE" name="LEFT_WINGTIP">
-      <location unit="M"><x>0.0</x><y>-1.0</y><z>0.1</z></location>
+      <location unit="M"><x>0.0</x><y>-1.0</y><z>-0.1</z></location>
       <static_friction>0.8</static_friction>
       <dynamic_friction>0.5</dynamic_friction>
       <spring_coeff  unit="LBS/FT">300</spring_coeff>
       <damping_coeff unit="LBS/FT/SEC">100</damping_coeff>
     </contact>
     <contact type="STRUCTURE" name="RIGHT_WINGTIP">
-      <location unit="M"><x>0.0</x><y>1.0</y><z>0.1</z></location>
+      <location unit="M"><x>0.0</x><y>1.0</y><z>-0.1</z></location>
       <static_friction>0.8</static_friction>
       <dynamic_friction>0.5</dynamic_friction>
       <spring_coeff  unit="LBS/FT">300</spring_coeff>
@@ -184,6 +209,49 @@
     <!-- cd-mult=0 disables all drag (used in energy-conservation gate) -->
     <property value="1.0">aero/cd-mult</property>
 
+    <!-- Total instantaneous CL (table lookup * cl-mult, plus elevator lift),
+         defined here (outside any axis block) purely as a reusable named
+         value; it does NOT itself contribute force: only functions nested
+         inside an axis element are summed into the aircraft's total forces.
+         CDi below squares this instead of using a fixed alpha-indexed table,
+         so induced drag responds correctly when domain randomisation
+         (aero/cl-mult) or elevator deflection changes the actual lift
+         coefficient; otherwise cl-mult could change lift without changing
+         induced drag, describing an aircraft with a physically impossible
+         polar. -->
+    <function name="aero/coefficient/CLtotal">
+      <sum>
+        <product>
+          <property>aero/cl-mult</property>
+          <table>
+            <independentVar lookup="row">aero/alpha-deg</independentVar>
+            <tableData>
+              -25   -0.5832
+              -18   -0.8414
+              -14   -1.0374
+              -12   -1.1519
+              -11   -1.0559
+               -8   -0.7679
+               -4   -0.3840
+                0    0.0000
+                4    0.3840
+                8    0.7679
+               11    1.0559
+               12    1.1519
+               14    1.0374
+               18    0.8414
+               25    0.6894
+            </tableData>
+          </table>
+        </product>
+        <product>
+          <value>0.30</value>
+          <property>aero/ctrl-eff-mult</property>
+          <property>fcs/elevator-pos-rad</property>
+        </product>
+      </sum>
+    </function>
+
     <!-- ============================================================
          LIFT  (positive = upward; JSBSim applies sign internally)
          ============================================================ -->
@@ -249,33 +317,20 @@
         </product>
       </function>
 
-      <!-- Induced drag: CDi = k*CL^2, tabulated vs alpha using actual CL
+      <!-- Induced drag: CDi = k*CL^2, using JSBSim's own instantaneous
+           CLtotal (defined above, outside the axes) instead of a fixed
+           alpha-indexed table, so CDi tracks the ACTUAL lift coefficient,
+           including domain-randomised cl-mult and elevator lift, rather
+           than silently decoupling from it.
            k = 1/(pi*e*AR) = 1/(pi*0.85*10.5) = 0.03566 -->
       <function name="aero/coefficient/CDi">
         <product>
           <property>aero/qbar-psf</property>
           <property>metrics/Sw-sqft</property>
           <property>aero/cd-mult</property>
-          <table>
-            <independentVar lookup="row">aero/alpha-deg</independentVar>
-            <tableData>
-              -25   0.01213
-              -18   0.02525
-              -14   0.03838
-              -12   0.04732
-              -11   0.03977
-               -8   0.02103
-               -4   0.00526
-                0   0.00000
-                4   0.00526
-                8   0.02103
-               11   0.03977
-               12   0.04732
-               14   0.03838
-               18   0.02525
-               25   0.01695
-            </tableData>
-          </table>
+          <value>0.03566</value>
+          <property>aero/coefficient/CLtotal</property>
+          <property>aero/coefficient/CLtotal</property>
         </product>
       </function>
 
@@ -361,6 +416,26 @@
           <value>0.15</value>
           <property>aero/ctrl-eff-mult</property>
           <property>fcs/aileron-pos-rad</property>
+        </product>
+      </function>
+
+      <!-- Rudder-induced roll: Cl_dr placeholder, magnitude/sign TBD from
+           AVL once real geometry is available (see review Section 5.3).
+           Small positive placeholder: on a shoulder/high-tail arrangement,
+           a nose-left yaw moment (positive rudder, see Cn_dr below) tends
+           to roll the aircraft left too (negative p) via the tail's side
+           force acting above the roll axis, i.e. proverse with the turn
+           this coordination is meant to assist; verify sign with
+           scratch/audit1.py's single-surface step test before trusting the
+           real AVL-derived value. -->
+      <function name="aero/moment/Cldr">
+        <product>
+          <property>aero/qbar-psf</property>
+          <property>metrics/Sw-sqft</property>
+          <property>metrics/bw-ft</property>
+          <value>0.005</value>
+          <property>aero/ctrl-eff-mult</property>
+          <property>fcs/rudder-pos-rad</property>
         </product>
       </function>
 
@@ -470,6 +545,28 @@
           <value>-0.05</value>
           <property>aero/ctrl-eff-mult</property>
           <property>fcs/rudder-pos-rad</property>
+        </product>
+      </function>
+
+      <!-- Adverse yaw: Cn_da placeholder, magnitude/sign TBD from AVL once
+           real geometry is available (see review Section 5.3). A 2 m-span
+           glider with outboard ailerons has significant adverse yaw:
+           the down-going aileron on the low wing (positive fcs/aileron-pos
+           -> right wing down, see rlglider.xml's ROLL axis header) creates
+           more induced drag than the up-going one, yawing the nose AWAY
+           from the roll direction (nose LEFT for a right roll, i.e.
+           negative Cn_da) until this is cancelled by rudder coordination.
+           Without this term the rudder channel was solving a problem the
+           simulation didn't have; verify sign with scratch/audit1.py's
+           single-surface step test before trusting the real AVL value. -->
+      <function name="aero/moment/Cnda">
+        <product>
+          <property>aero/qbar-psf</property>
+          <property>metrics/Sw-sqft</property>
+          <property>metrics/bw-ft</property>
+          <value>-0.012</value>
+          <property>aero/ctrl-eff-mult</property>
+          <property>fcs/aileron-pos-rad</property>
         </product>
       </function>
 

@@ -31,7 +31,7 @@ Coordinate frames used:
     WIND: Stability/wind frame (x into relative wind)
 
 Quaternion convention: [q0, q1, q2, q3] where q0 is the scalar component.
-Rotation R maps NED -> BODY: v_body = R @ v_ned
+Rotation quat_to_rotmat(q) maps BODY -> NED: v_ned = R @ v_body
 
 Units: SI throughout (m, m/s, rad, rad/s, kg, N, N*m)
 """
@@ -87,6 +87,8 @@ def compute_reward(
     prev_action: NDArray,
     home_ned:   NDArray,
     cfg:        dict,
+    alpha_true:    float,
+    airspeed_true: float,
     sensors_valid: bool = True,
 ) -> tuple[float, bool, bool, dict]:
     """Compute the shaped reward for one policy step.
@@ -100,6 +102,16 @@ def compute_reward(
         prev_action : action from the previous step (for smoothness penalty)
         home_ned    : NED position of the home/launch point, shape (3,) or (2,)
         cfg         : reward weight dict (see DEFAULT_REWARD_CFG for keys)
+        alpha_true  : true wind-relative angle of attack (rad), from
+                      JSBSimFDM.alpha -- NOT arctan2(state[5], state[3]),
+                      which is only correct in still air (see
+                      scratch/audit1.py TEST 2). Rewards are privileged
+                      information so using ground-truth alpha here is
+                      correct, unlike in the safety shield (see
+                      env/glider_env.py::_safety_shield).
+        airspeed_true : true wind-relative airspeed (m/s), from
+                      JSBSimFDM.airspeed -- reported in info['airspeed']
+                      (previously mislabelled ground-truth inertial speed).
         sensors_valid: overall sensor health flag; reserved for future use
                       (LiDAR validity is read from obs[10])
 
@@ -124,8 +136,11 @@ def compute_reward(
     lidar_valid = bool(obs[10])
 
     # --- Ground-truth quantities (safety-critical; not sensor-limited) --
-    V     = float(np.linalg.norm(state[3:6]))           # airspeed (m/s)
-    alpha = float(np.arctan2(state[5], state[3]))        # angle of attack (rad)
+    # True wind-relative alpha/airspeed from JSBSim -- NOT arctan2(state[5],
+    # state[3])/norm(state[3:6]), which are inertial-velocity-derived and
+    # wrong by up to ~19 deg / several m/s whenever wind is present.
+    V     = float(airspeed_true)
+    alpha = float(alpha_true)
 
     # --- Reward accumulator --------------------------------------------
     r = 0.0

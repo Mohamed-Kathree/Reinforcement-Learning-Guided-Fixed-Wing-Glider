@@ -15,7 +15,7 @@ Coordinate frames used:
     WIND: Stability/wind frame (x into relative wind)
 
 Quaternion convention: [q0, q1, q2, q3] where q0 is the scalar component.
-Rotation R maps NED -> BODY: v_body = R @ v_ned
+Rotation quat_to_rotmat(q) maps BODY -> NED: v_ned = R @ v_body
 
 Units: SI throughout (m, m/s, rad, rad/s, kg, N, N*m)
 """
@@ -41,19 +41,41 @@ class WindModel:
         mean_speed    : 0 -> 9 m/s across curriculum stages
         gust_intensity: 0 -> 2 m/s sigma of the driving white noise
 
+    Altitude scaling: the HORIZONTAL mean wind in mean_ned is defined at
+    z_ref AGL (2 m -- roughly the height wind is quoted at for small-UAV
+    operations) and log-profile-scaled by step()'s altitude_m argument.
+    A 20-40% gradient between 20 m and 2 m AGL is normal in the atmospheric
+    surface layer this glider spends its whole flight inside; a flat mean
+    wind that doesn't vary with altitude was previously a meaningful gap
+    for a task whose entire episode happens between 0-25 m AGL. The gust
+    and any vertical mean component (mean_ned[2], typically small thermal/
+    mechanical lift or sink sampled per episode) are NOT altitude-scaled.
+
     Usage (inside env.step() physics loop):
-        wind_ned = wind_model.step()
+        wind_ned = wind_model.step(altitude_m)
         state    = dyn.step(controls, wind_ned, dt_phys)
     """
 
-    def __init__(self, tau: float = 2.0, dt: float = 0.005) -> None:
+    def __init__(
+        self,
+        tau:   float = 2.0,
+        dt:    float = 0.005,
+        z_ref: float = 2.0,
+        z0:    float = 0.03,
+    ) -> None:
         """
         Args:
-            tau : gust correlation time (s).  Larger tau -> slower, smoother gusts.
-            dt  : physics integration step (s); must match GliderDynamics.
+            tau   : gust correlation time (s).  Larger tau -> slower, smoother gusts.
+            dt    : physics integration step (s); must match GliderDynamics.
+            z_ref : reference height (m AGL) at which mean_ned's horizontal
+                    component is defined (see altitude scaling above).
+            z0    : surface roughness length (m) for the log wind profile;
+                    0.03 m is a typical "open terrain, few obstacles" value.
         """
-        self.tau = tau
-        self.dt  = dt
+        self.tau   = tau
+        self.dt    = dt
+        self.z_ref = z_ref
+        self.z0    = z0
 
         self._mean_ned:  NDArray = np.zeros(3, dtype=np.float64)
         self._gust:      NDArray = np.zeros(3, dtype=np.float64)
@@ -91,21 +113,47 @@ class WindModel:
     # Per-step update
     # ------------------------------------------------------------------
 
-    def step(self) -> NDArray:
+    def step(self, altitude_m: float | None = None) -> NDArray:
         """Advance the gust state by one physics step and return total wind.
 
         Ornstein-Uhlenbeck update (Euler-Maruyama):
-            gust += (-gust/tau + noise) * dt
+            gust += -gust * (dt/tau) + sigma_d * N(0, 1)
+            sigma_d = intensity * sqrt(2*dt/tau)
 
-        where noise ~ N(0, intensity) per axis.
+        This scales the stochastic driving term by sqrt(dt) (not dt), which
+        is what makes the process's stationary standard deviation equal to
+        `intensity` exactly (an OU process integrated with a driving term
+        scaled by dt instead of sqrt(dt) underestimates its stationary
+        variance by a factor of ~dt/tau -- at dt=0.005s, tau=2s that's a
+        ~14x-too-weak gust for the same configured intensity).
+
+        Args:
+            altitude_m : current AGL altitude (m), used to log-profile-scale
+                         the horizontal mean wind component (see class
+                         docstring). None (default) skips scaling entirely
+                         (ratio = 1.0), for callers that don't track altitude.
 
         Returns:
             wind_ned : NED wind vector [wn, we, wd] (m/s), shape (3,).
         """
         if self._intensity > 0.0:
-            noise       = self._rng.normal(0.0, self._intensity, 3)
-            self._gust += (-self._gust / self.tau + noise) * self.dt
-        return self._mean_ned + self._gust
+            sigma_d      = self._intensity * np.sqrt(2.0 * self.dt / self.tau)
+            self._gust  += -self._gust * (self.dt / self.tau) + sigma_d * self._rng.normal(0.0, 1.0, 3)
+
+        if altitude_m is None:
+            profile_ratio = 1.0
+        else:
+            # Clipped to [0.5, 1.5]x: keeps the profile from blowing up near
+            # the ground (log singularity at z0) or over-amplifying well
+            # above the surface layer this glider actually operates in.
+            z = max(float(altitude_m), 0.5)
+            profile_ratio = float(np.clip(
+                np.log(z / self.z0) / np.log(self.z_ref / self.z0), 0.5, 1.5
+            ))
+
+        wind_ned = self._mean_ned.copy()
+        wind_ned[0:2] *= profile_ratio
+        return wind_ned + self._gust
 
     # ------------------------------------------------------------------
     # Convenience constructors
