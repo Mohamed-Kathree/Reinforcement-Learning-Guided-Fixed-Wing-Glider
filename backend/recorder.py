@@ -31,18 +31,24 @@ def _extract_true_state(env) -> dict:
     `env._fdm` is the GliderEnv's JSBSimFDM instance (sim/jsbsim_fdm.py).
     GliderEnv itself exposes no public accessor for it; this is read-only
     introspection for recording, not a modification of the RL code path.
+
+    `env._wind` (sim/wind.py's WindModel) is read the same way, for
+    `wind_ned` -- `.total_ned` is mean + gust, i.e. the actual wind vector
+    affecting the aircraft at this instant, not just the per-episode mean.
     """
     fdm = env._fdm
     pos_ned = fdm.position_ned
     roll, pitch, yaw = fdm.euler_angles()
     v_body = fdm.velocity_body
     ail, elev, rud = fdm.control_surfaces
+    wind_ned = env._wind.total_ned
     return dict(
         pos_ned=[float(pos_ned[0]), float(pos_ned[1]), float(pos_ned[2])],
         euler=[float(roll), float(pitch), float(yaw)],
         v_body=[float(v_body[0]), float(v_body[1]), float(v_body[2])],
         ctrl=ControlSurfaces(ail=float(ail), elev=float(elev), rud=float(rud)),
         agl=float(fdm.altitude),
+        wind_ned=[float(wind_ned[0]), float(wind_ned[1]), float(wind_ned[2])],
     )
 
 
@@ -98,6 +104,7 @@ def record_episode(
         ctrl=s0["ctrl"],
         dist_home=float(np.hypot(s0["pos_ned"][0], s0["pos_ned"][1])),
         agl=s0["agl"],
+        wind_ned=s0["wind_ned"],
     )]
 
     t = 0.0
@@ -117,6 +124,7 @@ def record_episode(
             ctrl=s["ctrl"],
             dist_home=float(info.get("dist_home", np.hypot(s["pos_ned"][0], s["pos_ned"][1]))),
             agl=s["agl"],
+            wind_ned=s["wind_ned"],
         ))
 
         if terminated or truncated:

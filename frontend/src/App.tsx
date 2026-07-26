@@ -53,12 +53,27 @@ function App() {
         <div className="sidebar-footer">COS 731/732 · UWC</div>
       </aside>
 
-      <main className="content">
-        {tab === "home" && <HomePanel />}
-        {tab === "validation" && <ValidationPanel />}
-        {tab === "baseline" && <BaselinePanel onSelectEpisode={handleSelectEpisode} />}
-        {tab === "training" && <TrainingPanel />}
-        {tab === "replay" && <ReplayPanel episodeId={selectedEpisodeId} />}
+      <main className={tab === "replay" ? "content content-wide" : "content"}>
+        {/* All tabs are always mounted, just hidden with CSS when inactive --
+            conditionally rendering (unmounting) them on tab switch used to
+            wipe every panel's local state (Replay's selected episode/frame,
+            Training's live WebSocket + accumulated metrics, etc.) every time
+            the user navigated away and back. */}
+        <div className={tab === "home" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
+          <HomePanel />
+        </div>
+        <div className={tab === "validation" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
+          <ValidationPanel />
+        </div>
+        <div className={tab === "baseline" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
+          <BaselinePanel onSelectEpisode={handleSelectEpisode} />
+        </div>
+        <div className={tab === "training" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
+          <TrainingPanel />
+        </div>
+        <div className={tab === "replay" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
+          <ReplayPanel episodeId={selectedEpisodeId} />
+        </div>
       </main>
     </div>
   );

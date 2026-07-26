@@ -88,6 +88,8 @@ class Frame(BaseModel):
     ctrl: ControlSurfaces
     dist_home: float
     agl: float
+    wind_ned: list[float] = [0.0, 0.0, 0.0]   # [wn, we, wd] m/s, total (mean+gust);
+                                               # default keeps old recordings loadable
 
 
 class Trajectory(BaseModel):

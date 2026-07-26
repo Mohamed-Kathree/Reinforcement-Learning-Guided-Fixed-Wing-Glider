@@ -75,6 +75,7 @@ export interface Frame {
   ctrl: ControlSurfaces;
   dist_home: number;
   agl: number;
+  wind_ned: [number, number, number];   // [wn, we, wd] m/s, total (mean+gust)
 }
 
 export interface Trajectory {
