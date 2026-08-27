@@ -115,7 +115,8 @@ reward:
   w_land:       500.0     # centre-precision bonus, scaled by landing quality
   w_bullseye:   150.0     # narrow secondary precision bonus (also quality-scaled)
   w_crash:      200.0     # penalty on a bad landing / fault, scaled by (1 - quality)
-  sigma_centre_m: 8.0     # Gaussian width for r_precision; overridden per curriculum stage
+  sigma_centre_m: 10.0    # half-value distance for the hyperbolic precision term
+                          # (r_precision = w_land*sigma/(sigma+d)); overridden per curriculum stage
 
   # Landing-quality grading bands: OK = full credit, BAD = zero credit,
   # linear ramp between. Only sink_bad/roll_bad_deg widen per curriculum
@@ -134,6 +135,11 @@ reward:
   w_path:        0.10     # reward per metre of ACTUAL ground track flown
   w_unreach:     2.0      # one-sided reachability-barrier penalty
   glide_ratio_usable: 8.0 # conservative vs. measured best L/D ~16.7 (12.9 trimmed)
+  barrier_min_agl_m: 10.0 # AGL below which the reachability barrier is inert. Above
+                          # the ultrasonic's 4.5 m validity gate and the baseline's
+                          # 3 m flare, below normal cruise.
+  w_unreach_cap: 20.0     # per-step ceiling on the barrier penalty, keeping it
+                          # subordinate to the terminal landing reward
   dt_rl:         0.050    # policy step size (s); multiplied by w_path each step
 
   # Safety penalties (unchanged from the pre-Phase-4 reward)
@@ -188,8 +194,17 @@ ppo:
 # Evaluation
 # ---------------------------------------------------------------------------
 eval:
-  n_episodes:       100             # episodes per evaluation call
-  eval_freq:        50_000          # timesteps between EvalCallback evaluations
+  n_episodes:       20              # episodes per evaluation call -- lowered from 100 under Phase 5:
+                                     # at n_episodes=100/eval_freq=50_000, 400 evaluations over a
+                                     # 20M-step run cost ~36M simulator steps against 20M steps of
+                                     # actual training (worse early on, when an untrained policy
+                                     # truncates at MAX_STEPS and each eval costs up to 200,000
+                                     # steps) -- more sim time in evaluation than in training, and a
+                                     # plausible contributor to the sustained-fps collapse recorded
+                                     # in V10. n_episodes=20/eval_freq=250_000 gives 80 evaluations x
+                                     # 20 x ~900 steps ~= 1.44M eval steps, a ~25x reduction, at the
+                                     # cost of a noisier best-model selection signal.
+  eval_freq:        250_000         # timesteps between EvalCallback evaluations -- see n_episodes note
   deterministic:    true            # use deterministic policy during evaluation
   best_model_path:  checkpoints/best_model
   vecnorm_path:     checkpoints/vecnormalize.pkl
@@ -198,13 +213,24 @@ eval:
 # Curriculum scheduler
 # ---------------------------------------------------------------------------
 curriculum:
-  advance_threshold: 0.80           # rolling success rate required to advance stage
+  advance_threshold: 0.60           # rolling success rate required to advance stage -- lowered from
+                                     # 0.80 under Phase 5: the measured baseline achieves 33-35% at
+                                     # Stages 0-1 and 5% at Stage 3, so demanding 80% before the
+                                     # first advance was a large ask even with Phase 2's precision
+                                     # gradient restored.
   rolling_window:    50             # number of recent episodes for rolling rate -- lowered from
                                      # 100 under Phase 4: ~7x fewer episodes per run at a fixed
                                      # timestep budget (see ppo.total_timesteps's note) means a
                                      # 100-episode window makes stage advancement very slow.
                                      # success here is env/reward.py's new definition:
                                      # quality > 0.5 and d_td < R_home_m -- not a radius crossing.
+  max_episodes_at_stage: 4000       # force an advance after this many episodes at one stage even if
+                                     # advance_threshold isn't met -- eval_venv is pinned at
+                                     # STAGES[-1] for the whole run (see training/train.py), so a
+                                     # stall at an early stage means best_model.zip gets selected by
+                                     # a policy that never trained against wind, gusts, sensor noise,
+                                     # or domain randomisation. Set None to disable (pre-Phase-5
+                                     # behaviour).
 
 # ---------------------------------------------------------------------------
 # Logging and checkpointing

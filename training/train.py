@@ -252,8 +252,20 @@ class CurriculumCallback(BaseCallback):
                 stage     = self.scheduler.current_stage
                 stage_cfg = self.scheduler.current_cfg
                 if self.verbose >= 1:
-                    print(f"\n[Curriculum] Advanced to Stage {stage}  "
-                          f"({self.scheduler.episodes_seen} episodes seen)")
+                    if self.scheduler.last_advance_was_forced:
+                        # A forced advance means the policy was promoted
+                        # while still failing the success-rate threshold --
+                        # this is information the user needs while reading
+                        # TensorBoard, not a detail to bury alongside earned
+                        # advances (RLGlider_Phase5_Reward_Rescaling_Spec.md
+                        # §3.1).
+                        print(f"\n[Curriculum] WARNING: FORCED advance to Stage {stage} "
+                              f"(success_rate={self.scheduler.success_rate:.1%} did not "
+                              f"reach threshold after max_episodes_at_stage episodes; "
+                              f"{self.scheduler.episodes_seen} episodes seen)")
+                    else:
+                        print(f"\n[Curriculum] Advanced to Stage {stage}  "
+                              f"({self.scheduler.episodes_seen} episodes seen)")
 
                 # Propagate to all parallel workers via set_attr (works for
                 # both DummyVecEnv and SubprocVecEnv).
@@ -309,6 +321,48 @@ class VecNormCheckpointCallback(BaseCallback):
         return True
 
 
+class SaveVecNormalizeOnBestCallback(BaseCallback):
+    """Saves VecNormalize stats whenever EvalCallback records a new best model.
+
+    EvalCallback saves best_model.zip on its own but has no equivalent for the
+    matching normalisation stats -- this module's own docstring has always
+    promised a vecnormalize_best.pkl output, but nothing ever produced it
+    (found during the Phase 5 throughput smoke-check; see
+    RLGlider_Phase5_Reward_Rescaling_Spec.md §5). Without this, best_model.zip
+    -- the artefact actually meant for deployment -- has no reliable
+    observation-normalisation stats to load it with; the periodic
+    vecnormalize_<step>.pkl snapshots are not guaranteed to land on the same
+    timestep as a new-best event.
+
+    Passed as EvalCallback's callback_on_new_best, so SB3 invokes it (via
+    BaseCallback.on_step -> _on_step) immediately after best_model.zip is
+    saved, at which point `venv` (the training VecNormalize) has already been
+    synced into eval_venv by EvalCallback itself -- either one's stats are
+    equivalent at this instant, so this saves `venv` directly.
+
+    Args:
+        checkpoint_dir : directory to write vecnormalize_best.pkl into
+        venv           : the training VecNormalize instance
+    """
+
+    def __init__(
+        self,
+        checkpoint_dir: str,
+        venv:           VecNormalize,
+        verbose:        int = 0,
+    ) -> None:
+        super().__init__(verbose=verbose)
+        self.checkpoint_dir = pathlib.Path(checkpoint_dir)
+        self.venv           = venv
+
+    def _on_step(self) -> bool:
+        path = self.checkpoint_dir / 'vecnormalize_best.pkl'
+        self.venv.save(str(path))
+        if self.verbose >= 1:
+            print(f"[VecNorm] Saved {path} (new best model)")
+        return True
+
+
 # ---------------------------------------------------------------------------
 # Training entry point
 # ---------------------------------------------------------------------------
@@ -343,8 +397,12 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
 
     # --- Curriculum scheduler --------------------------------------------
     scheduler = CurriculumScheduler(
-        advance_threshold = float(cur_cfg['advance_threshold']),
-        rolling_window    = int(cur_cfg['rolling_window']),
+        advance_threshold     = float(cur_cfg['advance_threshold']),
+        rolling_window        = int(cur_cfg['rolling_window']),
+        max_episodes_at_stage = (
+            int(cur_cfg['max_episodes_at_stage'])
+            if cur_cfg.get('max_episodes_at_stage') is not None else None
+        ),
     )
 
     # make_env() only seeds each worker with the reward section (flat_reward_cfg);
@@ -438,6 +496,11 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
         eval_freq            = max(int(eval_cfg['eval_freq']) // int(ppo_cfg['n_envs']), 1),
         n_eval_episodes      = int(eval_cfg['n_episodes']),
         deterministic        = bool(eval_cfg['deterministic']),
+        callback_on_new_best = SaveVecNormalizeOnBestCallback(
+            checkpoint_dir = str(checkpoint_dir),
+            venv           = venv,
+            verbose        = 1,
+        ),
         verbose              = 1,
     )
 

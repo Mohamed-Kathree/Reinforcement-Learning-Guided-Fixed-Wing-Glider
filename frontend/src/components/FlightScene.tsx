@@ -121,14 +121,16 @@ export default function FlightScene({ frames, currentIndex, rHome }: FlightScene
     }
     animate();
 
-    function handleResize() {
+    // Arrow function (not a nested function declaration) so TS's
+    // control-flow narrowing of `mount` above carries through here.
+    const handleResize = () => {
       const w = mount.clientWidth;
       const h = mount.clientHeight;
       if (w === 0 || h === 0) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
-    }
+    };
     window.addEventListener("resize", handleResize);
 
     return () => {

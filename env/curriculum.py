@@ -97,7 +97,7 @@ STAGES: list[dict] = [
         launch_offset_max_m = 90.0,
         aero_scale_range    = (1.0,  1.0),
         mass_range          = (1.1,  1.1),
-        sigma_centre_m      = 12.0,
+        sigma_centre_m      = 15.0,
         sink_bad            = 3.5,
         roll_bad_deg        = 45.0,
     ),
@@ -113,7 +113,7 @@ STAGES: list[dict] = [
         launch_offset_max_m = 80.0,
         aero_scale_range    = (0.9,  1.1),
         mass_range          = (1.0,  1.2),
-        sigma_centre_m      = 10.0,
+        sigma_centre_m      = 13.0,
         sink_bad            = 3.0,
         roll_bad_deg        = 40.0,
     ),
@@ -129,7 +129,7 @@ STAGES: list[dict] = [
         launch_offset_max_m = 70.0,
         aero_scale_range    = (0.85, 1.15),
         mass_range          = (0.9,  1.3),
-        sigma_centre_m      = 9.0,
+        sigma_centre_m      = 11.0,
         sink_bad            = 2.75,
         roll_bad_deg        = 37.0,
     ),
@@ -145,7 +145,7 @@ STAGES: list[dict] = [
         launch_offset_max_m = 70.0,
         aero_scale_range    = (0.8,  1.2),
         mass_range          = (0.85, 1.35),
-        sigma_centre_m      = 8.0,
+        sigma_centre_m      = 10.0,
         sink_bad            = 2.5,
         roll_bad_deg        = 35.0,
     ),
@@ -160,31 +160,49 @@ class CurriculumScheduler:
     """Tracks rolling episode success rate and advances the difficulty stage.
 
     Args:
-        advance_threshold : success rate required to advance (default 0.80)
-        rolling_window    : number of recent episodes used for the rate (default 100)
+        advance_threshold    : success rate required to advance (default 0.80)
+        rolling_window       : number of recent episodes used for the rate (default 100)
+        max_episodes_at_stage: force an advance after this many episodes at the
+                               current stage even if the threshold isn't met
+                               (default None = disabled, i.e. the pre-Phase-5
+                               behaviour -- never force-advances). Guards
+                               against a run stalling at an early stage for
+                               its whole timestep budget: eval_venv is pinned
+                               at STAGES[-1] (see training/train.py), so a
+                               stall means best_model.zip gets selected by a
+                               policy that never trained against wind, gusts,
+                               sensor noise, or domain randomisation.
 
     Attributes:
-        current_stage : int, index into STAGES (read-only via property)
-        success_rate  : float, rolling success rate over the last window episodes
-        current_cfg   : dict, stage config for the current difficulty level
-        episodes_seen : int, total episodes recorded since last reset()
+        current_stage          : int, index into STAGES (read-only via property)
+        success_rate           : float, rolling success rate over the last window episodes
+        current_cfg             : dict, stage config for the current difficulty level
+        episodes_seen           : int, total episodes recorded since last reset()
+        last_advance_was_forced : bool, True if the most recent advance was a
+                                  forced (not earned) promotion
     """
 
     def __init__(
         self,
-        advance_threshold: float = 0.80,
-        rolling_window:    int   = 100,
+        advance_threshold:     float     = 0.80,
+        rolling_window:        int       = 100,
+        max_episodes_at_stage: int | None = None,
     ) -> None:
         if not 0.0 < advance_threshold <= 1.0:
             raise ValueError(f"advance_threshold must be in (0, 1]; got {advance_threshold}")
         if rolling_window < 1:
             raise ValueError(f"rolling_window must be >= 1; got {rolling_window}")
+        if max_episodes_at_stage is not None and max_episodes_at_stage < 1:
+            raise ValueError(f"max_episodes_at_stage must be >= 1; got {max_episodes_at_stage}")
 
         self._threshold: float = advance_threshold
         self._window:    int   = rolling_window
+        self._max_episodes_at_stage: int | None = max_episodes_at_stage
         self._stage:     int   = 0
         self._buffer:    Deque[bool] = deque(maxlen=rolling_window)
         self.episodes_seen: int = 0
+        self._episodes_at_stage: int = 0
+        self.last_advance_was_forced: bool = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -202,6 +220,7 @@ class CurriculumScheduler:
         """
         self._buffer.append(bool(success))
         self.episodes_seen += 1
+        self._episodes_at_stage += 1
         return self._maybe_advance()
 
     def reset(self, stage: int = 0) -> None:
@@ -218,6 +237,8 @@ class CurriculumScheduler:
         self._stage = stage
         self._buffer.clear()
         self.episodes_seen = 0
+        self._episodes_at_stage = 0
+        self.last_advance_was_forced = False
 
     # ------------------------------------------------------------------
     # Properties
@@ -263,29 +284,44 @@ class CurriculumScheduler:
         """Number of episodes currently in the rolling window."""
         return len(self._buffer)
 
+    @property
+    def episodes_at_stage(self) -> int:
+        """Episodes recorded at the current stage since the last advance."""
+        return self._episodes_at_stage
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
     def _maybe_advance(self) -> bool:
-        """Advance stage if the rolling success rate meets the threshold.
+        """Advance stage if the rolling success rate meets the threshold, or
+        (if enabled) force an advance after max_episodes_at_stage episodes.
 
-        Only advances once the buffer is full (rolling_window episodes
-        recorded at the current stage) to avoid premature promotion on
-        small samples at the start of training.
+        Only advances on the threshold path once the buffer is full
+        (rolling_window episodes recorded at the current stage) to avoid
+        premature promotion on small samples at the start of training. The
+        force-advance path does not require a full buffer -- it exists
+        precisely to unstick a stage that isn't accumulating enough
+        successes to fill/pass the threshold at all.
 
         Returns True if the stage was advanced.
         """
         if self.at_final_stage:
             return False
 
-        # Require a full window before evaluating
-        if len(self._buffer) < self._window:
-            return False
-
-        if self.success_rate >= self._threshold:
+        if len(self._buffer) >= self._window and self.success_rate >= self._threshold:
             self._stage += 1
             self._buffer.clear()   # re-evaluate from scratch on the new stage
+            self._episodes_at_stage = 0
+            self.last_advance_was_forced = False
+            return True
+
+        if (self._max_episodes_at_stage is not None
+                and self._episodes_at_stage >= self._max_episodes_at_stage):
+            self._stage += 1
+            self._buffer.clear()
+            self._episodes_at_stage = 0
+            self.last_advance_was_forced = True
             return True
 
         return False
@@ -295,10 +331,17 @@ class CurriculumScheduler:
     # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
+        at_stage = (
+            f"at_stage={self._episodes_at_stage}/{self._max_episodes_at_stage}"
+            if self._max_episodes_at_stage is not None
+            else f"at_stage={self._episodes_at_stage}"
+        )
         return (
             f"CurriculumScheduler("
             f"stage={self._stage}/{len(STAGES)-1}, "
             f"success_rate={self.success_rate:.2%}, "
             f"window={len(self._buffer)}/{self._window}, "
-            f"threshold={self._threshold:.0%})"
+            f"threshold={self._threshold:.0%}, "
+            f"{at_stage}, "
+            f"last_advance={'forced' if self.last_advance_was_forced else 'earned'})"
         )

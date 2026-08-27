@@ -32,6 +32,12 @@ Tests:
     test_landing_quality_lexicographic    -- Phase 4: clean-but-further beats close-but-stalled
     test_episode_terminates_on_touchdown  -- Phase 4: crossing R_home_m alone doesn't end the episode
     test_baseline_fixed_seed_regression          -- 20-episode fixed-seed hash regression guard
+    test_barrier_inert_below_flare        -- Phase 5: reachability barrier never fires below barrier_min_agl_m
+    test_barrier_penalty_capped           -- Phase 5: barrier penalty clips to w_unreach_cap
+    test_precision_reward_monotone_and_has_gradient -- Phase 5: hyperbolic r_precision has a real gradient
+    test_curriculum_force_advance                    -- Phase 5: max_episodes_at_stage forces an advance
+    test_curriculum_force_advance_disabled_by_default -- Phase 5: default behaviour unchanged
+    test_reward_cfg_config_parity                     -- Phase 5: DEFAULT_REWARD_CFG keys mirrored in base.yaml
 
 Coordinate frames: NED inertial, BODY (FRD), WIND (stability).
 Quaternion convention: [q0, q1, q2, q3], q0 scalar.
@@ -660,4 +666,164 @@ def test_baseline_fixed_seed_regression():
             "physics, sensors, or control has altered baseline behaviour. "
             "If this change is deliberate, regenerate the reference array."
         ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 reward-rescaling tests (RLGlider_Phase5_Reward_Rescaling_Spec.md)
+# ---------------------------------------------------------------------------
+
+def test_barrier_inert_below_flare():
+    """The reachability barrier must never fire below barrier_min_agl_m --
+    pre-fix it fired on 79-186 steps/episode, 72% of them below 3 m AGL,
+    degenerating into a landing-accuracy penalty on geometry the policy can
+    no longer change (Defect A, RLGlider_Phase5_Reward_Rescaling_Spec.md
+    §1)."""
+    from env.glider_env import GliderEnv
+    from env.reward import DEFAULT_REWARD_CFG
+    from baseline.deterministic_rtl import DeterministicRTL
+
+    cfg = dict(STAGES[0])
+    env = GliderEnv(cfg=cfg)
+    ctrl = DeterministicRTL()
+    ctrl.reset()
+    obs, _ = env.reset(seed=0)
+
+    barrier_min_agl = float(DEFAULT_REWARD_CFG['barrier_min_agl_m'])
+    while True:
+        action = ctrl.act(obs)
+        obs, r, terminated, truncated, info = env.step(action)
+        if float(env._fdm.altitude) < barrier_min_agl:
+            assert not info['unreach_violation'], (
+                f"barrier fired at {env._fdm.altitude:.2f} m AGL, below the "
+                f"{barrier_min_agl} m gate"
+            )
+        if terminated or truncated:
+            break
+
+
+def test_barrier_penalty_capped():
+    """A synthetic state far outside glide range must clip to exactly
+    w_unreach_cap, not the unbounded linear penalty -- guards against the
+    cap being dropped in a future edit."""
+    from env.reward import compute_reward, DEFAULT_REWARD_CFG
+
+    cfg = dict(DEFAULT_REWARD_CFG)
+    state = build_state(p_ned=np.array([5000.0, 0.0, -15.0]), v_body=np.array([10.0, 0.0, 0.0]))
+    obs = np.zeros(12, dtype=np.float32)
+    zero_action = np.zeros(2, dtype=np.float32)
+
+    r, terminated, truncated, info = compute_reward(
+        state=state, prev_state=state, obs=obs, action=zero_action,
+        prev_action=zero_action, home_ned=np.zeros(3), cfg=cfg,
+        alpha_true=np.radians(3.0), airspeed_true=10.0,
+        touched_down=False, fault=False,
+    )
+
+    assert info['unreach_violation']
+    assert info['penalty_unreach'] == -cfg['w_unreach_cap'], (
+        f"expected penalty_unreach == -{cfg['w_unreach_cap']}, got {info['penalty_unreach']}"
+    )
+
+
+def test_precision_reward_monotone_and_has_gradient():
+    """r_terminal must be strictly decreasing in dist_home with a
+    non-vanishing gradient across the whole range the airframe actually
+    achieves -- under the old Gaussian, the 100->150 m finite difference was
+    ~1e-5 (Defect B); the hyperbolic replacement must clear 1.0 point there."""
+    from env.reward import compute_reward, DEFAULT_REWARD_CFG
+
+    def terminal_reward(dist_home):
+        state = build_state(p_ned=np.array([dist_home, 0.0, 0.0]), v_body=np.array([9.0, 0.0, 0.5]))
+        obs = np.zeros(12, dtype=np.float32)
+        zero_action = np.zeros(2, dtype=np.float32)
+        _, _, _, info = compute_reward(
+            state=state, prev_state=state, obs=obs, action=zero_action,
+            prev_action=zero_action, home_ned=np.zeros(3), cfg=dict(DEFAULT_REWARD_CFG),
+            alpha_true=np.radians(3.0), airspeed_true=9.0,
+            touched_down=True, fault=False,
+        )
+        assert info['quality'] == 1.0
+        return info['r_terminal']
+
+    dists = [0, 1, 2, 5, 10, 20, 30, 50, 100, 150, 200]
+    rewards = [terminal_reward(d) for d in dists]
+
+    assert all(rewards[i] > rewards[i + 1] for i in range(len(rewards) - 1)), (
+        f"r_terminal not strictly decreasing in dist_home: {list(zip(dists, rewards))}"
+    )
+
+    grad_100_150 = abs(rewards[dists.index(150)] - rewards[dists.index(100)])
+    assert grad_100_150 > 1.0, (
+        f"gradient between 100-150 m is {grad_100_150:.6f}, expected > 1.0 "
+        f"(this is the check that catches Defect B -- under the Gaussian it was ~1e-5)"
+    )
+
+
+def test_curriculum_force_advance():
+    """max_episodes_at_stage must force an advance once the cap is hit, even
+    if the success-rate threshold is never met -- guards a run from stalling
+    at one stage for its whole timestep budget (eval_venv is pinned at
+    STAGES[-1], so a stall means best_model.zip is selected by a policy that
+    never trained against wind/gusts/noise/domain-randomisation). Also checks
+    that an EARNED advance sets last_advance_was_forced=False, so the flag
+    isn't simply always true after any advance."""
+    from env.curriculum import CurriculumScheduler
+
+    # --- forced advance: never meets the (deliberately unreachable) threshold
+    forced = CurriculumScheduler(advance_threshold=0.99, rolling_window=10, max_episodes_at_stage=25)
+    advanced_on = None
+    for i in range(25):
+        if forced.record_episode(success=False):
+            advanced_on = i
+    assert advanced_on == 24, f"expected the 25th episode (index 24) to force the advance, got {advanced_on}"
+    assert forced.current_stage == 1
+    assert forced.last_advance_was_forced is True
+    assert forced.episodes_in_window == 0, "rolling buffer must be cleared on advance"
+    assert forced.episodes_at_stage == 0, "at-stage counter must be reset on advance"
+
+    # --- earned advance: threshold trivially met, so last_advance_was_forced must be False
+    earned = CurriculumScheduler(advance_threshold=0.5, rolling_window=10, max_episodes_at_stage=1000)
+    for _ in range(10):
+        earned.record_episode(success=True)
+    assert earned.current_stage == 1
+    assert earned.last_advance_was_forced is False
+    assert earned.episodes_in_window == 0
+    assert earned.episodes_at_stage == 0
+
+
+def test_curriculum_force_advance_disabled_by_default():
+    """max_episodes_at_stage defaults to None (disabled) -- the pre-Phase-5
+    behaviour must be unchanged: a scheduler that never earns an advance
+    stays at Stage 0 indefinitely."""
+    from env.curriculum import CurriculumScheduler
+
+    scheduler = CurriculumScheduler()
+    for _ in range(500):
+        scheduler.record_episode(success=False)
+
+    assert scheduler.current_stage == 0
+    assert scheduler.last_advance_was_forced is False
+
+
+def test_reward_cfg_config_parity():
+    """Every key in DEFAULT_REWARD_CFG must also appear in training/configs/
+    base.yaml's reward: section -- Phases 1 and 2 both added keys to both
+    places, and a silent divergence between them means training and tests
+    optimise different reward functions."""
+    import pathlib
+    import yaml
+    from env.reward import DEFAULT_REWARD_CFG
+
+    base_yaml_path = pathlib.Path(__file__).parent.parent / 'training' / 'configs' / 'base.yaml'
+    with open(base_yaml_path) as f:
+        base_cfg = yaml.safe_load(f)
+
+    yaml_reward_keys = set(base_cfg['reward'].keys())
+    missing = set(DEFAULT_REWARD_CFG.keys()) - yaml_reward_keys
+    assert not missing, (
+        f"keys present in DEFAULT_REWARD_CFG but missing from base.yaml's reward: "
+        f"section: {missing} -- training would silently use the DEFAULT_REWARD_CFG "
+        f"value for these while tests use whatever DEFAULT_REWARD_CFG also uses, "
+        f"diverging the moment either is changed independently"
     )

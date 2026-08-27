@@ -74,7 +74,8 @@ DEFAULT_REWARD_CFG: dict = {
     'w_land':          500.0,   # centre-precision bonus, scaled by landing quality
     'w_bullseye':      150.0,   # narrow secondary precision bonus (also quality-scaled)
     'w_crash':         200.0,   # penalty on a bad landing / fault, scaled by (1 - quality)
-    'sigma_centre_m':    8.0,   # Gaussian width for r_precision; curriculum-overridden
+    'sigma_centre_m':   10.0,   # half-value distance for the hyperbolic precision term
+                                # (r_precision = w_land / (1 + d/sigma)); curriculum-overridden
 
     # Landing-quality grading bands: OK = full credit, BAD = zero credit,
     # linear ramp between (see _grade()). Fixed across the curriculum on
@@ -94,6 +95,14 @@ DEFAULT_REWARD_CFG: dict = {
     'w_path':            0.10,  # reward per metre of ACTUAL ground track flown
     'w_unreach':         2.0,   # one-sided reachability-barrier penalty
     'glide_ratio_usable': 8.0,  # conservative vs. measured best L/D ~16.7 (12.9 trimmed)
+    'barrier_min_agl_m': 10.0,  # AGL below which the reachability barrier is inert.
+                                # Above the ultrasonic's 4.5 m validity gate and the
+                                # baseline's 3 m flare, below normal cruise. Measured
+                                # pre-fix barrier firing peaked at 6.06 m AGL, so this
+                                # makes it inert through the entire landing phase.
+    'w_unreach_cap':    20.0,   # per-step ceiling on the barrier penalty. Bounds a
+                                # single step's contribution to ~2.5% of a mid-range
+                                # terminal reward, keeping the barrier subordinate.
     'dt_rl':             0.05,  # policy step size (s); multiplied by w_path
 
     # Safety (unchanged from the pre-Phase-4 reward)
@@ -193,7 +202,7 @@ def compute_reward(
             'roll_td_deg': float('nan'), 'V_td': float('nan'),
             'alpha_td_deg': float('nan'),
             'alpha_deg': float(np.degrees(alpha_true)),
-            'roll_deg': float(obs[4]),
+            'roll_deg': float(np.degrees(float(obs[4]))),
             'airspeed': float(airspeed_true),
         }
         return float(r), True, False, info
@@ -225,19 +234,34 @@ def compute_reward(
     r_path = float(cfg['w_path']) * ground_speed_true * float(cfg['dt_rl'])
     r += r_path
 
-    # 2. Reachability barrier: zero during normal flight, penalising only
-    #    once the glider has flown itself further than it can glide back --
-    #    a constraint, not "hurry home" (replaces w_progress, which directly
-    #    opposed the new "take the longest route" objective).
-    altitude_agl    = float(-state[2])
-    glide_needed    = dist_home / max(altitude_agl, 1.0)
-    glide_usable    = float(cfg['glide_ratio_usable'])
-    penalty_unreach = 0.0
+    # 2. Reachability barrier: a CRUISE-PHASE constraint, not a landing-accuracy
+    #    penalty. r_path pays per metre of ground track, so without this the
+    #    optimal policy is to fly downwind forever; this is the only thing
+    #    bounding that. It deliberately does NOT encode "hurry home" (that was
+    #    w_progress, removed in Phase 4 and not to be reintroduced).
+    #
+    #    Phase 5: gated on altitude. The dist/alt ratio makes the permitted
+    #    radius shrink linearly as the glider descends (160 m at 20 m AGL,
+    #    16 m at 2 m AGL), so below the flare the barrier degenerates into a
+    #    landing-accuracy penalty on geometry the policy can no longer change.
+    #    Measured pre-fix, it fired on 79-186 steps/episode, 72% of them below
+    #    3 m AGL, contributing ~-3,900/episode against a +81 terminal reward --
+    #    i.e. it WAS the reward function. Below barrier_min_agl_m it is now
+    #    inert, and above it the per-step magnitude is capped.
+    altitude_agl      = float(-state[2])
+    barrier_min_agl   = float(cfg['barrier_min_agl_m'])
+    glide_usable      = float(cfg['glide_ratio_usable'])
+    penalty_unreach   = 0.0
     unreach_violation = False
-    if glide_needed > glide_usable:
-        penalty_unreach   = float(cfg['w_unreach']) * (glide_needed - glide_usable)
-        unreach_violation = True
-        r -= penalty_unreach
+    if altitude_agl >= barrier_min_agl:
+        glide_needed = dist_home / max(altitude_agl, barrier_min_agl)
+        if glide_needed > glide_usable:
+            penalty_unreach = min(
+                float(cfg['w_unreach']) * (glide_needed - glide_usable),
+                float(cfg['w_unreach_cap']),
+            )
+            unreach_violation = True
+            r -= penalty_unreach
 
     # 3. Stall margin penalty (ground truth alpha, safety-critical)
     penalty_stall = 0.0
@@ -291,11 +315,20 @@ def compute_reward(
         quality = q_sink * q_roll * q_speed * q_alpha
 
         sigma_centre = float(cfg['sigma_centre_m'])
-        r_precision  = float(cfg['w_land'])     * float(np.exp(-(dist_home / sigma_centre) ** 2))
-        # r_bullseye is ALSO gated by quality (not just r_precision) -- the
-        # spec's formula only shows r_precision scaled, but leaving a narrow
-        # bonus unscaled would let a stalled-but-centred landing beat a
-        # clean off-centre one, breaking the lexicographic guarantee the
+        # Phase 5: hyperbolic, not Gaussian. The Gaussian's tail vanished long
+        # before the distances this airframe actually achieves (measured mean
+        # touchdown 32.7 m at Stage 0, 155.8 m at Stage 3; the Gaussian paid
+        # 0.97 and ~0 points respectively out of 500), leaving no gradient to
+        # learn from. The hyperbolic form is monotone with a non-vanishing
+        # derivative at every distance: dR/dd = -w_land*sigma/(sigma+d)^2.
+        # dist_home is non-negative by construction (a norm), so no guard
+        # against a negative denominator is needed.
+        r_precision  = float(cfg['w_land']) * sigma_centre / (sigma_centre + dist_home)
+        # r_bullseye stays a NARROW Gaussian -- fine-precision incentive once
+        # already close -- and stays quality-gated (not just r_precision) --
+        # the spec's formula only shows r_precision scaled, but leaving a
+        # narrow bonus unscaled would let a stalled-but-centred landing beat
+        # a clean off-centre one, breaking the lexicographic guarantee the
         # whole multiplicative design exists to provide.
         r_bullseye   = float(cfg['w_bullseye']) * float(np.exp(-(dist_home / 2.0) ** 2))
         r_terminal   = quality * (r_precision + r_bullseye) - (1.0 - quality) * float(cfg['w_crash'])

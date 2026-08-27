@@ -134,13 +134,16 @@ export default function HomePanel() {
 
       <section className="home-section">
         <h2>Reward shaping</h2>
-        <pre className="reward-formula">{`r =  w_progress · Δd_home
-  +  w_airtime  · Δt
-  −  w_agl      · max(0, h_min − h)²
-  −  w_stall    · max(0, α − α_safe)
-  −  w_bank     · max(0, |φ| − φ_soft)
-  −  w_smooth   · ‖a − a_prev‖²
-  +  terminal:  +500 success  /  −100 crash`}</pre>
+        <pre className="reward-formula">{`quality  =  q_sink · q_roll · q_speed · q_alpha          (each ∈ [0,1], graded at touchdown)
+
+r_step   =  w_path  · v_ground · dt
+  −  w_unreach · max(0, d_home/h − L/D_usable)     (h ≥ h_barrier only, capped)
+  −  w_stall  · max(0, α − α_safe)
+  −  w_bank   · max(0, |φ| − φ_soft)
+  −  w_smooth · ‖a − a_prev‖²
+
+r_touchdown = quality · ( w_land · σ/(σ + d_home)  +  w_bullseye · exp(−(d_home/2)²) )
+            − (1 − quality) · w_crash`}</pre>
       </section>
 
       <footer className="home-footer">
