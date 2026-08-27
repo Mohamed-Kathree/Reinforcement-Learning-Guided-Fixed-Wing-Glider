@@ -223,6 +223,57 @@ class CurriculumScheduler:
         self._episodes_at_stage += 1
         return self._maybe_advance()
 
+    def state_dict(self) -> dict:
+        """Serialise scheduler state for checkpointing (plain JSON-safe types).
+
+        Written alongside every checkpoint pair by training/train.py's
+        VecNormCheckpointCallback so a --resume can restore the curriculum
+        stage instead of silently restarting at Stage 0 (see the training
+        runbook's Phase B -- a resumed run that regresses the curriculum
+        produces a policy that looks like it's succeeding because it's back
+        on easy episodes, with nothing in the logs saying why).
+        """
+        return {
+            'current_stage':           self._stage,
+            'episodes_at_stage':       self._episodes_at_stage,
+            'episodes_seen':           self.episodes_seen,
+            'last_advance_was_forced': self.last_advance_was_forced,
+            'buffer':                  list(self._buffer),
+        }
+
+    def load_state_dict(self, d: dict) -> None:
+        """Restore scheduler state from state_dict(). Tolerant of missing
+        keys (warns and keeps the default for that field) so a checkpoint
+        written by an older version of this class does not crash a resume.
+        An empty dict is a no-op: the scheduler is left at its current
+        (default: Stage 0) state.
+        """
+        missing = [k for k in
+                   ('current_stage', 'episodes_at_stage', 'episodes_seen',
+                    'last_advance_was_forced', 'buffer')
+                   if k not in d]
+        if missing:
+            print(f"[Curriculum] WARNING: state_dict missing keys {missing}; "
+                  f"using defaults for those fields.")
+
+        stage = d.get('current_stage')
+        if stage is not None:
+            if 0 <= stage < len(STAGES):
+                self._stage = stage
+            else:
+                print(f"[Curriculum] WARNING: state_dict current_stage={stage} "
+                      f"out of range [0, {len(STAGES)-1}]; keeping stage "
+                      f"{self._stage}.")
+
+        self._episodes_at_stage = d.get('episodes_at_stage', self._episodes_at_stage)
+        self.episodes_seen      = d.get('episodes_seen', self.episodes_seen)
+        self.last_advance_was_forced = d.get('last_advance_was_forced',
+                                              self.last_advance_was_forced)
+
+        buffer = d.get('buffer')
+        if buffer is not None:
+            self._buffer = deque((bool(v) for v in buffer), maxlen=self._window)
+
     def reset(self, stage: int = 0) -> None:
         """Reset the scheduler to a given stage and clear the rolling buffer.
 

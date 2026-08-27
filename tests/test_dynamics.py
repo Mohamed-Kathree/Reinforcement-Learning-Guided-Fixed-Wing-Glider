@@ -810,6 +810,37 @@ def test_curriculum_force_advance_disabled_by_default():
     assert scheduler.last_advance_was_forced is False
 
 
+def test_curriculum_state_roundtrip():
+    """state_dict()/load_state_dict() must round-trip enough scheduler state
+    that a --resume restores the curriculum stage instead of silently
+    regressing to Stage 0 (training runbook Phase B.1). Also checks that
+    load_state_dict({}) on a fresh scheduler is a tolerant no-op, so an
+    older checkpoint without a curriculum JSON does not crash a resume."""
+    from env.curriculum import CurriculumScheduler
+
+    src = CurriculumScheduler(advance_threshold=0.5, rolling_window=10, max_episodes_at_stage=1000)
+    for _ in range(10):
+        src.record_episode(success=True)   # earns the advance to Stage 1
+    assert src.current_stage == 1
+    for success in (True, False, True):
+        src.record_episode(success=success)
+
+    state = src.state_dict()
+
+    dst = CurriculumScheduler(advance_threshold=0.5, rolling_window=10, max_episodes_at_stage=1000)
+    dst.load_state_dict(state)
+
+    assert dst.current_stage == src.current_stage
+    assert dst.episodes_at_stage == src.episodes_at_stage
+    assert dst.episodes_seen == src.episodes_seen
+    assert dst.success_rate == src.success_rate
+    assert list(dst._buffer) == list(src._buffer)
+
+    fresh = CurriculumScheduler()
+    fresh.load_state_dict({})   # must not raise
+    assert fresh.current_stage == 0
+
+
 def test_reward_cfg_config_parity():
     """Every key in DEFAULT_REWARD_CFG must also appear in training/configs/
     base.yaml's reward: section -- Phases 1 and 2 both added keys to both

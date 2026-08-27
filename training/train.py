@@ -47,8 +47,10 @@ Units: SI throughout (m, m/s, rad, rad/s, kg, N, N*m)
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import pathlib
+import re
 import time
 from typing import Any
 
@@ -154,6 +156,46 @@ def flat_env_cfg(cfg: dict) -> dict:
 # Environment factory
 # ---------------------------------------------------------------------------
 
+def _extract_step_count(checkpoint_path: str) -> int | None:
+    """Parse the timestep count out of a checkpoint path such as
+    'checkpoints/ppo_glider_1000000_steps' or '...ppo_glider_1000000_steps.zip'.
+
+    Returns None if the '_<digits>_steps' suffix isn't found, e.g. for
+    'ppo_glider_final'  (there is no matching curriculum_final.json).
+    """
+    stem = pathlib.Path(checkpoint_path).stem
+    m = re.search(r'_(\d+)_steps$', stem)
+    return int(m.group(1)) if m else None
+
+
+def _vecnorm_path_for_checkpoint(checkpoint_path: str) -> pathlib.Path:
+    """Map a checkpoint path to its matching VecNormalize stats file.
+
+    CheckpointCallback names periodic snapshots 'ppo_glider_<N>_steps.zip'
+    while VecNormCheckpointCallback names the matching stats
+    'vecnormalize_<N>.pkl' -- no '_steps' suffix -- so a naive
+    ppo_glider->vecnormalize substring swap keeps the stray '_steps' and
+    never matches. Found while verifying Phase B's resume behaviour: every
+    --resume from a periodic checkpoint (the shape this runbook itself
+    hands off, e.g. after an interruption) silently reset the running
+    normalisation stats instead of restoring them.
+
+        ppo_glider_<N>_steps[.zip]  -> vecnormalize_<N>.pkl
+        ppo_glider_final[.zip]      -> vecnormalize_final.pkl
+        best_model[.zip]            -> vecnormalize_best.pkl
+    """
+    p = pathlib.Path(checkpoint_path)
+    stem = p.stem if p.suffix == '.zip' else p.name
+    step_num = _extract_step_count(checkpoint_path)
+    if step_num is not None:
+        name = f"vecnormalize_{step_num}.pkl"
+    elif stem == 'best_model':
+        name = "vecnormalize_best.pkl"
+    else:
+        name = stem.replace('ppo_glider', 'vecnormalize') + '.pkl'
+    return p.parent / name
+
+
 def make_env(cfg: dict, rank: int, seed: int = 0):
     """Return a callable that creates a single monitored GliderEnv.
 
@@ -230,12 +272,28 @@ class CurriculumCallback(BaseCallback):
         self.scheduler          = scheduler
         self.venv               = venv
         self.success_reward_min = success_reward_min
+        # Per-env running sums of the dense reward components, for the
+        # reward/* TensorBoard scalars below. compute_reward() returns
+        # r_path/penalty_unreach/r_terminal in info on EVERY step (not just
+        # at episode end), so these must be accumulated across the episode
+        # here rather than read once from the terminal step's info dict.
+        n_envs = venv.num_envs
+        self._ep_r_path_sum          = np.zeros(n_envs, dtype=np.float64)
+        self._ep_penalty_unreach_sum = np.zeros(n_envs, dtype=np.float64)
+        self._ep_r_terminal_sum      = np.zeros(n_envs, dtype=np.float64)
 
     def _on_step(self) -> bool:
         # SB3 populates self.locals['infos'] with a list of info dicts,
         # one per env.  'episode' key appears when the episode ends
         # (injected by Monitor wrapper).
-        for info in self.locals.get('infos', []):
+        for env_idx, info in enumerate(self.locals.get('infos', [])):
+            if 'r_path' in info:
+                self._ep_r_path_sum[env_idx]          += info['r_path']
+            if 'penalty_unreach' in info:
+                self._ep_penalty_unreach_sum[env_idx]  += info['penalty_unreach']
+            if 'r_terminal' in info:
+                self._ep_r_terminal_sum[env_idx]       += info['r_terminal']
+
             ep = info.get('episode')
             if ep is None:
                 continue
@@ -245,6 +303,23 @@ class CurriculumCallback(BaseCallback):
                 success = bool(info['success'])
             else:
                 success = float(ep['r']) >= self.success_reward_min
+
+            # Task/curriculum/reward-budget scalars -- the only way to see
+            # curriculum stage, success rate, touchdown distance, and the
+            # reward-component split live in TensorBoard over a multi-day
+            # run instead of only as stdout prints that scroll away.
+            self.logger.record('curriculum/stage',             self.scheduler.current_stage)
+            self.logger.record('curriculum/success_rate',      self.scheduler.success_rate)
+            self.logger.record('curriculum/episodes_at_stage', self.scheduler.episodes_at_stage)
+            self.logger.record('task/dist_home_final', info.get('dist_home', float('nan')))
+            self.logger.record('task/quality',          info.get('quality', 0.0))
+            self.logger.record('reward/r_terminal',      self._ep_r_terminal_sum[env_idx])
+            self.logger.record('reward/penalty_unreach', self._ep_penalty_unreach_sum[env_idx])
+            self.logger.record('reward/r_path',          self._ep_r_path_sum[env_idx])
+
+            self._ep_r_path_sum[env_idx]          = 0.0
+            self._ep_penalty_unreach_sum[env_idx] = 0.0
+            self._ep_r_terminal_sum[env_idx]      = 0.0
 
             advanced = self.scheduler.record_episode(success=success)
 
@@ -293,9 +368,15 @@ class VecNormCheckpointCallback(BaseCallback):
     companion callback saves the matching normalisation stats so that
     evaluation with --resume loads both files together.
 
+    Also writes curriculum_<num_timesteps>.json alongside each .pkl, so a
+    --resume can restore the curriculum stage instead of silently
+    restarting at Stage 0 (training runbook Phase B.1).
+
     Args:
         checkpoint_dir : directory where stats files are written
         save_freq      : timesteps between saves (should match CheckpointCallback)
+        venv           : the VecNormalize instance to save
+        scheduler      : the CurriculumScheduler whose state is saved alongside
         name_prefix    : filename prefix (default: 'vecnormalize')
     """
 
@@ -304,20 +385,26 @@ class VecNormCheckpointCallback(BaseCallback):
         checkpoint_dir: str,
         save_freq:      int,
         venv:           VecNormalize,
+        scheduler:      CurriculumScheduler,
         name_prefix:    str = 'vecnormalize',
     ) -> None:
         super().__init__()
         self.checkpoint_dir = pathlib.Path(checkpoint_dir)
         self.save_freq      = save_freq
         self.venv           = venv
+        self.scheduler       = scheduler
         self.name_prefix    = name_prefix
 
     def _on_step(self) -> bool:
         if self.n_calls % self.save_freq == 0:
             path = self.checkpoint_dir / f"{self.name_prefix}_{self.num_timesteps}.pkl"
             self.venv.save(str(path))
+            curriculum_path = self.checkpoint_dir / f"curriculum_{self.num_timesteps}.json"
+            with open(curriculum_path, 'w') as f:
+                json.dump(self.scheduler.state_dict(), f)
             if self.verbose >= 1:
                 print(f"[VecNorm] Saved {path}")
+                print(f"[Curriculum] Saved {curriculum_path}")
         return True
 
 
@@ -405,6 +492,28 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
         ),
     )
 
+    # On resume, restore the curriculum stage BEFORE applying it to venv
+    # below -- otherwise a run interrupted at Stage 3 would resume at
+    # Stage 0 (no wind/gusts/noise/domain-rand) with no indication why the
+    # success rate suddenly looks great (training runbook Phase B.1).
+    if resume:
+        step_num = _extract_step_count(resume)
+        curriculum_resume = (
+            pathlib.Path(resume).parent / f"curriculum_{step_num}.json"
+            if step_num is not None else None
+        )
+        if curriculum_resume is not None and curriculum_resume.exists():
+            with open(curriculum_resume) as f:
+                scheduler.load_state_dict(json.load(f))
+            print(f"[Curriculum] RESTORED to Stage {scheduler.current_stage} "
+                  f"(episodes_at_stage={scheduler.episodes_at_stage}, "
+                  f"episodes_seen={scheduler.episodes_seen}) from {curriculum_resume}")
+        else:
+            print("[Curriculum] WARNING: no matching curriculum_<steps>.json found "
+                  "for this resume checkpoint -- restarting the curriculum at "
+                  "Stage 0. This is almost certainly not what you want if "
+                  "training had already progressed past Stage 0.")
+
     # make_env() only seeds each worker with the reward section (flat_reward_cfg);
     # it does not know about STAGES[0]. Without this, training silently starts
     # with none of Stage 0's curriculum settings applied (wind, R_home_m,
@@ -433,19 +542,14 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
             verbose     = int(log_cfg['verbose']),
         )
         # Restore VecNormalize stats if a matching .pkl exists
-        vecnorm_resume = pathlib.Path(resume).with_suffix('.pkl')
-        if not vecnorm_resume.exists():
-            # Try convention: same name but pkl extension
-            vecnorm_resume = pathlib.Path(str(resume).replace(
-                '.zip', ''
-            ).replace('ppo_glider', 'vecnormalize') + '.pkl')
+        vecnorm_resume = _vecnorm_path_for_checkpoint(resume)
         if vecnorm_resume.exists():
             venv = VecNormalize.load(str(vecnorm_resume), venv.venv)
             model.set_env(venv)
             print(f"Loaded VecNormalize stats from {vecnorm_resume}")
         else:
-            print("Warning: no matching VecNormalize stats found; "
-                  "continuing with fresh running stats.")
+            print(f"Warning: no matching VecNormalize stats found at "
+                  f"{vecnorm_resume}; continuing with fresh running stats.")
     else:
         model = PPO(
             policy          = ppo_cfg['policy'],
@@ -480,6 +584,7 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
         checkpoint_dir = str(checkpoint_dir),
         save_freq      = max(checkpoint_freq // int(ppo_cfg['n_envs']), 1),
         venv           = venv,
+        scheduler      = scheduler,
         name_prefix    = 'vecnormalize',
     )
 
