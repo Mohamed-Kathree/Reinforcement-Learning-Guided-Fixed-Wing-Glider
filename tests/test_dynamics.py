@@ -704,8 +704,11 @@ def test_barrier_inert_below_flare():
 
 def test_barrier_penalty_capped():
     """A synthetic state far outside glide range must clip to exactly
-    w_unreach_cap, not the unbounded linear penalty -- guards against the
-    cap being dropped in a future edit."""
+    w_unreach_cap PER SECOND (Phase 6: the cap is applied before the dt_rl
+    scaling that makes the barrier share units with r_path), not the
+    unbounded linear penalty -- guards against the cap being dropped in a
+    future edit."""
+    import pytest
     from env.reward import compute_reward, DEFAULT_REWARD_CFG
 
     cfg = dict(DEFAULT_REWARD_CFG)
@@ -720,9 +723,10 @@ def test_barrier_penalty_capped():
         touched_down=False, fault=False,
     )
 
+    expected = -cfg['w_unreach_cap'] * cfg['dt_rl']
     assert info['unreach_violation']
-    assert info['penalty_unreach'] == -cfg['w_unreach_cap'], (
-        f"expected penalty_unreach == -{cfg['w_unreach_cap']}, got {info['penalty_unreach']}"
+    assert info['penalty_unreach'] == pytest.approx(expected), (
+        f"expected penalty_unreach == {expected}, got {info['penalty_unreach']}"
     )
 
 

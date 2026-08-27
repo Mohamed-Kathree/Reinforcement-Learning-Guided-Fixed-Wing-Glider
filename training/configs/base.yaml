@@ -138,9 +138,11 @@ reward:
   barrier_min_agl_m: 10.0 # AGL below which the reachability barrier is inert. Above
                           # the ultrasonic's 4.5 m validity gate and the baseline's
                           # 3 m flare, below normal cruise.
-  w_unreach_cap: 20.0     # per-step ceiling on the barrier penalty, keeping it
-                          # subordinate to the terminal landing reward
-  dt_rl:         0.050    # policy step size (s); multiplied by w_path each step
+  w_unreach_cap: 20.0     # ceiling on the barrier penalty PER SECOND (applied before
+                          # the dt_rl scaling, Phase 6), keeping it subordinate to the
+                          # terminal landing reward
+  dt_rl:         0.050    # policy step size (s); multiplied by w_path each step, and
+                          # (Phase 6) the capped barrier penalty each step
 
   # Safety penalties (unchanged from the pre-Phase-4 reward)
   w_stall:      30.0      # stall margin violation: linear penalty

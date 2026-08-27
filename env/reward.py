@@ -26,7 +26,10 @@ track, which is exactly the failure mode to avoid:
         w_unreach  : one-sided barrier, zero during normal flight, penalising
                      only once the glider has flown itself out of glide range
                      of home (replaces the old progress-toward-home term,
-                     which directly opposed "take the longest route")
+                     which directly opposed "take the longest route"). Scaled
+                     by dt_rl like r_path (Phase 6) so the two dense terms
+                     share units -- do not reintroduce an unscaled per-step
+                     penalty here, it silently becomes 20x per second at 20 Hz.
         w_stall / w_bank / w_smooth : unchanged safety/regularisation terms
 
 Deleted vs. the pre-Phase-4 version: w_progress (opposed the new objective),
@@ -100,8 +103,10 @@ DEFAULT_REWARD_CFG: dict = {
                                 # baseline's 3 m flare, below normal cruise. Measured
                                 # pre-fix barrier firing peaked at 6.06 m AGL, so this
                                 # makes it inert through the entire landing phase.
-    'w_unreach_cap':    20.0,   # per-step ceiling on the barrier penalty. Bounds a
-                                # single step's contribution to ~2.5% of a mid-range
+    'w_unreach_cap':    20.0,   # ceiling on the barrier penalty PER SECOND (applied
+                                # before the dt_rl scaling below, so this reads as a
+                                # rate, not a per-step or per-episode bound). Bounds
+                                # each second's contribution to ~2.5% of a mid-range
                                 # terminal reward, keeping the barrier subordinate.
     'dt_rl':             0.05,  # policy step size (s); multiplied by w_path
 
@@ -256,10 +261,18 @@ def compute_reward(
     if altitude_agl >= barrier_min_agl:
         glide_needed = dist_home / max(altitude_agl, barrier_min_agl)
         if glide_needed > glide_usable:
+            # Phase 6: scaled by dt_rl, matching r_path above. Without this the
+            # two dense terms are in different units -- r_path is per METRE
+            # flown, the barrier was per STEP, so at 20 Hz the barrier accrued
+            # 20x per second and nothing bounded the episode total (ceiling
+            # -40,000 at MAX_STEPS, against a terminal reward spanning
+            # -200..+500). Measured pre-fix: a random policy at Stage 0 saw a
+            # reward that was 98.7% barrier. The cap is applied BEFORE the dt
+            # scaling, so w_unreach_cap is a ceiling per SECOND, not per step.
             penalty_unreach = min(
                 float(cfg['w_unreach']) * (glide_needed - glide_usable),
                 float(cfg['w_unreach_cap']),
-            )
+            ) * float(cfg['dt_rl'])
             unreach_violation = True
             r -= penalty_unreach
 

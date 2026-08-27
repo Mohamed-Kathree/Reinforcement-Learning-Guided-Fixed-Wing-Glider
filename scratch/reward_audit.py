@@ -26,7 +26,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +46,21 @@ COMPONENTS: list[str] = [
 ]
 
 GRADIENT_PROBE_DISTS: list[float] = [2, 5, 10, 15, 20, 25, 30, 40, 60, 100, 150]
+
+
+# ---------------------------------------------------------------------------
+# Audit provenance -- Phase 6: every audit artefact must record what it
+# measured. reward_audit_phase5_policy.json recorded no model path, so its
+# provenance had to be reconstructed by inference after the fact
+# (RLGlider_Phase6_Barrier_Unit_Fix_Spec.md §C.1) -- don't repeat that.
+# ---------------------------------------------------------------------------
+
+def _file_provenance(path: str) -> dict:
+    """Absolute path, mtime (ISO 8601, UTC), and a truncated SHA-256 for one file."""
+    p = Path(path).resolve()
+    digest = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+    mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc).isoformat()
+    return {'path': str(p), 'mtime_utc': mtime, 'sha256_16': digest}
 
 
 # ---------------------------------------------------------------------------
@@ -85,17 +102,28 @@ def gradient_probe(cfg: dict) -> tuple[list[float], list[float]]:
 # Per-stage episode runner
 # ---------------------------------------------------------------------------
 
-def run_stage(stage_idx: int, n: int, seed_base: int, adversarial: bool = False) -> dict:
+def run_stage(stage_idx: int, n: int, seed_base: int, adversarial: bool = False, random_policy: bool = False) -> dict:
     """adversarial=True runs a constant [0.0, -1.0] action (wings level,
     minimum speed -- maximum-endurance drift) instead of the baseline
     controller. Used to sanity-check that barrier_min_agl_m/glide_ratio_usable
     still leave the barrier CAPABLE of firing (RLGlider_Phase5_Reward_
     Rescaling_Spec.md §1.3) -- a constraint that can never bind is not a
-    constraint."""
+    constraint.
+
+    random_policy=True samples uniformly from env.action_space every step
+    instead of running the baseline controller. This is what PPO sees at
+    initialisation, before it has learned anything -- and is the measurement
+    that caught the barrier/r_path unit mismatch (RLGlider_Phase6_Barrier_
+    Unit_Fix_Spec.md §1): a random policy's terminal reward is near zero by
+    definition, so ANY penalty looks dominant as a percentage share. Judge
+    this case on absolute per-episode magnitude and return std, not % share.
+    """
     env = GliderEnv()
     env.set_stage(dict(STAGES[stage_idx]))
     ctrl = DeterministicRTL()
     rng = np.random.default_rng(seed_base + stage_idx)
+    action_low  = np.asarray(env.action_space.low,  dtype=np.float32)
+    action_high = np.asarray(env.action_space.high, dtype=np.float32)
 
     episodes: list[dict] = []
     barrier_altitudes: list[float] = []
@@ -114,6 +142,8 @@ def run_stage(stage_idx: int, n: int, seed_base: int, adversarial: bool = False)
         while True:
             if adversarial:
                 action = np.array([0.0, -1.0], dtype=np.float32)
+            elif random_policy:
+                action = rng.uniform(action_low, action_high).astype(np.float32)
             else:
                 action = ctrl.act(obs)
             obs, r, terminated, truncated, info = env.step(action)
@@ -250,6 +280,10 @@ def _mean(episodes: list[dict], key: str) -> float:
     return float(np.mean([e[key] for e in episodes])) if episodes else float('nan')
 
 
+def _std(episodes: list[dict], key: str) -> float:
+    return float(np.std([e[key] for e in episodes])) if episodes else float('nan')
+
+
 def print_stage_report(result: dict) -> None:
     stage = result['stage']
     episodes = result['episodes']
@@ -271,6 +305,8 @@ def print_stage_report(result: dict) -> None:
           f"{sum(e['truncated'] for e in episodes)/n:>6.0%} "
           f"{_mean(episodes,'r_path'):>9.2f} {_mean(episodes,'penalty_unreach'):>10.2f} "
           f"{_mean(episodes,'r_terminal'):>9.2f} {_mean(episodes,'total_return'):>10.2f}")
+    print(f"episode-return: mean={_mean(episodes,'total_return'):.2f}  std={_std(episodes,'total_return'):.2f}  "
+          f"min={min(e['total_return'] for e in episodes):.2f}  max={max(e['total_return'] for e in episodes):.2f}")
 
     # --- reward-budget summary: each component's mean |magnitude| as a % of
     # the summed |magnitude| of all components ---
@@ -318,6 +354,9 @@ def main() -> None:
     ap.add_argument('--adversarial', action='store_true',
                      help='run a constant [0.0, -1.0] wings-level min-speed action instead of '
                           'the baseline controller, to check the barrier can still fire')
+    ap.add_argument('--random', action='store_true',
+                     help='sample actions uniformly from env.action_space every step instead of '
+                          'the baseline controller -- what PPO sees at initialisation')
     ap.add_argument('--policy', type=str, default=None,
                      help='path to a trained PPO .zip checkpoint -- audit this policy instead '
                           'of the scripted DeterministicRTL baseline. Requires --vecnorm.')
@@ -325,10 +364,33 @@ def main() -> None:
                      help='path to the VecNormalize .pkl matching --policy')
     args = ap.parse_args()
 
+    modes_selected = sum([args.policy is not None, args.adversarial, args.random])
+    if modes_selected > 1:
+        raise SystemExit('--policy, --adversarial, and --random are mutually exclusive')
     if args.policy is not None and args.vecnorm is None:
         raise SystemExit('--policy requires --vecnorm (the matching VecNormalize .pkl)')
-    if args.policy is not None and args.adversarial:
-        raise SystemExit('--policy and --adversarial are mutually exclusive')
+
+    if args.policy is not None:
+        mode = 'policy'
+    elif args.adversarial:
+        mode = 'adversarial'
+    elif args.random:
+        mode = 'random'
+    else:
+        mode = 'baseline'
+
+    provenance: dict = {'mode': mode}
+    if mode == 'policy':
+        provenance['policy']  = _file_provenance(args.policy)
+        provenance['vecnorm'] = _file_provenance(args.vecnorm)
+
+    print(f"Audit mode: {mode}")
+    if mode == 'policy':
+        print(f"  policy:  {provenance['policy']['path']}")
+        print(f"           mtime={provenance['policy']['mtime_utc']}  sha256_16={provenance['policy']['sha256_16']}")
+        print(f"  vecnorm: {provenance['vecnorm']['path']}")
+        print(f"           mtime={provenance['vecnorm']['mtime_utc']}  sha256_16={provenance['vecnorm']['sha256_16']}")
+    print()
 
     stage_indices = [int(s) for s in args.stages.split(',')]
 
@@ -337,13 +399,16 @@ def main() -> None:
         if args.policy is not None:
             result = run_stage_policy(stage_idx, args.n, args.seed_base, args.policy, args.vecnorm)
         else:
-            result = run_stage(stage_idx, args.n, args.seed_base, adversarial=args.adversarial)
+            result = run_stage(stage_idx, args.n, args.seed_base,
+                                adversarial=args.adversarial, random_policy=args.random)
         print_stage_report(result)
         all_results.append(result)
 
     out_path = Path(__file__).parent / f"reward_audit_{args.label}.json"
     with open(out_path, 'w') as f:
-        json.dump(to_jsonable({'stages': all_results, 'n': args.n, 'label': args.label}), f, indent=2)
+        json.dump(to_jsonable({
+            'stages': all_results, 'n': args.n, 'label': args.label, 'provenance': provenance,
+        }), f, indent=2)
     print(f"Wrote {out_path}")
 
 
