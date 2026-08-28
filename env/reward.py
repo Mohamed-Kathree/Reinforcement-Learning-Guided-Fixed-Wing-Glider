@@ -30,7 +30,16 @@ track, which is exactly the failure mode to avoid:
                      by dt_rl like r_path (Phase 6) so the two dense terms
                      share units -- do not reintroduce an unscaled per-step
                      penalty here, it silently becomes 20x per second at 20 Hz.
-        w_stall / w_bank / w_smooth : unchanged safety/regularisation terms
+        w_stall / w_bank : per-step safety terms, now also scaled by dt_rl
+                     (Phase F fix -- these were left out of the Phase 6 pass
+                     that fixed r_path/penalty_unreach, so they were still
+                     firing at 20x their intended per-second rate at 20 Hz.
+                     Measured effect: at Stage 3 with a fully-trained policy,
+                     6% of steps violated the stall margin but contributed
+                     47% of the reward budget raw, vs. ~3% once scaled --
+                     the barrier's pre-fix failure mode, recurring here).
+        w_smooth   : unchanged regularisation term (negligible magnitude;
+                     not implicated in the above)
 
 Deleted vs. the pre-Phase-4 version: w_progress (opposed the new objective),
 w_airtime (rewarded loitering, double-counted against r_path), w_agl /
@@ -110,7 +119,9 @@ DEFAULT_REWARD_CFG: dict = {
                                 # terminal reward, keeping the barrier subordinate.
     'dt_rl':             0.05,  # policy step size (s); multiplied by w_path
 
-    # Safety (unchanged from the pre-Phase-4 reward)
+    # Safety -- values carried over from the pre-Phase-4 reward, now scaled
+    # by dt_rl like r_path/penalty_unreach (Phase F fix) so these read as a
+    # per-second rate, not a per-step one
     'w_stall':          30.0,   # stall margin violation: linear penalty
     'w_bank':            5.0,   # excess bank: linear penalty above soft limit
 
@@ -281,7 +292,8 @@ def compute_reward(
     stall_violation = False
     stall_margin = _ALPHA_STALL - alpha
     if stall_margin < cfg['stall_buffer_rad']:
-        penalty_stall   = cfg['w_stall'] * (cfg['stall_buffer_rad'] - stall_margin)
+        penalty_stall   = (cfg['w_stall'] * (cfg['stall_buffer_rad'] - stall_margin)
+                            * float(cfg['dt_rl']))
         stall_violation = True
         r -= penalty_stall
 
@@ -289,7 +301,8 @@ def compute_reward(
     penalty_bank = 0.0
     bank_violation = False
     if abs(roll) > cfg['bank_soft_limit_rad']:
-        penalty_bank   = cfg['w_bank'] * (abs(roll) - cfg['bank_soft_limit_rad'])
+        penalty_bank   = (cfg['w_bank'] * (abs(roll) - cfg['bank_soft_limit_rad'])
+                           * float(cfg['dt_rl']))
         bank_violation = True
         r -= penalty_bank
 
