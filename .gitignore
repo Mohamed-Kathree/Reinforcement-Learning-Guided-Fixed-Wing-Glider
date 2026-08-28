@@ -229,6 +229,13 @@ wandb/
 checkpoints/
 *.zip
 
+# Archived checkpoints/runs (training runbook Phase A.2 -- e.g.
+# checkpoints_archive_pre_<sha>/, runs_archive_pre_<sha>/): same superseded
+# binary artefacts as above, just renamed so the patterns above no longer
+# match by name. Kept on disk (and synced via OneDrive), never in git.
+checkpoints_archive_*/
+runs_archive_*/
+
 # Environment variables
 .env
 
