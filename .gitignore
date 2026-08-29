@@ -238,6 +238,15 @@ checkpoints/
 checkpoints_*/
 runs_*/
 
+# EXCEPTION: deployment/ holds only the single current best-model triple
+# (best_model.zip + vecnormalize_best.pkl + curriculum JSON, ~480KB) --
+# small enough to track directly in git so `git pull` alone gets a working
+# device the deployable model, instead of a manual out-of-band copy. This
+# is deliberately the only checkpoint-shaped thing ever committed; the full
+# checkpoint ladder (hundreds of files, ~100MB+) stays gitignored above.
+!deployment/
+!deployment/**
+
 # Environment variables
 .env
 
