@@ -17,12 +17,57 @@ import uuid
 import numpy as np
 
 from . import config
-from .schemas import ControlSurfaces, Frame, Trajectory, TrajectoryMeta
+from .schemas import ControlSurfaces, FlightConditions, Frame, Trajectory, TrajectoryMeta
 
 # env/glider_env.py has no public `dt`/`env.dt` attribute -- DT_RL is a
 # module-level constant there (20 Hz RL policy step). Mirrored here rather
 # than imported to avoid coupling the dashboard to glider_env's private names.
 DT_RL = 0.050
+
+
+# Lazy-loaded, cached: PPO + VecNormalize load from disk on first "rl"
+# request and are reused after that, instead of re-reading the checkpoint
+# files on every /api/episode/record call.
+_rl_policy = None
+_rl_vecnorm = None
+
+
+def _load_rl_policy():
+    """Load the tracked deployment checkpoint (deployment/best_model/), once.
+
+    Uses stable_baselines3 directly rather than shelling out to the venv
+    Python like training/evaluate.py does elsewhere in this backend --
+    this module already imports env/sim packages in-process (see module
+    docstring), so importing stable_baselines3 in-process too is
+    consistent, not a new pattern.
+    """
+    global _rl_policy, _rl_vecnorm
+    if _rl_policy is not None:
+        return _rl_policy, _rl_vecnorm
+
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+    from env.glider_env import GliderEnv
+    from env.curriculum import STAGES
+
+    model_path = config.GLIDER_REPO_ROOT / "deployment" / "best_model" / "best_model.zip"
+    vecnorm_path = config.GLIDER_REPO_ROOT / "deployment" / "best_model" / "vecnormalize_best.pkl"
+    if not model_path.is_file() or not vecnorm_path.is_file():
+        raise NotImplementedError(
+            f"RL replay needs {model_path.name} + {vecnorm_path.name} under "
+            f"deployment/best_model/ -- not found at {model_path.parent}."
+        )
+
+    # normalize_obs() below only needs the running stats, not a live env --
+    # this DummyVecEnv is a throwaway required by VecNormalize.load()'s API.
+    dummy_venv = DummyVecEnv([lambda: GliderEnv(cfg=dict(STAGES[0]))])
+    vecnorm = VecNormalize.load(str(vecnorm_path), dummy_venv)
+    vecnorm.training = False
+    vecnorm.norm_reward = False
+
+    _rl_policy = PPO.load(str(model_path), device="cpu")
+    _rl_vecnorm = vecnorm
+    return _rl_policy, _rl_vecnorm
 
 
 def _extract_true_state(env) -> dict:
@@ -57,38 +102,102 @@ def record_episode(
     controller: str = "baseline",
     stage: int = 0,
     seed: int | None = None,
+    wind_speed: float | None = None,
+    gust_intensity: float | None = None,
+    sensor_noise: float | None = None,
+    dropout_prob: float | None = None,
+    alt0_m: float | None = None,
+    launch_offset_m: float | None = None,
 ) -> Trajectory:
     """Run one episode and record its full TRUE-state trajectory to disk.
 
     Args:
-        controller : "baseline" (DeterministicRTL). "rl" is not available
-                     until a trained model + VecNormalize stats exist
-                     (FRONTEND_BUILD_CONTEXT.md TODO 6 / Milestone 6).
+        controller : "baseline" (DeterministicRTL) or "rl" (the tracked
+                     deployment/best_model/ checkpoint -- the 20M-step
+                     reward-fix retrain's best_model.zip, evaluated in
+                     Rl-Glider-Context-File-Code-V14-RewardFix-Retrain-Final-Outcome.md).
         stage      : curriculum stage index (0-3), see env/curriculum.py STAGES.
+                     Supplies R_home_m/aero_scale_range/mass_range/
+                     sigma_centre_m/sink_bad/roll_bad_deg and defaults for
+                     anything not overridden below.
         seed       : episode RNG seed; drawn randomly if None.
+
+        wind_speed, gust_intensity, sensor_noise, dropout_prob, alt0_m,
+        launch_offset_m : optional per-episode overrides of the chosen
+                     stage's preset, for flying a custom scenario instead
+                     of a fixed curriculum difficulty. wind_speed/
+                     gust_intensity/sensor_noise/dropout_prob are each the
+                     UPPER BOUND GliderEnv.reset() draws the actual
+                     per-episode value from -- same convention STAGES
+                     already uses, not a fixed exact value (see
+                     env/glider_env.py's reset()). launch_offset_m sets
+                     both launch_offset_min_m and launch_offset_max_m to
+                     the same value, for a deterministic launch distance
+                     instead of a preset's randomised range. None (the
+                     default) for any of these means "use the stage's
+                     preset value," matching pre-existing behaviour.
 
     Returns:
         The recorded Trajectory (also written to config.EPISODES_DIR).
     """
-    if controller != "baseline":
-        raise NotImplementedError(
-            "RL replay needs a trained PPO model + vecnormalize.pkl "
-            "(not available yet) -- baseline replay only for now."
-        )
+    if controller not in ("baseline", "rl"):
+        raise ValueError(f"controller must be 'baseline' or 'rl'; got {controller!r}")
     if not 0 <= stage < 4:
         raise ValueError(f"stage must be in [0, 3]; got {stage}")
+    for name, value in (("wind_speed", wind_speed), ("gust_intensity", gust_intensity),
+                        ("sensor_noise", sensor_noise), ("alt0_m", alt0_m),
+                        ("launch_offset_m", launch_offset_m)):
+        if value is not None and value < 0:
+            raise ValueError(f"{name} must be >= 0; got {value}")
+    if dropout_prob is not None and not 0.0 <= dropout_prob <= 1.0:
+        raise ValueError(f"dropout_prob must be in [0, 1]; got {dropout_prob}")
+    if alt0_m is not None and alt0_m <= 0:
+        raise ValueError(f"alt0_m must be > 0; got {alt0_m}")
+    if launch_offset_m is not None and launch_offset_m <= 0:
+        raise ValueError(f"launch_offset_m must be > 0; got {launch_offset_m}")
 
     from env.curriculum import STAGES
     from env.glider_env import GliderEnv
-    from baseline.deterministic_rtl import DeterministicRTL
 
     if seed is None:
         seed = int(np.random.default_rng().integers(0, 2**31))
 
     stage_cfg = dict(STAGES[stage])
+    if wind_speed is not None:
+        stage_cfg["wind_speed"] = wind_speed
+    if gust_intensity is not None:
+        stage_cfg["gust_intensity"] = gust_intensity
+    if sensor_noise is not None:
+        stage_cfg["sensor_noise"] = sensor_noise
+    if dropout_prob is not None:
+        stage_cfg["dropout_prob"] = dropout_prob
+    if alt0_m is not None:
+        stage_cfg["alt0_m"] = alt0_m
+    if launch_offset_m is not None:
+        stage_cfg["launch_offset_min_m"] = launch_offset_m
+        stage_cfg["launch_offset_max_m"] = launch_offset_m
+
     env = GliderEnv(cfg=stage_cfg, seed=seed)
-    policy = DeterministicRTL()
-    policy.reset()  # fresh instance per episode already, but explicit for clarity
+
+    if controller == "baseline":
+        from baseline.deterministic_rtl import DeterministicRTL
+        policy = DeterministicRTL()
+        policy.reset()  # fresh instance per episode already, but explicit for clarity
+
+        def act(obs):
+            return policy.act(obs)
+    else:
+        rl_model, rl_vecnorm = _load_rl_policy()
+
+        def act(obs):
+            # PPO was trained on VecNormalize-normalised observations; stepping
+            # the raw GliderEnv here (for TRUE-state recording, see module
+            # docstring) means observations must be normalised by hand with
+            # the checkpoint's own running stats before predict() -- same
+            # pattern as scratch/final_benchmark_policy.py.
+            norm_obs = rl_vecnorm.normalize_obs(obs)
+            action, _ = rl_model.predict(norm_obs, deterministic=True)
+            return action
 
     obs, _info = env.reset(seed=seed)
 
@@ -111,7 +220,7 @@ def record_episode(
     info: dict = {}
     terminated = truncated = False
     while True:
-        action = policy.act(obs)
+        action = act(obs)
         obs, _reward, terminated, truncated, info = env.step(action)
         t += DT_RL
 
@@ -165,6 +274,14 @@ def record_episode(
             duration_s=t,
             quality=quality,
             final_dist_home=final_dist_home,
+            conditions=FlightConditions(
+                wind_speed=float(stage_cfg.get("wind_speed", 0.0)),
+                gust_intensity=float(stage_cfg.get("gust_intensity", 0.0)),
+                sensor_noise=float(stage_cfg.get("sensor_noise", 0.0)),
+                dropout_prob=float(stage_cfg.get("dropout_prob", 0.0)),
+                launch_offset_min_m=float(stage_cfg.get("launch_offset_min_m", 0.0)),
+                launch_offset_max_m=float(stage_cfg.get("launch_offset_max_m", 0.0)),
+            ),
         ),
         home_ned=[0.0, 0.0, 0.0],
         frames=frames,

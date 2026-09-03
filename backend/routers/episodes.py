@@ -23,9 +23,25 @@ def record(
     controller: str = "baseline",
     stage: int = 0,
     seed: Optional[int] = None,
+    wind_speed: Optional[float] = None,
+    gust_intensity: Optional[float] = None,
+    sensor_noise: Optional[float] = None,
+    dropout_prob: Optional[float] = None,
+    alt0_m: Optional[float] = None,
+    launch_offset_m: Optional[float] = None,
 ) -> Trajectory:
     try:
-        return recorder.record_episode(controller=controller, stage=stage, seed=seed)
+        return recorder.record_episode(
+            controller=controller,
+            stage=stage,
+            seed=seed,
+            wind_speed=wind_speed,
+            gust_intensity=gust_intensity,
+            sensor_noise=sensor_noise,
+            dropout_prob=dropout_prob,
+            alt0_m=alt0_m,
+            launch_offset_m=launch_offset_m,
+        )
     except (NotImplementedError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

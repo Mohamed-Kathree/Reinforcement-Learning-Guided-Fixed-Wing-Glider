@@ -29,8 +29,9 @@ export default function ReplayPanel({ episodeId }: ReplayPanelProps) {
 
       {compareMode && !hasRlEpisode && (
         <p className="hint-text">
-          No RL episode has been recorded yet (needs a trained model — see Milestone 6 TODO 6).
-          Comparing two baseline runs for now, e.g. a Stage 3 crash against a Stage 0 success.
+          No RL episode has been recorded yet — pick "RL policy" and hit Record on one of the two
+          panels below. Comparing two baseline runs for now, e.g. a Stage 3 crash against a Stage 0
+          success.
         </p>
       )}
 

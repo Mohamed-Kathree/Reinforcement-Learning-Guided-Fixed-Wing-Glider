@@ -61,6 +61,24 @@ class TestRunResult(BaseModel):
 # Flight trajectory -- the core data contract (Milestones 2-4)
 # ---------------------------------------------------------------------------
 
+class FlightConditions(BaseModel):
+    """The env-config values actually applied for this episode -- either the
+    chosen stage's preset, or a caller-supplied override of some subset of
+    them (see /api/episode/record's wind_speed/gust_intensity/etc. query
+    params). wind_speed/gust_intensity/sensor_noise/dropout_prob are each
+    the UPPER BOUND GliderEnv.reset() draws this episode's actual value
+    from (env/glider_env.py uniform-samples within [0, cfg value] each
+    reset) -- not a fixed exact value, by the same design curriculum
+    stages already use.
+    """
+    wind_speed: float
+    gust_intensity: float
+    sensor_noise: float
+    dropout_prob: float
+    launch_offset_min_m: float
+    launch_offset_max_m: float
+
+
 class TrajectoryMeta(BaseModel):
     stage: int
     controller: Literal["baseline", "rl"]
@@ -72,6 +90,14 @@ class TrajectoryMeta(BaseModel):
     duration_s: float
     quality: float = 0.0            # landing-quality grade [0,1]; 0 for a real timeout
     final_dist_home: float = 0.0    # dist_home (m) at the final frame
+    # Default is the pre-this-field placeholder (all zero) so the 827
+    # already-recorded episodes in data/episodes/ (none of which have a
+    # "conditions" key) still load -- see Frame.wind_ned's default above
+    # for the same pattern applied earlier in this file.
+    conditions: FlightConditions = FlightConditions(
+        wind_speed=0.0, gust_intensity=0.0, sensor_noise=0.0, dropout_prob=0.0,
+        launch_offset_min_m=0.0, launch_offset_max_m=0.0,
+    )
 
 
 class ControlSurfaces(BaseModel):

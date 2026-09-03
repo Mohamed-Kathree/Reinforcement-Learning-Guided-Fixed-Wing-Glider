@@ -548,6 +548,46 @@ button, select, input {
   font-size: 0.82rem;
 }
 
+.custom-conditions-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  margin: 0.5rem 0;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.custom-conditions-box {
+  margin-bottom: 1rem;
+}
+
+.condition-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.7rem 1.2rem;
+}
+
+.condition-rows label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.condition-rows input[type="range"] {
+  width: 100%;
+}
+
+.replay-meta-conditions {
+  margin-top: -0.4rem;
+  margin-bottom: 0.9rem;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
 /* ------------------------------------------------------------------ */
 /* Flight replay / 3D viewer                                           */
 /* ------------------------------------------------------------------ */

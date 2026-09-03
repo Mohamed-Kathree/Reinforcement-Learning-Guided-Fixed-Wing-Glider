@@ -48,6 +48,19 @@ export type Controller = "baseline" | "rl";
 // what it says: truncated without ever touching down.
 export type Outcome = "success" | "soft_landing" | "crash" | "timeout";
 
+// The env-config values actually applied for this episode. wind_speed/
+// gust_intensity/sensor_noise/dropout_prob are each the UPPER BOUND
+// GliderEnv.reset() draws the episode's actual value from, not a fixed
+// exact number -- same convention curriculum stages already use.
+export interface FlightConditions {
+  wind_speed: number;
+  gust_intensity: number;
+  sensor_noise: number;
+  dropout_prob: number;
+  launch_offset_min_m: number;
+  launch_offset_max_m: number;
+}
+
 export interface TrajectoryMeta {
   stage: number;
   controller: Controller;
@@ -59,6 +72,7 @@ export interface TrajectoryMeta {
   duration_s: number;
   quality: number;           // landing-quality grade [0,1]; 0 for a real timeout
   final_dist_home: number;   // dist_home (m) at the final frame
+  conditions: FlightConditions;
 }
 
 export interface ControlSurfaces {

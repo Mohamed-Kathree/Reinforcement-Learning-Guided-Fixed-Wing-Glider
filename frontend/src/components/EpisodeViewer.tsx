@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import FlightScene from "./FlightScene";
 import OrientationSphere from "./OrientationSphere";
-import type { Frame, Trajectory } from "../types";
+import type { Controller, Frame, Trajectory } from "../types";
 
 const API_BASE = "http://localhost:8000";
 
@@ -37,8 +37,22 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [stage, setStage] = useState(0);
+  const [controller, setController] = useState<Controller>("baseline");
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Custom flight conditions -- when off, the chosen stage's own preset is
+  // used unchanged (pre-existing behaviour). When on, these override that
+  // preset's wind/gust/noise/dropout/altitude/launch-distance for one
+  // episode; R_home/aero-mass-randomisation/landing-grading-strictness
+  // still come from `stage` (see backend/recorder.py's record_episode).
+  const [useCustom, setUseCustom] = useState(false);
+  const [windSpeed, setWindSpeed] = useState(3.0);
+  const [gustIntensity, setGustIntensity] = useState(0.5);
+  const [sensorNoise, setSensorNoise] = useState(0.3);
+  const [dropoutProb, setDropoutProb] = useState(0.05);
+  const [alt0, setAlt0] = useState(23);
+  const [launchOffset, setLaunchOffset] = useState(60);
 
   function refreshList(preferId?: string) {
     fetch(`${API_BASE}/api/episode`)
@@ -94,8 +108,17 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
     setRecording(true);
     setError(null);
     try {
+      const params = new URLSearchParams({ controller, stage: String(stage) });
+      if (useCustom) {
+        params.set("wind_speed", String(windSpeed));
+        params.set("gust_intensity", String(gustIntensity));
+        params.set("sensor_noise", String(sensorNoise));
+        params.set("dropout_prob", String(dropoutProb));
+        params.set("alt0_m", String(alt0));
+        params.set("launch_offset_m", String(launchOffset));
+      }
       const res = await fetch(
-        `${API_BASE}/api/episode/record?controller=baseline&stage=${stage}`,
+        `${API_BASE}/api/episode/record?${params.toString()}`,
         { method: "POST" },
       );
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -120,8 +143,12 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
               <option key={s} value={s}>Stage {s}</option>
             ))}
           </select>
+          <select value={controller} onChange={(e) => setController(e.target.value as Controller)}>
+            <option value="baseline">Baseline (DeterministicRTL)</option>
+            <option value="rl">RL policy</option>
+          </select>
           <button onClick={handleRecord} disabled={recording}>
-            {recording ? "Recording…" : "Record baseline"}
+            {recording ? "Recording…" : `Record ${controller}`}
           </button>
           <select value={selected ?? ""} onChange={(e) => setSelected(e.target.value)}>
             {episodeIds.length === 0 && <option value="">No recorded episodes</option>}
@@ -131,6 +158,57 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
           </select>
         </div>
       </div>
+
+      <label className="custom-conditions-toggle">
+        <input
+          type="checkbox"
+          checked={useCustom}
+          onChange={(e) => setUseCustom(e.target.checked)}
+        />
+        Custom flight conditions
+      </label>
+
+      {useCustom && (
+        <div className="telemetry-box custom-conditions-box">
+          <div className="condition-rows">
+            <label>
+              <span>Wind (max) {windSpeed.toFixed(1)} m/s</span>
+              <input type="range" min={0} max={15} step={0.5} value={windSpeed}
+                onChange={(e) => setWindSpeed(Number(e.target.value))} />
+            </label>
+            <label>
+              <span>Gusts (max) {gustIntensity.toFixed(1)}</span>
+              <input type="range" min={0} max={3} step={0.1} value={gustIntensity}
+                onChange={(e) => setGustIntensity(Number(e.target.value))} />
+            </label>
+            <label>
+              <span>Sensor noise (max) {sensorNoise.toFixed(2)}</span>
+              <input type="range" min={0} max={1.5} step={0.05} value={sensorNoise}
+                onChange={(e) => setSensorNoise(Number(e.target.value))} />
+            </label>
+            <label>
+              <span>Sensor dropout (max) {(dropoutProb * 100).toFixed(0)}%</span>
+              <input type="range" min={0} max={0.5} step={0.01} value={dropoutProb}
+                onChange={(e) => setDropoutProb(Number(e.target.value))} />
+            </label>
+            <label>
+              <span>Launch altitude {alt0.toFixed(0)} m</span>
+              <input type="range" min={10} max={30} step={1} value={alt0}
+                onChange={(e) => setAlt0(Number(e.target.value))} />
+            </label>
+            <label>
+              <span>Launch distance {launchOffset.toFixed(0)} m</span>
+              <input type="range" min={10} max={150} step={5} value={launchOffset}
+                onChange={(e) => setLaunchOffset(Number(e.target.value))} />
+            </label>
+          </div>
+          <p className="hint-text">
+            Wind/gusts/noise/dropout are the maximum for this episode — GliderEnv draws the
+            actual value uniformly between 0 and this, same as a curriculum stage preset.
+            Launch distance is fixed at this value (not randomised).
+          </p>
+        </div>
+      )}
 
       {error && <p className="error-text">{error}</p>}
 
@@ -145,6 +223,15 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
             <span>final dist {trajectory.meta.final_dist_home.toFixed(1)} m</span>
             <span>{trajectory.meta.controller}</span>
             <span>seed {trajectory.meta.seed}</span>
+          </div>
+          <div className="replay-meta replay-meta-conditions">
+            <span>wind ≤{trajectory.meta.conditions.wind_speed.toFixed(1)} m/s</span>
+            <span>gusts ≤{trajectory.meta.conditions.gust_intensity.toFixed(1)}</span>
+            <span>noise ≤{trajectory.meta.conditions.sensor_noise.toFixed(2)}</span>
+            <span>dropout ≤{(trajectory.meta.conditions.dropout_prob * 100).toFixed(0)}%</span>
+            <span>launch {trajectory.meta.alt0.toFixed(0)}m alt, {trajectory.meta.conditions.launch_offset_min_m.toFixed(0)}
+              {trajectory.meta.conditions.launch_offset_min_m !== trajectory.meta.conditions.launch_offset_max_m
+                ? `–${trajectory.meta.conditions.launch_offset_max_m.toFixed(0)}` : ""}m out</span>
           </div>
 
           <div className="replay-layout">
