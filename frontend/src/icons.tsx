@@ -53,6 +53,20 @@ export function IconActivity(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconScatter(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 20V4" />
+      <path d="M4 20h17" />
+      <circle cx="8" cy="15" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="13" cy="9" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="17" cy="13" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="11" cy="16.5" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="7.5" r="1.3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function IconPlay(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...base} {...props}>

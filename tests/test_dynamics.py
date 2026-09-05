@@ -38,6 +38,10 @@ Tests:
     test_curriculum_force_advance                    -- Phase 5: max_episodes_at_stage forces an advance
     test_curriculum_force_advance_disabled_by_default -- Phase 5: default behaviour unchanged
     test_reward_cfg_config_parity                     -- Phase 5: DEFAULT_REWARD_CFG keys mirrored in base.yaml
+    test_episode_reward_components_sum_to_return -- V16 Phase A: GliderEnv's accumulated
+                                                     per-component totals sum to the episode return
+    test_curriculum_outcome_counts               -- V16 Phase A: 4-way outcome tally + rolling
+                                                     window eviction + state_dict round-trip
 
 Coordinate frames: NED inertial, BODY (FRD), WIND (stability).
 Quaternion convention: [q0, q1, q2, q3], q0 scalar.
@@ -862,3 +866,130 @@ def test_reward_cfg_config_parity():
         f"value for these while tests use whatever DEFAULT_REWARD_CFG also uses, "
         f"diverging the moment either is changed independently"
     )
+
+
+# ---------------------------------------------------------------------------
+# V16 Phase A -- dashboard streaming backbone
+# ---------------------------------------------------------------------------
+
+def test_episode_reward_components_sum_to_return():
+    """GliderEnv's own per-episode reward-component accumulation
+    (info['episode_reward_components'], env/glider_env.py's
+    _REWARD_COMPONENT_KEYS) must sum to EXACTLY the episode's total return --
+    the sum of every scalar reward env.step() actually returned. This is the
+    "accumulation must not change the reward value returned to the agent"
+    constraint from RLGlider_Context_File_Code_V16_Frontend_Redesign_Spec.md
+    §A3: the accumulation is pure bookkeeping layered on top of the already-
+    tested per-step invariant (test_reward_components_sum_to_total), so this
+    test checks the SAME invariant integrated over a whole episode instead of
+    one step -- including a truncated (non-landing) episode, where the
+    MAX_STEPS backstop penalty (never part of compute_reward()'s own info)
+    must also be folded into the accumulated total via 'penalty_truncate'."""
+    from env.glider_env import GliderEnv
+    from baseline.deterministic_rtl import DeterministicRTL
+
+    env  = GliderEnv(cfg=dict(STAGES[0]))
+    ctrl = DeterministicRTL()
+    ctrl.reset()
+    obs, _ = env.reset(seed=0)
+
+    total_return = 0.0
+    info: dict = {}
+    while True:
+        obs, r, terminated, truncated, info = env.step(ctrl.act(obs))
+        total_return += r
+        if terminated or truncated:
+            break
+
+    assert 'episode_reward_components' in info, (
+        "episode_reward_components missing from the terminal step's info dict"
+    )
+    component_sum = sum(info['episode_reward_components'].values())
+    assert abs(total_return - component_sum) < 1e-6, (
+        f"accumulated episode return {total_return} != sum of accumulated "
+        f"reward components {component_sum} "
+        f"(components: {info['episode_reward_components']})"
+    )
+
+    # Also exercise the truncated (never-landed) path specifically, so the
+    # 'penalty_truncate' accumulation is checked, not just the far more
+    # common touchdown path above. Launching far higher than a ~0.4-1 m/s
+    # sink rate can cover in MAX_STEPS's 100 s budget (at most ~100 m of
+    # descent) guarantees a timeout deterministically, with no wind/gust
+    # trickery needed -- wind_speed=0 keeps this fully deterministic.
+    env2 = GliderEnv(cfg=dict(
+        wind_speed=0.0, gust_intensity=0.0, sensor_noise=0.0, dropout_prob=0.0,
+        alt0_m=1000.0, launch_offset_min_m=50.0, launch_offset_max_m=50.0,
+    ))
+    obs2, _ = env2.reset(seed=0)
+    action = np.array([0.0, 0.0], dtype=np.float32)
+    total_return2 = 0.0
+    info2: dict = {}
+    while True:
+        obs2, r2, terminated2, truncated2, info2 = env2.step(action)
+        total_return2 += r2
+        if terminated2 or truncated2:
+            break
+
+    assert truncated2 and not terminated2, (
+        "expected this constant near-min-sink action to time out without "
+        "landing -- if it now lands, this test no longer exercises the "
+        "truncation-backstop path and should be recalibrated, not deleted"
+    )
+    component_sum2 = sum(info2['episode_reward_components'].values())
+    assert abs(total_return2 - component_sum2) < 1e-6, (
+        f"truncated-episode return {total_return2} != component sum "
+        f"{component_sum2} (components: {info2['episode_reward_components']})"
+    )
+    assert info2['episode_reward_components']['penalty_truncate'] < 0.0, (
+        "penalty_truncate must be non-zero (negative) on a truncated episode"
+    )
+
+
+def test_curriculum_outcome_counts():
+    """CurriculumScheduler.outcome_counts must tally the 4-way outcome
+    bucket (success/soft_landing/crash/timeout -- env/curriculum.py's
+    OUTCOME_BUCKETS) over the same rolling window as the success/fail
+    buffer, always reporting all four keys (zero-filled), and must survive
+    a state_dict()/load_state_dict() round-trip."""
+    from env.curriculum import CurriculumScheduler, OUTCOME_BUCKETS
+
+    scheduler = CurriculumScheduler(advance_threshold=0.99, rolling_window=5)
+
+    # Callers that never pass outcome= must see all-zero counts, not an error.
+    scheduler.record_episode(success=False)
+    assert scheduler.outcome_counts == {b: 0 for b in OUTCOME_BUCKETS}
+
+    scheduler.reset()
+    sequence = ['success', 'soft_landing', 'crash', 'timeout', 'soft_landing']
+    for outcome in sequence:
+        scheduler.record_episode(success=(outcome == 'success'), outcome=outcome)
+
+    assert scheduler.outcome_counts == {
+        'success': 1, 'soft_landing': 2, 'crash': 1, 'timeout': 1,
+    }
+
+    # Rolling window (5) eviction: two more entries push the oldest two
+    # ('success', 'soft_landing') out.
+    scheduler.record_episode(success=False, outcome='crash')
+    scheduler.record_episode(success=False, outcome='crash')
+    assert scheduler.outcome_counts == {
+        'success': 0, 'soft_landing': 1, 'crash': 3, 'timeout': 1,
+    }
+
+    # state_dict()/load_state_dict() round-trip, including outcome_buffer.
+    state = scheduler.state_dict()
+    assert 'outcome_buffer' in state
+
+    restored = CurriculumScheduler(advance_threshold=0.99, rolling_window=5)
+    restored.load_state_dict(state)
+    assert restored.outcome_counts == scheduler.outcome_counts
+
+    # A state_dict from before this field existed (no 'outcome_buffer' key)
+    # must not crash a resume -- same tolerant-of-missing-keys contract the
+    # other fields already have.
+    legacy = CurriculumScheduler(advance_threshold=0.99, rolling_window=5)
+    legacy.load_state_dict({'current_stage': 0, 'episodes_at_stage': 3,
+                             'episodes_seen': 3, 'last_advance_was_forced': False,
+                             'buffer': [True, False, True]})
+    assert legacy.outcome_counts == {b: 0 for b in OUTCOME_BUCKETS}

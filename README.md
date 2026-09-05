@@ -18,6 +18,7 @@ A simulation-first reinforcement learning system that autonomously guides a 1.1 
 - [Training](#training)
 - [Evaluation](#evaluation)
 - [Visualisation](#visualisation)
+- [Dashboard](#dashboard)
 - [Testing](#testing)
 - [Key Design Decisions](#key-design-decisions)
 - [Interface Contracts](#interface-contracts)
@@ -291,6 +292,46 @@ python -m analysis.plot_trajectories \
 ```
 
 Produces three figures: 3D flight path, ground track with home radius circle, and time-series of airspeed, bank angle, and AGL.
+
+---
+
+## Dashboard
+
+A live web dashboard, separate from the CLI plotting above — a FastAPI backend (`backend/`) plus
+a React/Vite frontend (`frontend/`), for interactively watching a training run, replaying/comparing
+recorded episodes, and browsing the episode archive. Runtime data lives under the gitignored
+`data/`; nothing here affects training/evaluation results.
+
+**Launch** (from the repo root, two terminals):
+
+```bash
+# Backend -- must use the project's own venv, not system Python
+venv\Scripts\python.exe -m uvicorn backend.main:app --reload --port 8000 ^
+    --reload-dir backend --reload-dir env --reload-dir sim --reload-dir training
+
+# Frontend
+cd frontend && npm run dev
+```
+
+Open `http://localhost:5173`. `--reload-dir` must list every directory you're actively editing —
+edits to an unwatched directory are silently not picked up by `--reload` (if `--reload` seems to
+have stopped noticing changes at all, kill the whole process tree and restart clean rather than
+trust an already-running `--reload` process; this is a known quirk on this project's OneDrive-
+synced working copy).
+
+Six tabs:
+
+| Tab | What it shows |
+|---|---|
+| **Overview** | Full-bleed looping 3D ground track of the best recently recorded episode, plus the architecture/curriculum/reward reference material below the fold |
+| **Validation** | Runs the five physics gates + unit test suite live, from the browser |
+| **Baseline** | Runs the DeterministicRTL baseline across all four curriculum stages, with per-stage outcome breakdowns and clickable episodes |
+| **Training** | Live-streams an active (or replays a past) training run's metrics, curriculum stage, reward-component breakdown, and constraint-violation lamps |
+| **Analysis** | Touchdown scatter (every recorded landing relative to home) and a filterable failure gallery, across the whole recorded-episode archive |
+| **Flight Replay** | Scrub/play back one recorded episode (or two, side by side in Compare mode) with a 3D ground track, instrument cluster, and annunciator lamps |
+
+Every chart supports "Export SVG"/"Export PNG" for report figures. `#/replay/<episode-id>` (and
+each other tab's own `#/<tab>`) is a real, shareable, refresh-surviving URL.
 
 ---
 

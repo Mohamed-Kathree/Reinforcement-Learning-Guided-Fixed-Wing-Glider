@@ -26,9 +26,16 @@ GLIDER_PYTHON = GLIDER_REPO_ROOT / "venv" / "Scripts" / "python.exe"
 
 DATA_DIR = BACKEND_DIR.parent / "data"
 EPISODES_DIR = DATA_DIR / "episodes"
-TRAIN_STREAM_PATH = DATA_DIR / "train_stream.jsonl"
+# One stream file (<ISO8601>_seed<N>.jsonl) + one sibling metadata file
+# (<same stem>.meta.json) per training run -- V16 Phase A (§A5). Replaces
+# the old single, run-truncated TRAIN_STREAM_PATH: every run used to
+# overwrite its predecessor, destroying run history. See
+# backend/callbacks/web_stream_callback.py and
+# backend/routers/training.py's GET /api/training/runs.
+RUNS_DIR = DATA_DIR / "runs"
 
 EPISODES_DIR.mkdir(parents=True, exist_ok=True)
+RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
 if str(GLIDER_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(GLIDER_REPO_ROOT))

@@ -49,11 +49,14 @@ Launch speed/pitch randomisation (deliberately NOT a per-stage key here):
     covered a much narrower and less realistic range and has been removed
     from STAGES.
 
-Advance rule (CLAUDE.md Section 15):
-    advance_threshold = 0.80  (80 % success rate)
-    rolling_window    = 100   episodes
-    Rolling buffer is cleared after each advance to re-evaluate on the
-    harder stage from scratch.
+Advance rule:
+    advance_threshold, rolling_window, and max_episodes_at_stage are all
+    configured in training/configs/base.yaml's curriculum: section -- that
+    file, not this docstring, is the source of truth (values have been
+    retuned since this project's early design: see that file's own comments
+    for the current numbers and why). Rolling buffer is cleared after each
+    advance (earned or forced -- see max_episodes_at_stage below) to
+    re-evaluate on the harder stage from scratch.
 
 Usage (inside training/train.py CurriculumCallback):
     scheduler = CurriculumScheduler()
@@ -76,8 +79,17 @@ Units: SI throughout (m, m/s, rad, rad/s, kg, N, N*m)
 
 from __future__ import annotations
 
-from collections import deque
+from collections import Counter, deque
 from typing import Deque
+
+# The 4-way episode-outcome bucket used throughout the dashboard
+# (backend/recorder.py, scratch/final_benchmark.py) -- NOT the 3-way
+# success/crash/timeout some older docs describe. "soft_landing" (touched
+# down clean-ish but missed the strict success bar) is deliberately kept
+# separate from "timeout" (never touched down at all): collapsing the two
+# was a real bug, fixed elsewhere in this project, and is not to be
+# reintroduced here.
+OUTCOME_BUCKETS: tuple[str, ...] = ('success', 'soft_landing', 'crash', 'timeout')
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +212,7 @@ class CurriculumScheduler:
         self._max_episodes_at_stage: int | None = max_episodes_at_stage
         self._stage:     int   = 0
         self._buffer:    Deque[bool] = deque(maxlen=rolling_window)
+        self._outcome_buffer: Deque[str] = deque(maxlen=rolling_window)
         self.episodes_seen: int = 0
         self._episodes_at_stage: int = 0
         self.last_advance_was_forced: bool = False
@@ -208,17 +221,24 @@ class CurriculumScheduler:
     # Public API
     # ------------------------------------------------------------------
 
-    def record_episode(self, success: bool) -> bool:
+    def record_episode(self, success: bool, outcome: str | None = None) -> bool:
         """Record the outcome of one episode and check for a stage advance.
 
         Args:
             success : True if the episode ended with the glider reaching home
+            outcome : optional 4-way outcome bucket ('success', 'soft_landing',
+                      'crash', or 'timeout' -- see OUTCOME_BUCKETS) for the
+                      rolling outcome_counts breakdown below. None (default)
+                      skips outcome tallying entirely -- existing callers that
+                      only track success/fail are unaffected.
 
         Returns:
             True if the stage was advanced this call, False otherwise.
             Callers can use this to log stage transitions.
         """
         self._buffer.append(bool(success))
+        if outcome is not None:
+            self._outcome_buffer.append(str(outcome))
         self.episodes_seen += 1
         self._episodes_at_stage += 1
         return self._maybe_advance()
@@ -239,6 +259,7 @@ class CurriculumScheduler:
             'episodes_seen':           self.episodes_seen,
             'last_advance_was_forced': self.last_advance_was_forced,
             'buffer':                  list(self._buffer),
+            'outcome_buffer':          list(self._outcome_buffer),
         }
 
     def load_state_dict(self, d: dict) -> None:
@@ -250,7 +271,7 @@ class CurriculumScheduler:
         """
         missing = [k for k in
                    ('current_stage', 'episodes_at_stage', 'episodes_seen',
-                    'last_advance_was_forced', 'buffer')
+                    'last_advance_was_forced', 'buffer', 'outcome_buffer')
                    if k not in d]
         if missing:
             print(f"[Curriculum] WARNING: state_dict missing keys {missing}; "
@@ -274,6 +295,10 @@ class CurriculumScheduler:
         if buffer is not None:
             self._buffer = deque((bool(v) for v in buffer), maxlen=self._window)
 
+        outcome_buffer = d.get('outcome_buffer')
+        if outcome_buffer is not None:
+            self._outcome_buffer = deque((str(v) for v in outcome_buffer), maxlen=self._window)
+
     def reset(self, stage: int = 0) -> None:
         """Reset the scheduler to a given stage and clear the rolling buffer.
 
@@ -287,6 +312,7 @@ class CurriculumScheduler:
             raise ValueError(f"stage must be in [0, {len(STAGES)-1}]; got {stage}")
         self._stage = stage
         self._buffer.clear()
+        self._outcome_buffer.clear()
         self.episodes_seen = 0
         self._episodes_at_stage = 0
         self.last_advance_was_forced = False
@@ -339,6 +365,24 @@ class CurriculumScheduler:
     def episodes_at_stage(self) -> int:
         """Episodes recorded at the current stage since the last advance."""
         return self._episodes_at_stage
+
+    @property
+    def advance_threshold(self) -> float:
+        """The configured rolling-success-rate threshold required to advance."""
+        return self._threshold
+
+    @property
+    def outcome_counts(self) -> dict[str, int]:
+        """4-way outcome tally (see OUTCOME_BUCKETS) over the rolling window.
+
+        Only episodes recorded with an explicit `outcome=` (see
+        record_episode()) are counted -- callers that never pass it see all
+        zeros here, not an error. Always returns all four bucket keys, even
+        at zero, so a consumer (e.g. the dashboard stream) never has to guard
+        against a missing key.
+        """
+        counts = Counter(self._outcome_buffer)
+        return {bucket: counts.get(bucket, 0) for bucket in OUTCOME_BUCKETS}
 
     # ------------------------------------------------------------------
     # Private helpers

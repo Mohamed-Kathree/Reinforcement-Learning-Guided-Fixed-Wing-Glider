@@ -17,7 +17,9 @@ import uuid
 import numpy as np
 
 from . import config
-from .schemas import ControlSurfaces, FlightConditions, Frame, Trajectory, TrajectoryMeta
+from .schemas import (
+    ControlSurfaces, EpisodeRecordSummary, FlightConditions, Frame, Trajectory, TrajectoryMeta,
+)
 
 # env/glider_env.py has no public `dt`/`env.dt` attribute -- DT_RL is a
 # module-level constant there (20 Hz RL policy step). Mirrored here rather
@@ -234,6 +236,15 @@ def record_episode(
             dist_home=float(info.get("dist_home", np.hypot(s["pos_ned"][0], s["pos_ned"][1]))),
             agl=s["agl"],
             wind_ned=s["wind_ned"],
+            # V16 Phase C2 -- straight from compute_reward()'s info dict (via
+            # GliderEnv.step()), ground-truth and already computed; frame 0
+            # above has no `info` yet, so it keeps Frame's field defaults.
+            stall_violation=bool(info.get("stall_violation", False)),
+            bank_violation=bool(info.get("bank_violation", False)),
+            unreach_violation=bool(info.get("unreach_violation", False)),
+            alpha_deg=float(info.get("alpha_deg", 0.0)),
+            roll_deg=float(info.get("roll_deg", 0.0)),
+            airspeed=float(info.get("airspeed", 0.0)),
         ))
 
         if terminated or truncated:
@@ -289,6 +300,23 @@ def record_episode(
 
     out_path = config.EPISODES_DIR / f"{episode_id}.json"
     out_path.write_text(trajectory.model_dump_json(indent=2))
+
+    # V16 Phase D §D1/§D3 -- a small sidecar so the analysis views can list/
+    # filter every recorded episode without parsing full frame arrays (same
+    # pattern as data/runs/<id>.meta.json, Phase A §A5).
+    summary = EpisodeRecordSummary(
+        episode_id=episode_id,
+        stage=stage,
+        controller=controller,
+        outcome=outcome,
+        quality=quality,
+        seed=seed,
+        R_home=trajectory.meta.R_home,
+        touchdown_ned=frames[-1].pos_ned,
+        home_ned=trajectory.home_ned,
+    )
+    summary_path = config.EPISODES_DIR / f"{episode_id}.summary.json"
+    summary_path.write_text(summary.model_dump_json())
 
     return trajectory
 

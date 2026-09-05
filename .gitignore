@@ -262,3 +262,6 @@ frontend/node_modules/
 frontend/dist/
 data/episodes/
 data/train_stream.jsonl
+
+# Claude Code project-local skills/config -- never committed
+.claude/

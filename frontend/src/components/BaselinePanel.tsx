@@ -1,4 +1,5 @@
 import { useState } from "react";
+import StackedBarChart from "./StackedBarChart";
 import type { BaselineRunResult } from "../types";
 
 const API_BASE = "http://localhost:8000";
@@ -58,11 +59,6 @@ export default function BaselinePanel({ onSelectEpisode }: BaselinePanelProps) {
       {result && (
         <div className="baseline-stages">
           {result.stages.map((s) => {
-            const total = s.n_episodes || 1;
-            const successPct = (100 * s.n_success) / total;
-            const softLandingPct = (100 * s.n_soft_landing) / total;
-            const crashPct = (100 * s.n_crash) / total;
-            const timeoutPct = (100 * s.n_timeout) / total;
             return (
               <div key={s.stage} className="baseline-stage">
                 <div className="baseline-stage-header">
@@ -72,12 +68,16 @@ export default function BaselinePanel({ onSelectEpisode }: BaselinePanelProps) {
                     {s.mean_quality.toFixed(2)} ({s.n_episodes} episodes)
                   </span>
                 </div>
-                <div className="stacked-bar">
-                  <div className="bar-seg bar-success" style={{ width: `${successPct}%` }} title={`success ${s.n_success}`} />
-                  <div className="bar-seg bar-soft_landing" style={{ width: `${softLandingPct}%` }} title={`soft landing ${s.n_soft_landing}`} />
-                  <div className="bar-seg bar-crash" style={{ width: `${crashPct}%` }} title={`crash ${s.n_crash}`} />
-                  <div className="bar-seg bar-timeout" style={{ width: `${timeoutPct}%` }} title={`timeout ${s.n_timeout}`} />
-                </div>
+                <StackedBarChart
+                  title={`Stage ${s.stage} outcomes`}
+                  exportName={`baseline-stage${s.stage}-outcomes`}
+                  segments={[
+                    { key: "success", value: s.n_success, label: "success", colorVar: "var(--success)" },
+                    { key: "soft_landing", value: s.n_soft_landing, label: "soft landing", colorVar: "var(--accent)" },
+                    { key: "crash", value: s.n_crash, label: "crash", colorVar: "var(--danger)" },
+                    { key: "timeout", value: s.n_timeout, label: "timeout", colorVar: "var(--warning)" },
+                  ]}
+                />
                 <div className="episode-chips">
                   {s.episodes.map((ep, i) => (
                     <button

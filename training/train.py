@@ -54,7 +54,6 @@ import re
 import time
 from typing import Any
 
-import numpy as np
 import yaml
 
 from stable_baselines3 import PPO
@@ -272,28 +271,39 @@ class CurriculumCallback(BaseCallback):
         self.scheduler          = scheduler
         self.venv               = venv
         self.success_reward_min = success_reward_min
-        # Per-env running sums of the dense reward components, for the
-        # reward/* TensorBoard scalars below. compute_reward() returns
-        # r_path/penalty_unreach/r_terminal in info on EVERY step (not just
-        # at episode end), so these must be accumulated across the episode
-        # here rather than read once from the terminal step's info dict.
-        n_envs = venv.num_envs
-        self._ep_r_path_sum          = np.zeros(n_envs, dtype=np.float64)
-        self._ep_penalty_unreach_sum = np.zeros(n_envs, dtype=np.float64)
-        self._ep_r_terminal_sum      = np.zeros(n_envs, dtype=np.float64)
+
+    @staticmethod
+    def _outcome_bucket(info: dict) -> str:
+        """Derive the 4-way outcome bucket (env/curriculum.py's
+        OUTCOME_BUCKETS) from a terminal-step info dict.
+
+        env/reward.py only ever sets info['outcome'] to a non-None value
+        inside its touchdown branch (see compute_reward()'s module
+        docstring) -- so 'outcome' is None at episode end if and only if the
+        episode ended via MAX_STEPS truncation without ever touching down,
+        i.e. a real timeout. No separate terminated/truncated plumbing is
+        needed to tell that apart from a landed-but-imprecise soft landing,
+        which is exactly the distinction backend/recorder.py already makes
+        the same way.
+
+        Duplicated (not imported) in backend/callbacks/web_stream_callback.py
+        for its own live-rollout-dump outcome field -- that module is
+        imported BY this one (see the try/except at this file's top), so the
+        reverse import would be circular. Keep both copies in sync.
+        """
+        if info.get('success'):
+            return 'success'
+        if info.get('outcome') is None:
+            return 'timeout'
+        if info.get('crash'):
+            return 'crash'
+        return 'soft_landing'
 
     def _on_step(self) -> bool:
         # SB3 populates self.locals['infos'] with a list of info dicts,
         # one per env.  'episode' key appears when the episode ends
         # (injected by Monitor wrapper).
-        for env_idx, info in enumerate(self.locals.get('infos', [])):
-            if 'r_path' in info:
-                self._ep_r_path_sum[env_idx]          += info['r_path']
-            if 'penalty_unreach' in info:
-                self._ep_penalty_unreach_sum[env_idx]  += info['penalty_unreach']
-            if 'r_terminal' in info:
-                self._ep_r_terminal_sum[env_idx]       += info['r_terminal']
-
+        for info in self.locals.get('infos', []):
             ep = info.get('episode')
             if ep is None:
                 continue
@@ -304,6 +314,8 @@ class CurriculumCallback(BaseCallback):
             else:
                 success = float(ep['r']) >= self.success_reward_min
 
+            outcome_bucket = self._outcome_bucket(info)
+
             # Task/curriculum/reward-budget scalars -- the only way to see
             # curriculum stage, success rate, touchdown distance, and the
             # reward-component split live in TensorBoard over a multi-day
@@ -311,17 +323,24 @@ class CurriculumCallback(BaseCallback):
             self.logger.record('curriculum/stage',             self.scheduler.current_stage)
             self.logger.record('curriculum/success_rate',      self.scheduler.success_rate)
             self.logger.record('curriculum/episodes_at_stage', self.scheduler.episodes_at_stage)
+            self.logger.record('curriculum/advance_threshold', self.scheduler.advance_threshold)
             self.logger.record('task/dist_home_final', info.get('dist_home', float('nan')))
             self.logger.record('task/quality',          info.get('quality', 0.0))
-            self.logger.record('reward/r_terminal',      self._ep_r_terminal_sum[env_idx])
-            self.logger.record('reward/penalty_unreach', self._ep_penalty_unreach_sum[env_idx])
-            self.logger.record('reward/r_path',          self._ep_r_path_sum[env_idx])
 
-            self._ep_r_path_sum[env_idx]          = 0.0
-            self._ep_penalty_unreach_sum[env_idx] = 0.0
-            self._ep_r_terminal_sum[env_idx]      = 0.0
+            # Reward-component breakdown -- GliderEnv now accumulates all 7
+            # components itself (env/glider_env.py's _REWARD_COMPONENT_KEYS)
+            # and hands back the completed totals in info on the terminal
+            # step, so this callback just reads them rather than maintaining
+            # its own (previously incomplete, 3-of-7-term) per-env sums.
+            for name, value in info.get('episode_reward_components', {}).items():
+                self.logger.record(f'reward/{name}', value)
 
-            advanced = self.scheduler.record_episode(success=success)
+            advanced = self.scheduler.record_episode(success=success, outcome=outcome_bucket)
+
+            # Outcome-count breakdown, logged AFTER record_episode() so it
+            # reflects the buffer including this episode.
+            for bucket, count in self.scheduler.outcome_counts.items():
+                self.logger.record(f'curriculum/outcome_{bucket}', count)
 
             if advanced:
                 stage     = self.scheduler.current_stage
@@ -611,7 +630,11 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
 
     callback_list = [curriculum_cb, checkpoint_cb, vecnorm_cb, eval_cb]
     if WebStreamCallback is not None:
-        callback_list.append(WebStreamCallback(scheduler=scheduler))
+        callback_list.append(WebStreamCallback(
+            scheduler       = scheduler,
+            seed            = seed,
+            total_timesteps = int(ppo_cfg['total_timesteps']),
+        ))
     callbacks = CallbackList(callback_list)
 
     # --- Train -----------------------------------------------------------

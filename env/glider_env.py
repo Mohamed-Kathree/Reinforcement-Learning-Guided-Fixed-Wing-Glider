@@ -140,6 +140,22 @@ LAUNCH_PITCH_MAX_DEG: float = 15.0     # nose-up (positive pitch)
 # TOTAL mass sampled via the ballast point mass; see _sample_domain_rand()).
 CG_OFFSET_RANGE_M: float = 0.01
 
+# Per-episode reward-component accumulation keys (V16 Phase A / dashboard
+# streaming backbone). The first 6 are exactly the keys env/reward.py's
+# compute_reward() already returns in `info` on every step (already
+# guaranteed to sum to the step reward -- see
+# tests/test_dynamics.py::test_reward_components_sum_to_total); the 7th,
+# 'penalty_truncate', covers step()'s own MAX_STEPS backstop penalty, which
+# is applied directly to `reward` below and never appears in compute_reward's
+# own info dict. Accumulating all 7 here (not just in an external SB3
+# callback, which only had 3 of them) is what lets info['episode_reward_
+# components'] sum to the EXACT episode return on every terminal step,
+# whether the episode ended by landing or by timing out.
+_REWARD_COMPONENT_KEYS: tuple[str, ...] = (
+    'r_path', 'penalty_unreach', 'penalty_stall', 'penalty_bank',
+    'penalty_smooth', 'r_terminal', 'penalty_truncate',
+)
+
 # Transport latency (sim-to-real gap: zero latency here vs. ~60-150 ms on
 # the real GPS-fix-age + Pi<->ESP32 link + servo command path in real life,
 # i.e. 1-3 whole policy steps). Sampled once per episode at reset() -- a
@@ -332,6 +348,15 @@ class GliderEnv(gym.Env):
         # only (info['track_length']), not read by the reward function itself.
         self._track_length_m: float = 0.0
 
+        # Per-episode reward-component running totals; see
+        # _REWARD_COMPONENT_KEYS above. Exposed as info['episode_reward_
+        # components'] only on the terminal step (same "only present at
+        # episode end" convention the Monitor wrapper already uses for
+        # info['episode']).
+        self._episode_reward_components: dict[str, float] = {
+            k: 0.0 for k in _REWARD_COMPONENT_KEYS
+        }
+
         # Observation/action transport-delay state (sampled per episode in
         # reset(); see OBS_DELAY_MAX_STEPS / ACTION_DELAY_*_SUBSTEPS above).
         self._obs_delay_steps:       int = 0
@@ -429,6 +454,7 @@ class GliderEnv(gym.Env):
         self._prev_state      = self._fdm.state.copy()
         self._prev_action     = np.zeros(2, dtype=np.float32)
         self._track_length_m  = 0.0
+        self._episode_reward_components = {k: 0.0 for k in _REWARD_COMPONENT_KEYS}
 
         # Sample this episode's fixed transport delays (held constant for the
         # whole episode, not resampled every step -- real transport latency
@@ -559,13 +585,26 @@ class GliderEnv(gym.Env):
         )
         info['track_length'] = self._track_length_m
 
+        # Accumulate this step's reward components into the running episode
+        # totals (V16 Phase A) -- purely bookkeeping, does not touch `reward`
+        # itself. compute_reward() always returns all 6 non-truncation keys
+        # (the fault branch included -- see env/reward.py), so no .get() guard
+        # is needed here.
+        for key in _REWARD_COMPONENT_KEYS[:-1]:   # all but 'penalty_truncate'
+            self._episode_reward_components[key] += info[key]
+
         # Step-limit truncation (handled here, not in reward). Penalised as a
         # backstop -- never-landing must be strictly dominated by landing
         # badly, so PPO can't prefer running out the clock over touching down.
         self._step_count += 1
         truncated = truncated_r or (self._step_count >= MAX_STEPS)
         if truncated and not terminated:
-            reward -= float(self.cfg.get('w_truncate', DEFAULT_REWARD_CFG['w_truncate']))
+            truncate_penalty = float(self.cfg.get('w_truncate', DEFAULT_REWARD_CFG['w_truncate']))
+            reward -= truncate_penalty
+            self._episode_reward_components['penalty_truncate'] -= truncate_penalty
+
+        if terminated or truncated:
+            info['episode_reward_components'] = dict(self._episode_reward_components)
 
         # Update previous step cache
         self._prev_state  = self._fdm.state.copy()

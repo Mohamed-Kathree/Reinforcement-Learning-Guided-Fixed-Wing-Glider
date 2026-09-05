@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import FlightScene from "./FlightScene";
-import OrientationSphere from "./OrientationSphere";
-import type { Controller, Frame, Trajectory } from "../types";
+import InstrumentCluster from "./InstrumentCluster";
+import AnnunciatorRow from "./AnnunciatorRow";
+import { kinematicsAt } from "../kinematics";
+import type { Controller, Trajectory } from "../types";
 
 const API_BASE = "http://localhost:8000";
 
@@ -11,24 +13,6 @@ interface EpisodeViewerProps {
 }
 
 const RAD2DEG = 180 / Math.PI;
-const DT_RL = 0.05; // matches env/glider_env.py's policy step (20 Hz)
-
-// Ground/vertical speed aren't recorded directly (only body-frame velocity
-// is) -- derive them from consecutive recorded positions instead of doing
-// a body->NED rotation client-side. Falls back to the next frame at t=0
-// where there's no previous one yet.
-function kinematicsAt(frames: Frame[], index: number): { groundSpeed: number; verticalSpeed: number } {
-  const a = frames[index > 0 ? index - 1 : index];
-  const b = frames[index > 0 ? index : Math.min(index + 1, frames.length - 1)];
-  if (!a || !b || a === b) return { groundSpeed: 0, verticalSpeed: 0 };
-  const dn = b.pos_ned[0] - a.pos_ned[0];
-  const de = b.pos_ned[1] - a.pos_ned[1];
-  const dd = b.pos_ned[2] - a.pos_ned[2];
-  return {
-    groundSpeed: Math.hypot(dn, de) / DT_RL,
-    verticalSpeed: -dd / DT_RL, // positive = climbing
-  };
-}
 
 export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewerProps) {
   const [episodeIds, setEpisodeIds] = useState<string[]>([]);
@@ -38,6 +22,12 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
   const [playing, setPlaying] = useState(false);
   const [stage, setStage] = useState(0);
   const [controller, setController] = useState<Controller>("baseline");
+  // V16 Phase D §D2 -- optional matched seed, so a baseline/RL pair can be
+  // recorded on the same seed and compared apples-to-apples in Compare mode
+  // (which already handles any episode id, including rl-*, with no changes
+  // of its own -- this seed field is the only thing D2 actually needed).
+  // Empty means "random," matching the pre-existing default behaviour.
+  const [seedInput, setSeedInput] = useState("");
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +99,9 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
     setError(null);
     try {
       const params = new URLSearchParams({ controller, stage: String(stage) });
+      if (seedInput.trim() !== "") {
+        params.set("seed", seedInput.trim());
+      }
       if (useCustom) {
         params.set("wind_speed", String(windSpeed));
         params.set("gust_intensity", String(gustIntensity));
@@ -147,6 +140,14 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
             <option value="baseline">Baseline (DeterministicRTL)</option>
             <option value="rl">RL policy</option>
           </select>
+          <input
+            type="number"
+            placeholder="seed (random)"
+            title="Seed (optional) -- set the same value on both A and B in Compare mode to record a matched baseline/RL pair"
+            value={seedInput}
+            onChange={(e) => setSeedInput(e.target.value)}
+            style={{ width: "8rem" }}
+          />
           <button onClick={handleRecord} disabled={recording}>
             {recording ? "Recording…" : `Record ${controller}`}
           </button>
@@ -262,7 +263,15 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
 
             <div className="replay-side">
               {frame && (
-                <OrientationSphere roll={frame.euler[0]} pitch={frame.euler[1]} yaw={frame.euler[2]} />
+                <AnnunciatorRow
+                  stall={frame.stall_violation}
+                  bank={frame.bank_violation}
+                  reach={frame.unreach_violation}
+                />
+              )}
+
+              {frame && (
+                <InstrumentCluster frame={frame} frames={trajectory.frames} frameIndex={frameIndex} />
               )}
 
               {frame && (() => {

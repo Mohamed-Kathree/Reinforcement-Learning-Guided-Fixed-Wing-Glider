@@ -116,6 +116,17 @@ class Frame(BaseModel):
     agl: float
     wind_ned: list[float] = [0.0, 0.0, 0.0]   # [wn, we, wd] m/s, total (mean+gust);
                                                # default keeps old recordings loadable
+    # V16 Phase C2 §C2.1/§C2.2 -- straight from env/reward.py's compute_reward()
+    # info dict (ground-truth, ever step), not recomputed here. Defaults keep
+    # the 837 pre-this-field recordings loadable (same pattern as wind_ned
+    # above), though those will simply show "no violation, ever" until
+    # re-recorded -- the field didn't exist when they were made.
+    stall_violation: bool = False
+    bank_violation: bool = False
+    unreach_violation: bool = False
+    alpha_deg: float = 0.0
+    roll_deg: float = 0.0
+    airspeed: float = 0.0
 
 
 class Trajectory(BaseModel):
@@ -123,6 +134,26 @@ class Trajectory(BaseModel):
     meta: TrajectoryMeta
     home_ned: list[float]
     frames: list[Frame]
+
+
+# V16 Phase D §D1/§D3 -- lightweight per-episode summary for the analysis
+# views (touchdown scatter, failure gallery), so listing/filtering across
+# the whole data/episodes/ archive doesn't require parsing every full
+# Trajectory's frame array. Written as a data/episodes/<id>.summary.json
+# sidecar by recorder.record_episode() (same "small sidecar next to the
+# big file" pattern data/runs/<id>.meta.json already established in Phase A
+# §A5), and backfilled lazily for pre-this-phase episodes the first time
+# GET /api/episode/summaries reads them (see backend/routers/episodes.py).
+class EpisodeRecordSummary(BaseModel):
+    episode_id: str
+    stage: int
+    controller: str
+    outcome: str
+    quality: float
+    seed: int
+    R_home: float
+    touchdown_ned: list[float]   # final frame's pos_ned [n, e, d]
+    home_ned: list[float]
 
 
 # ---------------------------------------------------------------------------
@@ -166,3 +197,72 @@ class TrainingMetric(BaseModel):
     stage: int
     success_rate: float
     ep_rew_mean: Optional[float] = None
+    # SB3 diagnostics (V16 Phase A §A1), read from the model's own logger --
+    # None until the first rollout/episode completes, never fabricated.
+    ep_len_mean: Optional[float] = None
+    explained_variance: Optional[float] = None
+    approx_kl: Optional[float] = None
+    clip_fraction: Optional[float] = None
+    entropy_loss: Optional[float] = None
+    value_loss: Optional[float] = None
+    policy_gradient_loss: Optional[float] = None
+    learning_rate: Optional[float] = None
+    # Curriculum detail (§A2)
+    advance_threshold: Optional[float] = None
+    episodes_at_stage: Optional[int] = None
+    # 4-way rolling outcome breakdown (§A4) -- success/soft_landing/crash/
+    # timeout, matching Outcome above (NOT env/reward.py's own 3-way
+    # success/crash/timeout the V16 spec's literal text described --
+    # collapsing soft-landings into "timeout" was a real bug, already fixed
+    # elsewhere in this project; not reintroducing it here).
+    outcome_counts: Optional[dict[str, int]] = None
+    # Per-component reward breakdown for the most recently completed episode
+    # (§A3), keyed by env/reward.py's component names plus 'penalty_truncate'
+    # (env/glider_env.py's MAX_STEPS backstop, which compute_reward() itself
+    # never sees).
+    reward_components: Optional[dict[str, float]] = None
+    # V16 Phase C2 §C2.1 -- constraint-violation flags for the live annunciator
+    # lamp row, sampled from the single step at which this record was emitted
+    # (self.locals['infos'][0] in WebStreamCallback, same info dict
+    # compute_reward() returns) -- a live update roughly every emit_freq
+    # steps, not every raw step, matching this stream's existing bounded-
+    # frequency design. None before the first step's info is available.
+    stall_violation: Optional[bool] = None
+    bank_violation: Optional[bool] = None
+    unreach_violation: Optional[bool] = None
+    alpha_deg: Optional[float] = None
+    roll_deg: Optional[float] = None
+
+
+class TrainingRunMeta(BaseModel):
+    """One entry in GET /api/training/runs -- mirrors a data/runs/<run_id>.meta.json
+    file written once by WebStreamCallback at training start (V16 Phase A §A5)."""
+    run_id: str
+    start_time: str
+    seed: int
+    total_timesteps: int
+    git_hash: Optional[str] = None
+    n_envs: Optional[int] = None
+
+
+class LiveFrame(BaseModel):
+    t: float
+    pos_ned: list[float]   # [n, e, d] metres -- position only, this is a 2D top-down view
+
+
+class LiveEpisode(BaseModel):
+    """The most recently completed episode's true-state ground track, for the
+    training panel's live top-down view (V16 Phase A §A6 / Phase B §B7).
+    Written by WebStreamCallback to data/live_episode.json -- NOT the full
+    Trajectory/TrajectoryMeta shape used by recorded-episode replay: a live
+    training rollout has no meaningful seed/controller/FlightConditions the
+    way a manually recorded evaluation episode does, so this is a smaller,
+    purpose-built shape rather than force-fitting that one.
+    """
+    frames: list[LiveFrame]
+    outcome: Optional[str] = None
+    quality: float = 0.0
+    dist_home: float = 0.0
+    R_home: float = 20.0
+    stage: int = 0
+    updated_at: str

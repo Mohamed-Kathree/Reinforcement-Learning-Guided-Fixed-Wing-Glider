@@ -1,6 +1,109 @@
+// HomePanel.tsx
+// =============
+// V16 Phase C1 §C1.7 -- fixes D5 (the old version was a static text wall,
+// the weakest possible first impression). Hero is a full-bleed looping 3D
+// ground track of the best recently recorded episode (FlightScene in
+// autoplay mode); everything the old static version had is kept below the
+// fold, restyled, not deleted -- it's real reference material, just no
+// longer the first thing a visitor sees.
+//
+// "Best" is picked from the most recent RECENT_SCAN_LIMIT recordings, not
+// the whole data/episodes/ archive (837 files at last count) -- fetching
+// every trajectory client-side just to rank them isn't viable, and this
+// project has its own standing warning about mixing pre- and post-fix
+// recordings (see the verification checklist), so scanning only the most
+// recent ones sidesteps both problems at once.
+import { useEffect, useState } from "react";
+import FlightScene from "./FlightScene";
+import type { Trajectory } from "../types";
+
+const API_BASE = "http://localhost:8000";
+const RECENT_SCAN_LIMIT = 20;
+
+function pickBest(trajectories: Trajectory[]): Trajectory | null {
+  if (trajectories.length === 0) return null;
+  const successes = trajectories.filter((t) => t.meta.outcome === "success");
+  const softLandings = trajectories.filter((t) => t.meta.outcome === "soft_landing");
+  const pool = successes.length > 0 ? successes : softLandings.length > 0 ? softLandings : trajectories;
+  return pool.reduce((best, t) => (t.meta.quality > best.meta.quality ? t : best));
+}
+
 export default function HomePanel() {
+  // undefined = still loading, null = nothing to show (empty archive or a
+  // fetch error), a Trajectory once one's picked.
+  const [best, setBest] = useState<Trajectory | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const idsRes = await fetch(`${API_BASE}/api/episode`);
+        if (!idsRes.ok) throw new Error(`${idsRes.status} ${idsRes.statusText}`);
+        const ids = (await idsRes.json()) as string[]; // already newest-first
+        const recent = ids.slice(0, RECENT_SCAN_LIMIT);
+        const trajectories = await Promise.all(
+          recent.map((id) =>
+            fetch(`${API_BASE}/api/episode/${id}`).then((r) => {
+              if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+              return r.json() as Promise<Trajectory>;
+            }),
+          ),
+        );
+        if (!cancelled) setBest(pickBest(trajectories));
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+          setBest(null);
+        }
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="home">
+      <section className="home-hero">
+        {best === undefined ? (
+          <div className="home-hero-loading placeholder">Loading recent flight data…</div>
+        ) : best === null ? (
+          <div className="home-hero-empty placeholder">
+            {error
+              ? `Could not load recorded episode data (${error}).`
+              : "No flights recorded yet — record one from the Baseline or Flight Replay tab to see it here."}
+          </div>
+        ) : (
+          <>
+            <FlightScene frames={best.frames} currentIndex={0} rHome={best.meta.R_home} autoplay />
+            <div className="home-hero-overlay">
+              <div className="home-hero-stat">
+                <span>Controller</span>
+                <strong>{best.meta.controller}</strong>
+              </div>
+              <div className="home-hero-stat">
+                <span>Stage</span>
+                <strong>{best.meta.stage}</strong>
+              </div>
+              <div className={`home-hero-stat outcome-${best.meta.outcome}`}>
+                <span>Outcome</span>
+                <strong>{best.meta.outcome.replace("_", " ")}</strong>
+              </div>
+              <div className="home-hero-stat">
+                <span>Quality</span>
+                <strong>{(best.meta.quality * 100).toFixed(0)}%</strong>
+              </div>
+              <div className="home-hero-stat">
+                <span>R_home</span>
+                <strong>{best.meta.R_home.toFixed(0)} m</strong>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+
       <section className="home-intro">
         <p className="eyebrow">COS 731/732 Honours Project · University of the Western Cape</p>
         <h1>RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider</h1>
@@ -104,7 +207,10 @@ export default function HomePanel() {
             <li><span>Parallel envs</span><strong>8 × SubprocVecEnv</strong></li>
             <li><span>Rollout / batch</span><strong>2048 / 256</strong></li>
             <li><span>Discount γ</span><strong>0.999</strong></li>
-            <li><span>Curriculum advance</span><strong>80% success / 100 episodes</strong></li>
+            {/* Verified against training/configs/base.yaml + env/curriculum.py
+                during V16 Phase A (Gate A) -- the previous "80% / 100
+                episodes" here was stale. */}
+            <li><span>Curriculum advance</span><strong>60% success / 50-episode window</strong></li>
             <li><span>Target run</span><strong>20M timesteps</strong></li>
           </ul>
         </div>
