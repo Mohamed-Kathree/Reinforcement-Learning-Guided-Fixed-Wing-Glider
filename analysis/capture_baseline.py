@@ -57,7 +57,8 @@ def run_pytest(suite: str = "tests/test_dynamics.py") -> dict:
         [sys.executable, "-m", "pytest", suite, "-v", "-p", "no:cacheprovider"],
         cwd=PROJ_ROOT, capture_output=True, text=True,
     )
-    tests = dict(re.findall(r"(\S+::\S+) (PASSED|FAILED|ERROR|SKIPPED)", proc.stdout))
+    # Test ids may contain spaces (parametrize ids), so match up to the status word.
+    tests = dict(re.findall(r"^(\S+::.+?) (PASSED|FAILED|ERROR|SKIPPED)\b", proc.stdout, re.M))
     summary = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else ""
     return {
         "command": f"pytest {suite} -v",
@@ -125,7 +126,7 @@ def gate_values() -> dict:
 
     # Gate 4 — max |q| over 15 s from near-trim
     fdm = vg._make_fdm()
-    vg._set_near_trim_ic(fdm, alt_m=300.0, vt_ms=10.0)
+    vg._set_near_trim_ic(fdm, alt_m=300.0)
     max_q = 0.0
     for _ in range(int(15.0 / vg.DT)):
         fdm.run()
@@ -133,7 +134,7 @@ def gate_values() -> dict:
 
     # Gate 5 — Euler bounds over 30 s
     fdm = vg._make_fdm()
-    vg._set_near_trim_ic(fdm, alt_m=500.0, vt_ms=10.0)
+    vg._set_near_trim_ic(fdm, alt_m=500.0)
     max_phi = max_theta = 0.0
     finite = True
     for _ in range(int(30.0 / vg.DT)):
