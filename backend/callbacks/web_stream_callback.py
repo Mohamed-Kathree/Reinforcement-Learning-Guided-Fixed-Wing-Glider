@@ -39,7 +39,7 @@ import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import DummyVecEnv
 
-from env.curriculum import CurriculumScheduler, OUTCOME_BUCKETS
+from env.curriculum import CurriculumScheduler, OUTCOME_BUCKETS, outcome_bucket
 
 from .. import config
 from ..recorder import _extract_true_state
@@ -241,22 +241,8 @@ class WebStreamCallback(BaseCallback):
 
     @staticmethod
     def _outcome_bucket(info: dict) -> str:
-        """4-way outcome bucket (env/curriculum.py's OUTCOME_BUCKETS) from a
-        terminal-step info dict -- duplicated from training/train.py's
-        CurriculumCallback._outcome_bucket() rather than imported, since
-        training/train.py imports THIS module (see the try/except at its
-        top), so the reverse import would be circular. Both copies derive
-        the bucket the same way from the same info-dict shape (see
-        CurriculumCallback._outcome_bucket()'s fuller docstring for the
-        reasoning); keep them in sync if that rule ever changes.
-        """
-        if info.get('success'):
-            return 'success'
-        if info.get('outcome') is None:
-            return 'timeout'
-        if info.get('crash'):
-            return 'crash'
-        return 'soft_landing'
+        """4-way outcome bucket; see env/curriculum.py outcome_bucket()."""
+        return outcome_bucket(info)
 
     def _accumulate_rollout_frame(self) -> None:
         """Append one frame for env index 0 and, on episode end, snapshot the

@@ -12,7 +12,7 @@ task that is actually SCORED on touchdown quality it would arrive high, fast,
 and off-centre with the score collapsing to near zero).
 
 Consumes the same 12-element normalised observation and produces the same
-2-element normalised action as the RL policy, so training/evaluate.py can
+2-element normalised action as the RL policy, so training/benchmark.py can
 compare both controllers through an identical evaluation harness.
 
 Algorithm (three phases, advancing forward only -- never reverting mid-episode):
@@ -248,7 +248,7 @@ class DeterministicRTL:
     ) -> tuple[NDArray, None]:
         """Compute action from a single (unnormalised) observation.
 
-        Mirrors the SB3 policy.predict() interface so evaluate.py can call
+        Mirrors the SB3 policy.predict() interface so evaluation code can call
         both the RL policy and this controller identically:
             action, _ = policy.predict(obs, deterministic=True)
 
@@ -405,7 +405,7 @@ def evaluate_rtl(
 
     Intended for quick sanity checks and as the reference score that the
     RL policy must beat.  For full comparative evaluation use
-    training/evaluate.py.
+    training/benchmark.py.
 
     Args:
         n_episodes : number of episodes to evaluate

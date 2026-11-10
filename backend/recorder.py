@@ -27,30 +27,26 @@ from .schemas import (
 DT_RL = 0.050
 
 
-# Lazy-loaded, cached: PPO + VecNormalize load from disk on first "rl"
-# request and are reused after that, instead of re-reading the checkpoint
-# files on every /api/episode/record call.
-_rl_policy = None
-_rl_vecnorm = None
+# Lazy-loaded, cached: the policy loads from disk on first "rl" request and
+# is reused after that, instead of re-reading the checkpoint files on every
+# /api/episode/record call.
+_rl_actor = None
 
 
 def _load_rl_policy():
     """Load the tracked deployment checkpoint (deployment/best_model/), once.
 
-    Uses stable_baselines3 directly rather than shelling out to the venv
-    Python like training/evaluate.py does elsewhere in this backend --
-    this module already imports env/sim packages in-process (see module
-    docstring), so importing stable_baselines3 in-process too is
-    consistent, not a new pattern.
+    Returns training/benchmark.py's PolicyActor, which applies the training
+    observation pipeline (frame stacking + VecNormalize, n_stack read from
+    the model) to raw observations, so a frame-stacked post-V20 model
+    replays as correctly as the 12-observation one. Callers reset() it per
+    episode.
     """
-    global _rl_policy, _rl_vecnorm
-    if _rl_policy is not None:
-        return _rl_policy, _rl_vecnorm
+    global _rl_actor
+    if _rl_actor is not None:
+        return _rl_actor
 
-    from stable_baselines3 import PPO
-    from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-    from env.glider_env import GliderEnv
-    from env.curriculum import STAGES
+    from training.benchmark import PolicyActor
 
     model_path = config.GLIDER_REPO_ROOT / "deployment" / "best_model" / "best_model.zip"
     vecnorm_path = config.GLIDER_REPO_ROOT / "deployment" / "best_model" / "vecnormalize_best.pkl"
@@ -60,16 +56,8 @@ def _load_rl_policy():
             f"deployment/best_model/ -- not found at {model_path.parent}."
         )
 
-    # normalize_obs() below only needs the running stats, not a live env --
-    # this DummyVecEnv is a throwaway required by VecNormalize.load()'s API.
-    dummy_venv = DummyVecEnv([lambda: GliderEnv(cfg=dict(STAGES[0]))])
-    vecnorm = VecNormalize.load(str(vecnorm_path), dummy_venv)
-    vecnorm.training = False
-    vecnorm.norm_reward = False
-
-    _rl_policy = PPO.load(str(model_path), device="cpu")
-    _rl_vecnorm = vecnorm
-    return _rl_policy, _rl_vecnorm
+    _rl_actor = PolicyActor(model_path, vecnorm_path)
+    return _rl_actor
 
 
 def _extract_true_state(env) -> dict:
@@ -189,17 +177,12 @@ def record_episode(
         def act(obs):
             return policy.act(obs)
     else:
-        rl_model, rl_vecnorm = _load_rl_policy()
-
-        def act(obs):
-            # PPO was trained on VecNormalize-normalised observations; stepping
-            # the raw GliderEnv here (for TRUE-state recording, see module
-            # docstring) means observations must be normalised by hand with
-            # the checkpoint's own running stats before predict() -- same
-            # pattern as scratch/final_benchmark_policy.py.
-            norm_obs = rl_vecnorm.normalize_obs(obs)
-            action, _ = rl_model.predict(norm_obs, deterministic=True)
-            return action
+        # Stepping the raw GliderEnv here (for TRUE-state recording, see
+        # module docstring); the actor stacks and normalises observations
+        # the way training did.
+        rl_actor = _load_rl_policy()
+        rl_actor.reset(seed)
+        act = rl_actor.act
 
     obs, _info = env.reset(seed=seed)
 
@@ -259,14 +242,8 @@ def record_episode(
     # non-crash episodes land clean, just off-centre, so conflating the two
     # (as this function used to) mislabelled the majority of Stage 0-2
     # episodes as timeouts.
-    if info.get("success"):
-        outcome: str = "success"
-    elif truncated and not terminated:
-        outcome = "timeout"
-    elif info.get("crash"):
-        outcome = "crash"
-    else:
-        outcome = "soft_landing"
+    from env.curriculum import outcome_bucket
+    outcome: str = outcome_bucket(info)
 
     quality = float(info.get("quality", 0.0))
     final_dist_home = float(info.get("dist_home", 0.0))

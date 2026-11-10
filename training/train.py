@@ -67,7 +67,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize, DummyV
 from stable_baselines3.common.monitor import Monitor
 
 from env.glider_env import GliderEnv
-from env.curriculum import CurriculumScheduler, STAGES
+from env.curriculum import CurriculumScheduler, STAGES, outcome_bucket
 
 # eval_venv is held at the FINAL curriculum stage for the entire run (see
 # train()) so that best_model.zip -- the artefact actually deployed -- is
@@ -287,30 +287,8 @@ class CurriculumCallback(BaseCallback):
 
     @staticmethod
     def _outcome_bucket(info: dict) -> str:
-        """Derive the 4-way outcome bucket (env/curriculum.py's
-        OUTCOME_BUCKETS) from a terminal-step info dict.
-
-        env/reward.py only ever sets info['outcome'] to a non-None value
-        inside its touchdown branch (see compute_reward()'s module
-        docstring) -- so 'outcome' is None at episode end if and only if the
-        episode ended via MAX_STEPS truncation without ever touching down,
-        i.e. a real timeout. No separate terminated/truncated plumbing is
-        needed to tell that apart from a landed-but-imprecise soft landing,
-        which is exactly the distinction backend/recorder.py already makes
-        the same way.
-
-        Duplicated (not imported) in backend/callbacks/web_stream_callback.py
-        for its own live-rollout-dump outcome field -- that module is
-        imported BY this one (see the try/except at this file's top), so the
-        reverse import would be circular. Keep both copies in sync.
-        """
-        if info.get('success'):
-            return 'success'
-        if info.get('outcome') is None:
-            return 'timeout'
-        if info.get('crash'):
-            return 'crash'
-        return 'soft_landing'
+        """4-way outcome bucket; see env/curriculum.py outcome_bucket()."""
+        return outcome_bucket(info)
 
     def _on_step(self) -> bool:
         # SB3 populates self.locals['infos'] with a list of info dicts,

@@ -9,7 +9,7 @@
 # can see the full parameter picture in one place.
 #
 # Live-wired sections (actually read by code):
-#   reward:      -- training/train.py flat_env_cfg() / training/evaluate.py
+#   reward:      -- training/train.py flat_env_cfg() / training/benchmark.py make_env()
 #                   _build_eval_env() -> env/glider_env.py GliderEnv(cfg=...)
 #                   (env/reward.py DEFAULT_REWARD_CFG is the fallback used
 #                   when GliderEnv is constructed without an explicit cfg,
@@ -20,7 +20,7 @@
 #                   energy state -- a fixed hardware uncertainty, not
 #                   curriculum-stage-dependent (same range at every stage)
 #   ppo:         -- training/train.py train()
-#   eval:        -- training/train.py train() (EvalCallback), training/evaluate.py
+#   eval:        -- training/train.py train() (EvalCallback)
 #   curriculum:  -- training/train.py train() -> CurriculumScheduler
 #
 # Reference-only sections (code does NOT read these; kept for documentation --

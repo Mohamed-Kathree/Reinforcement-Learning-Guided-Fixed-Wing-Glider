@@ -62,7 +62,6 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (registers 3-D projection)
 
 from env.glider_env import GliderEnv
 from env.reward import DEFAULT_REWARD_CFG
-from baseline.deterministic_rtl import DeterministicRTL
 from sim.math_utils import euler_from_quat
 
 
@@ -100,52 +99,37 @@ class Trajectory:
 # ---------------------------------------------------------------------------
 
 def collect_trajectory(
-    policy:    Any,
+    actor:     Any,
     env:       GliderEnv,
     seed:      int,
     label:     str,
     color:     str,
-    is_vecenv: bool = False,
 ) -> Trajectory:
     """Run one episode and record per-step state data.
 
-    Works with both a raw GliderEnv (baseline) and a VecNormalize-wrapped
-    env (RL policy).  Ground-truth physics state is read directly from the
-    underlying GliderEnv in both cases.
-
-    Args:
-        policy    : object with .predict(obs, deterministic=True) interface
-        env       : GliderEnv or VecNormalize
-        seed      : episode RNG seed
-        label     : legend label for the trajectory
-        color     : matplotlib colour string
-        is_vecenv : True when env is VecNormalize-wrapped
+    `actor` is a training/benchmark.py controller (reset(seed), act(obs)):
+    BaselineActor, or PolicyActor, which applies the training observation
+    pipeline (frame stacking + VecNormalize) itself. Every controller steps
+    the same raw GliderEnv from env.reset(seed=seed), so a --compare plot
+    overlays the same episode. (The previous VecNormalize path reset the
+    env a second time without the seed, so RL and baseline flew different
+    episodes.) Ground-truth state is read from the FDM.
 
     Returns:
         Trajectory with all per-step fields populated.
     """
+    from env.curriculum import outcome_bucket
+
     traj = Trajectory(label=label, color=color)
     dt   = 0.05   # policy step size (s)
 
-    # DeterministicRTL is stateful (yaw-rate derivative for its PD heading
-    # controller) and must be reset per episode; SB3 policies have no such
-    # method, hence the guard.
-    if hasattr(policy, 'reset'):
-        policy.reset()
-
-    if is_vecenv:
-        env.env_method('reset', seed=seed)
-        obs = env.reset()
-        # Reach the underlying GliderEnv through VecNormalize -> VecEnv -> envs[0]
-        raw_env = env.venv.envs[0].unwrapped
-    else:
-        obs, _ = env.reset(seed=seed)
-        raw_env = env
+    actor.reset(seed)
+    obs, _ = env.reset(seed=seed)
 
     t = 0.0
     while True:
         # Record ground-truth state BEFORE this step
-        s     = raw_env._fdm.state
+        s     = env._fdm.state
         roll, pitch, _ = euler_from_quat(s[6:10])
         alpha = float(np.arctan2(s[5], s[3]))
         V     = float(np.linalg.norm(s[3:6]))
@@ -160,27 +144,17 @@ def collect_trajectory(
         traj.pitch_deg.append(float(np.degrees(pitch)))
         traj.alpha_deg.append(float(np.degrees(alpha)))
 
-        # Step
-        action, _ = policy.predict(obs, deterministic=True)
-
-        if is_vecenv:
-            obs, reward, done, info_arr = env.step(action)
-            r    = float(reward[0])
-            done = bool(done[0])
-            info = info_arr[0]
-        else:
-            obs, r, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
+        obs, r, terminated, truncated, info = env.step(actor.act(obs))
 
         traj.agl.append(float(info.get('lidar_agl', 0.0)))
-        traj.reward.append(r)
+        traj.reward.append(float(r))
         traj.dist_home.append(float(info.get('dist_home', np.nan)))
 
         t += dt
 
-        if done:
-            traj.success = bool(info.get('success', False))
-            traj.crash   = bool(info.get('crash',   False))
+        if terminated or truncated:
+            traj.success = outcome_bucket(info) == 'success'
+            traj.crash   = outcome_bucket(info) == 'crash'
             break
 
     traj.n_steps = len(traj.time)
@@ -401,40 +375,19 @@ def make_figures(
 # ---------------------------------------------------------------------------
 
 def run_episode(
-    policy,
+    actor,
     cfg:       dict,
     stage_idx: int,
     seed:      int,
     label:     str,
     color:     str,
-    is_vecenv: bool = False,
 ) -> Trajectory:
-    """Build env, run one episode, return a Trajectory."""
-    from env.curriculum import STAGES
+    """Build the env exactly as training does at `stage_idx`, run one episode."""
+    from training.benchmark import make_env
 
-    stage_cfg  = dict(STAGES[stage_idx])
-    reward_cfg = dict(DEFAULT_REWARD_CFG)
-    reward_cfg.update(cfg.get('reward', {}))
-    reward_cfg.update(stage_cfg)
-
-    if is_vecenv:
-        from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-        from stable_baselines3.common.monitor import Monitor
-
-        def _make():
-            return Monitor(GliderEnv(cfg=reward_cfg))
-
-        venv = DummyVecEnv([_make])
-        venv = VecNormalize.load(cfg['_vecnorm_path'], venv)
-        venv.training    = False
-        venv.norm_reward = False
-        traj = collect_trajectory(policy, venv, seed, label, color, is_vecenv=True)
-        venv.close()
-    else:
-        env  = GliderEnv(cfg=reward_cfg)
-        traj = collect_trajectory(policy, env, seed, label, color, is_vecenv=False)
-        env.close()
-
+    env  = make_env(cfg, stage_idx)
+    traj = collect_trajectory(actor, env, seed, label, color)
+    env.close()
     return traj
 
 
@@ -473,10 +426,11 @@ if __name__ == '__main__':
 
     trajectories: list[Trajectory] = []
 
+    from training.benchmark import BaselineActor, PolicyActor
+
     # --- Deterministic baseline (always collected) -----------------------
-    baseline_ctrl = DeterministicRTL()
     base_traj     = run_episode(
-        policy    = baseline_ctrl,
+        actor     = BaselineActor(),
         cfg       = cfg,
         stage_idx = args.stage,
         seed      = args.seed,
@@ -491,20 +445,16 @@ if __name__ == '__main__':
 
     # --- RL policy (optional) --------------------------------------------
     if args.model is not None:
-        from stable_baselines3 import PPO
         if args.vecnorm is None:
             raise SystemExit('--vecnorm is required when --model is provided')
 
-        cfg['_vecnorm_path'] = args.vecnorm
-        rl_model = PPO.load(args.model)
         rl_traj  = run_episode(
-            policy    = rl_model,
+            actor     = PolicyActor(args.model, args.vecnorm),
             cfg       = cfg,
             stage_idx = args.stage,
             seed      = args.seed,
             label     = 'RL Policy',
             color     = 'tomato',
-            is_vecenv = True,
         )
         print(f"RL Policy steps={rl_traj.n_steps:4d}  "
               f"success={rl_traj.success}  crash={rl_traj.crash}")

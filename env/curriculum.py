@@ -171,13 +171,33 @@ def stage_ranges(scale: float) -> dict[str, tuple[float, float]]:
     return out
 
 # The 4-way episode-outcome bucket used throughout the dashboard
-# (backend/recorder.py, scratch/final_benchmark.py) -- NOT the 3-way
+# (backend/recorder.py, training/benchmark.py) -- NOT the 3-way
 # success/crash/timeout some older docs describe. "soft_landing" (touched
 # down clean-ish but missed the strict success bar) is deliberately kept
 # separate from "timeout" (never touched down at all): collapsing the two
 # was a real bug, fixed elsewhere in this project, and is not to be
 # reintroduced here.
 OUTCOME_BUCKETS: tuple[str, ...] = ('success', 'soft_landing', 'crash', 'timeout')
+
+
+def outcome_bucket(info: dict) -> str:
+    """The one definition of an episode's OUTCOME_BUCKETS bucket, from its
+    terminal-step info dict. Used by training (CurriculumCallback), the
+    dashboard (WebStreamCallback, backend/recorder.py) and the evaluator
+    (training/benchmark.py).
+
+    env/reward.py sets info['outcome'] only in its touchdown and fault
+    branches, so 'outcome' is None at episode end exactly when the episode
+    was truncated without ever touching down: a real timeout. A touchdown
+    that misses the success bar is a soft landing, never a timeout.
+    """
+    if info.get('success'):
+        return 'success'
+    if info.get('outcome') is None:
+        return 'timeout'
+    if info.get('crash'):
+        return 'crash'
+    return 'soft_landing'
 
 
 # ---------------------------------------------------------------------------
