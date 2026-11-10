@@ -358,22 +358,34 @@ did not, by and large, contain uncontrollable aircraft. The crashes come
 from the baseline's fixed gains meeting widely varied airframes, which is
 genuine separation between baseline and policy rather than a "task too
 hard" artefact. The re-measured baseline is in
-`analysis/baseline_benchmark_v20.json`.
+`analysis/benchmark_baseline_v20.json`.
 
 
-### Baseline re-measured (post-Phase-5)
+### Baseline benchmark (Gate 6)
 
-`scratch/v20_baseline_benchmark.py`, DeterministicRTL, 100 episodes per
-stage, Wilson 95% intervals, at commit 8203aed (clean). The old 28–29%
-figure is void (GPS velocity bug). Phase 6's single evaluator supersedes
-this script.
+`python -m training.benchmark --policy baseline --episodes 100`, the single
+evaluator, at commit 3a8131e (clean): DeterministicRTL, 100 episodes per
+stage, a fresh env per episode, Wilson 95% intervals. Recorded in
+`analysis/benchmark_baseline_v20.json`. **This is the reference baseline
+number.** The old 28–29% figure is void (GPS velocity bug).
 
 | Stage | Success | Soft landing | Crash | Timeout | Mean quality |
 |---|---|---|---|---|---|
 | 0 | 27% [19.3, 36.4] | 73% | 0% [0, 3.7] | 0% | 1.00 |
 | 1 | 25% [17.5, 34.3] | 75% | 0% [0, 3.7] | 0% | 0.91 |
-| 2 | 11% [6.3, 18.6] | 82% | 6% [2.8, 12.5] | 1% | 0.70 |
-| 3 | **8% [4.1, 15.0]** | 53% | **38% [29.1, 47.8]** | 1% | 0.32 |
+| 2 | 11% [6.3, 18.6] | 82% | 6% [2.8, 12.5] | 1% | 0.69 |
+| 3 | **8% [4.1, 15.0]** | 52% | **39% [30.0, 48.8]** | 1% | 0.32 |
+
+Cross-checks:
+
+- **Bucket logic and environment construction carried over intact.** Run
+  with one env reused per stage (as the interim post-Phase-5 script did),
+  the evaluator reproduces that script's 400 episodes exactly: same seeds,
+  airframes and outcomes, zero difference in miss distance.
+- **The fresh-env rule changes one episode in 400.** A stage-3 soft landing
+  becomes a crash: one chaotic episode was sensitive to the ~1e-15 JSBSim
+  state left over from earlier episodes. With a fresh env, every result
+  depends on its seed alone.
 
 No single airframe parameter separates the stage-3 crashes from the other
 episodes by more than 0.42 standard deviations (largest: `clbeta_mult`,
@@ -381,3 +393,33 @@ episodes by more than 0.42 standard deviations (largest: `clbeta_mult`,
 widely varied but flyable airframes, plus stage 3's wind and gusts, rather
 than one uncontrollable corner. Per-episode `dr_params` are in the JSON for
 the Phase 7 regression.
+
+## Phase 6: one evaluator
+
+`training/benchmark.py` replaced `training/evaluate.py` and five scratch
+benchmark scripts. Two bugs were retired with them:
+
+- **Soft landings counted as timeouts.** `evaluate.py` set
+  `timeout = not success and not crash`, so every soft landing landed in
+  the timeout bucket.
+- **Paired runs that were not paired.** `evaluate.py` and
+  `plot_trajectories.py` reset the RL VecEnv a second time without the
+  seed, so the policy and the baseline never flew the same episode.
+
+How it works:
+
+- All controllers step one loop on a plain `GliderEnv` built as training
+  builds it.
+- A trained policy is fed through `PolicyActor`, which reproduces the
+  training observation pipeline (`VecFrameStack` then `VecNormalize`) with
+  `n_stack` read from the model. A test matches it to SB3's wrappers
+  observation by observation. Both the pre-V20 12-observation model and
+  frame-stacked models run.
+- There is one outcome definition, `env/curriculum.py`
+  `outcome_bucket()`, used by training, the dashboard and the evaluator.
+
+**Ablation caveat.** `--ablate-home` zeroes obs 0, 1 and 3 (dx_home,
+dy_home, course angle), as specified. obs[11] (required glide ratio =
+distance to home / altitude) still carries the *distance* to home, though
+not its direction. The ablation therefore removes home direction but not
+home distance.
