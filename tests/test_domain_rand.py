@@ -51,11 +51,11 @@ def test_ranges_bracket_both_estimates():
 
 def test_dr_ranges_come_from_mass_properties_yaml():
     mp = load_mass_properties()
-    assert DR_RANGES["mass_kg"] == tuple(mp["mass"]["flying_kg"]["range"])
-    assert DR_RANGES["cg_x_m"] == tuple(mp["cg"]["residual_m"]["range"])
-    assert DR_RANGES["ixx"] == tuple(mp["inertia"]["ixx"]["range"])
-    iyy = mp["inertia"]["iyy"]
-    assert DR_RANGES["iyy"] == tuple(iyy.get("dr_range", iyy["range"]))
+    sampled = lambda e: tuple(e.get("dr_range", e["range"]))   # dr_range = recorded narrowing
+    assert DR_RANGES["mass_kg"] == sampled(mp["mass"]["flying_kg"])
+    assert DR_RANGES["cg_x_m"] == sampled(mp["cg"]["residual_m"])
+    assert DR_RANGES["ixx"] == sampled(mp["inertia"]["ixx"])
+    assert DR_RANGES["iyy"] == sampled(mp["inertia"]["iyy"])
     area = mp["geometry"]["wing_area_m2"]
     assert DR_RANGES["sw_mult"] == pytest.approx(tuple(r / area["value"] for r in area["range"]))
     # Deliberately not randomised (docs/SPEC_V20_decisions.md).

@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <!-- GENERATED FILE: DO NOT EDIT BY HAND.
      Generator : aircraft/generate_fdm.py
-     Source    : aircraft/mass_properties.yaml  sha256=e11f24e3bf4852a6aab5f92dbddf03bef7bdea7a6c0e4153d5415deffe3f01db
-     Template  : aircraft/rlglider.template.xml sha256=41d8fca0df82603033630aeecf8bc4b4a455a32424c668d140a5973f5613e603
-     Generated : 2026-11-10T16:11:50+00:00
+     Source    : aircraft/mass_properties.yaml  sha256=82e81f44c76e42798a24f2d5fea17ca589d18a698645559af693bfb005a6951a
+     Template  : aircraft/rlglider.template.xml sha256=0b287ea4b936e483bae32184e415d1044ad93c195653a5f51cba09c7cc44e955
+     Generated : 2026-11-10T19:00:41+00:00
      Edit the YAML or the template, then rerun the generator. -->
 <!--
   rlglider.xml
@@ -277,11 +277,12 @@
        multiplier on the table would move slope and peak together and make
        the two parameters indistinguishable. At s = m = 1 every operation is
        exact in floating point, so the defaults reproduce the unscaled table.
-       The lookup clamps at the table's +/-30 deg ends. The +/-30 deg rows were
-       added in SPEC V20 Phase 4 (the scaled lookup reaches 25 deg at only 17.7 deg
-       of true alpha at the cl-mult 1.2 / clmax-scale 0.85 corner, and stage-3
-       episodes crossed it regularly). They come from the same generating formula
-       as every other row (the original sim/aerodynamics.py CL()):
+       The table spans the lookup angle's whole reachable range, so it never
+       clamps: |alpha| <= 180 deg and cl-mult / clmax-scale <= 1.2/0.85,
+       giving |lookup| <= 254 deg, covered by rows to +/-260 deg
+       (tests/test_dr_hooks.py checks this against env/curriculum.py
+       DR_RANGES). Every row beyond the original +/-25 deg set comes from the
+       same generating formula (the original sim/aerodynamics.py CL()):
          CL = a0*alpha                                   |alpha| <= 12 deg
          CL = sign(alpha) * max(CLpk*exp(-3*excess), 0.9*sin(2*alpha))   beyond
        with a0 = 5.5, CLpk = 1.1519; it reproduces all 15 original rows to 4 dp.
@@ -334,6 +335,52 @@
           <table>
             <independentVar lookup="row">aero/misc/alpha-deg-cl-lookup</independentVar>
             <tableData>
+             -260   -0.0000
+             -255   -0.0000
+             -250   -0.0000
+             -245   -0.0000
+             -240   -0.0000
+             -235   -0.0000
+             -230   -0.0000
+             -225   -0.0000
+             -220   -0.0000
+             -215   -0.0000
+             -210   -0.0000
+             -205   -0.0000
+             -200   -0.0001
+             -195   -0.0001
+             -190   -0.0001
+             -185   -0.0001
+             -180   -0.0002
+             -175   -0.1563
+             -170   -0.3078
+             -165   -0.4500
+             -160   -0.5785
+             -155   -0.6894
+             -150   -0.7794
+             -145   -0.8457
+             -140   -0.8863
+             -135   -0.9000
+             -130   -0.8863
+             -125   -0.8457
+             -120   -0.7794
+             -115   -0.6894
+             -110   -0.5785
+             -105   -0.4500
+             -100   -0.3078
+              -95   -0.1563
+              -90   -0.0194
+              -85   -0.0252
+              -80   -0.0327
+              -75   -0.0425
+              -70   -0.0553
+              -65   -0.0718
+              -60   -0.0933
+              -55   -0.1212
+              -50   -0.1575
+              -45   -0.2047
+              -40   -0.2659
+              -35   -0.3455
               -30   -0.4489
               -25   -0.5832
               -18   -0.8414
@@ -351,6 +398,52 @@
                18    0.8414
                25    0.6894
                30    0.7794
+               35    0.8457
+               40    0.8863
+               45    0.9000
+               50    0.8863
+               55    0.8457
+               60    0.7794
+               65    0.6894
+               70    0.5785
+               75    0.4500
+               80    0.3078
+               85    0.1563
+               90    0.0194
+               95    0.0149
+              100    0.0115
+              105    0.0088
+              110    0.0068
+              115    0.0052
+              120    0.0040
+              125    0.0031
+              130    0.0024
+              135    0.0018
+              140    0.0014
+              145    0.0011
+              150    0.0008
+              155    0.0006
+              160    0.0005
+              165    0.0004
+              170    0.0003
+              175    0.0002
+              180    0.0002
+              185    0.1563
+              190    0.3078
+              195    0.4500
+              200    0.5785
+              205    0.6894
+              210    0.7794
+              215    0.8457
+              220    0.8863
+              225    0.9000
+              230    0.8863
+              235    0.8457
+              240    0.7794
+              245    0.6894
+              250    0.5785
+              255    0.4500
+              260    0.3078
             </tableData>
           </table>
         </product>
@@ -425,6 +518,52 @@
           <table>
             <independentVar lookup="row">aero/misc/alpha-deg-cl-lookup</independentVar>
             <tableData>
+             -260   -0.0000
+             -255   -0.0000
+             -250   -0.0000
+             -245   -0.0000
+             -240   -0.0000
+             -235   -0.0000
+             -230   -0.0000
+             -225   -0.0000
+             -220   -0.0000
+             -215   -0.0000
+             -210   -0.0000
+             -205   -0.0000
+             -200   -0.0001
+             -195   -0.0001
+             -190   -0.0001
+             -185   -0.0001
+             -180   -0.0002
+             -175   -0.1563
+             -170   -0.3078
+             -165   -0.4500
+             -160   -0.5785
+             -155   -0.6894
+             -150   -0.7794
+             -145   -0.8457
+             -140   -0.8863
+             -135   -0.9000
+             -130   -0.8863
+             -125   -0.8457
+             -120   -0.7794
+             -115   -0.6894
+             -110   -0.5785
+             -105   -0.4500
+             -100   -0.3078
+              -95   -0.1563
+              -90   -0.0194
+              -85   -0.0252
+              -80   -0.0327
+              -75   -0.0425
+              -70   -0.0553
+              -65   -0.0718
+              -60   -0.0933
+              -55   -0.1212
+              -50   -0.1575
+              -45   -0.2047
+              -40   -0.2659
+              -35   -0.3455
               -30   -0.4489
               -25   -0.5832
               -18   -0.8414
@@ -442,6 +581,52 @@
                18    0.8414
                25    0.6894
                30    0.7794
+               35    0.8457
+               40    0.8863
+               45    0.9000
+               50    0.8863
+               55    0.8457
+               60    0.7794
+               65    0.6894
+               70    0.5785
+               75    0.4500
+               80    0.3078
+               85    0.1563
+               90    0.0194
+               95    0.0149
+              100    0.0115
+              105    0.0088
+              110    0.0068
+              115    0.0052
+              120    0.0040
+              125    0.0031
+              130    0.0024
+              135    0.0018
+              140    0.0014
+              145    0.0011
+              150    0.0008
+              155    0.0006
+              160    0.0005
+              165    0.0004
+              170    0.0003
+              175    0.0002
+              180    0.0002
+              185    0.1563
+              190    0.3078
+              195    0.4500
+              200    0.5785
+              205    0.6894
+              210    0.7794
+              215    0.8457
+              220    0.8863
+              225    0.9000
+              230    0.8863
+              235    0.8457
+              240    0.7794
+              245    0.6894
+              250    0.5785
+              255    0.4500
+              260    0.3078
             </tableData>
           </table>
         </product>

@@ -21,7 +21,14 @@ mass:
 
 cg:
   target_x_mm: {value: 362, source: design_target}   # 30% MAC
-  residual_m:  {value: 0.0, range: [-0.015, 0.015], source: estimated}
+  # residual_m is positive FORWARD of the 362 mm target (body frame).
+  residual_m:  {value: 0.0, range: [-0.015, 0.015], source: estimated,
+                dr_range: [-0.013, 0.015],
+                dr_reason: "SPEC V20 Phase 5 gate sweep: with the CG 15 mm aft, weakest
+                  cmalpha_mult (0.75) and steepest cl_mult (1.2) the airframe has a negative
+                  static margin at the design trim alpha and fails the trimmed-stability gate
+                  (elevator-trimmed mode). It passes with the CG at most 13.18 mm aft; the aft
+                  limit is set to 13 mm. Forward limit unchanged. Not a measurement."}
 
 inertia:
   ixx: {value: 0.21, range: [0.14, 0.32], source: derived_cad}  # V19 0.28, CAD 0.16

@@ -119,6 +119,33 @@ DR_PROPERTY_MAP: dict[str, str] = {
 }
 MASS_KEYS: tuple[str, ...] = ("mass_kg", "cg_x_m", "ixx", "iyy")
 
+
+def apply_airframe(fdm: jsbsim.FGFDMExec, params: dict[str, float],
+                   solver: MassPropertySolver, sw_declared_sqft: float) -> None:
+    """Write one airframe (DR-table keys) to a raw FGFDMExec; ends with run_ic().
+
+    Shared by JSBSimFDM.apply_domain_rand() and validate_glide.py's sweep so
+    both apply parameters identically. See apply_domain_rand() for the key
+    semantics. Raises KeyError on unknown or incomplete keys.
+    """
+    unknown = set(params) - set(DR_PROPERTY_MAP) - set(MASS_KEYS) - {"sw_mult"}
+    if unknown:
+        raise KeyError(f"unknown domain-randomisation keys: {sorted(unknown)}")
+
+    for key, prop in DR_PROPERTY_MAP.items():
+        if key in params:
+            fdm[prop] = float(params[key])
+    if "sw_mult" in params:
+        fdm["metrics/Sw-sqft"] = sw_declared_sqft * float(params["sw_mult"])
+
+    present = [k for k in MASS_KEYS if k in params]
+    if present and len(present) != len(MASS_KEYS):
+        raise KeyError(f"mass properties need all of {MASS_KEYS}, got {present}")
+    if present:
+        solver.solve(fdm, *(float(params[k]) for k in MASS_KEYS))
+    else:
+        fdm.run_ic()
+
 # Number of <contact> elements in aircraft/rlglider/rlglider.xml
 # (NOSE, TAIL, LEFT_WINGTIP, RIGHT_WINGTIP) -- belly-skid ground contact points.
 N_CONTACT_POINTS = 4
@@ -382,24 +409,7 @@ class JSBSimFDM:
         the second call leaves position, velocity and attitude unchanged since
         no ic/* property has changed.
         """
-        unknown = set(params) - set(DR_PROPERTY_MAP) - set(MASS_KEYS) - {"sw_mult"}
-        if unknown:
-            raise KeyError(f"unknown domain-randomisation keys: {sorted(unknown)}")
-
-        fdm = self._fdm
-        for key, prop in DR_PROPERTY_MAP.items():
-            if key in params:
-                fdm[prop] = float(params[key])
-        if "sw_mult" in params:
-            fdm["metrics/Sw-sqft"] = self._dr_defaults["metrics/Sw-sqft"] * float(params["sw_mult"])
-
-        present = [k for k in MASS_KEYS if k in params]
-        if present and len(present) != len(MASS_KEYS):
-            raise KeyError(f"mass properties need all of {MASS_KEYS}, got {present}")
-        if present:
-            self.mass_solver.solve(fdm, *(float(params[k]) for k in MASS_KEYS))
-        else:
-            fdm.run_ic()
+        apply_airframe(self._fdm, params, self.mass_solver, self._dr_defaults["metrics/Sw-sqft"])
 
     # ------------------------------------------------------------------
     # State read-outs  (SI, NED/FRD frames)

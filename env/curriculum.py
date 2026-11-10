@@ -116,7 +116,7 @@ _SW_LO, _SW_HI = _yaml_range("geometry", "wing_area_m2")
 
 DR_RANGES: dict[str, tuple[float, float]] = {
     'mass_kg':        _yaml_range("mass", "flying_kg"),     # (1.50, 1.80): V19 1.64, CAD 1.62
-    'cg_x_m':         _yaml_range("cg", "residual_m"),      # (-0.015, 0.015) after ballasting to 362 mm; +fwd
+    'cg_x_m':         _yaml_range("cg", "residual_m"),      # (-0.013, 0.015) after ballasting to 362 mm; +fwd; dr_range, see YAML
     'ixx':            _yaml_range("inertia", "ixx"),        # (0.14, 0.32): CAD 0.16, V19 0.28
     'iyy':            _yaml_range("inertia", "iyy"),        # (0.110, 0.26): CAD 0.12, V19 0.22; dr_range, see YAML
 
@@ -146,7 +146,11 @@ DR_RANGES: dict[str, tuple[float, float]] = {
 
 # One-directional: real drag is never better than the model. Scaled from the
 # lower bound, not the midpoint, so 0 (the model as written) is in every stage.
-DR_ONESIDED: dict[str, tuple[float, float]] = {'cd0_add': (0.0, 0.015)}
+# Narrowed from 0.015 (SPEC V20 Phase 5 gate sweep): at 0.015 the airframe's
+# trimmed glide ratio is 9.7 alone and 9.2 at the heaviest-draggiest corner,
+# below the glide gate's floor of 10; the corner passes up to 0.0109. 0.010 is
+# +40% on CD0 at worst. See docs/SPEC_V20_decisions.md.
+DR_ONESIDED: dict[str, tuple[float, float]] = {'cd0_add': (0.0, 0.010)}
 
 # Fraction of the full range used at each curriculum stage.
 DR_SCALE: list[float] = [0.25, 0.50, 0.75, 1.00]

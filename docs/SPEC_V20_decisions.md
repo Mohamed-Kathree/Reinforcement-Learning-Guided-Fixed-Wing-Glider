@@ -128,14 +128,23 @@ documented meaning ("CL slope multiplier") and makes the two parameters
 orthogonal. The worst-corner stall is now 9.17 m/s, and `cl_mult` moves it
 by under 0.01 m/s.
 
-**Table extended to ±30°.** The scaled lookup reaches the old ±25° table end
-at only 17.7° of true alpha at the `cl-mult` 1.2 / `clmax-scale` 0.85
-corner. At stage 3 the baseline crossed it in 14 of 30 episodes (2.8% of
-airborne steps; 99th-percentile |α| 32.8°). The ±30° rows come from the
-same formula that generated every other row (the original
-`sim/aerodynamics.py` `CL()`, which reproduces all 15 rows to 4 dp):
-+0.7794 and −0.4489. Beyond ±30° the lookup still clamps. Those excursions
-are departures from controlled flight, which Phase 5 addresses.
+**Table extended so the lookup never clamps.** The scaled lookup
+α · m / s reaches the original ±25° table end at only 17.7° of true alpha
+at the `cl-mult` 1.2 / `clmax-scale` 0.85 corner. At stage 3 the baseline
+crossed it in 14 of 30 episodes (2.8% of airborne steps; 99th-percentile
+|α| 32.8°). A clamped deep-stall lift would make the worst airframes behave
+better than they should, exactly where the baseline crashes. With |α| ≤ 180°
+and m / s ≤ 1.2 / 0.85, the lookup reaches at most ±254°, so the table now
+runs to ±260° in 5° steps (109 rows).
+
+Every new row comes from the formula that generated the original 15, which
+it reproduces to 4 dp (the original `sim/aerodynamics.py` `CL()`):
+
+  CL = a0 · α for |α| ≤ 12°, otherwise sign(α) · max(1.1519 · e^(−3 · excess), 0.9 · sin 2α)
+
+Linear interpolation on the 5° grid is within 0.016 of the formula.
+`tests/test_dr_hooks.py` checks the bound against `DR_RANGES` and
+empirically, over full-range baseline and random-policy episodes.
 
 ## Control effectiveness: per surface
 
@@ -183,7 +192,11 @@ Iyy and wing area are read from `aircraft/mass_properties.yaml`.
   the CG with ballast near the reference point always adds pitch inertia,
   and the pairs can only add, so the lowest Iyy cannot be combined with a
   large CG shift. 0.110 removes every failure and still brackets both
-  estimates (CAD 0.12, V19 0.22).
+  estimates (CAD 0.12, V19 0.22). The unreachable region is a *joint*
+  constraint on mass, CG and Iyy; narrowing Iyy globally rather than
+  adding a joint rejection rule is a deliberate simplification. It gives up
+  the bottom 0.010 of Iyy for every airframe, including the many that could
+  reach it, in exchange for a plain rectangular range with no rejection.
 - **Solver cache.** It rarely hits in training, because the targets are
   continuous. It earns its place in evaluation: the Phase 5 sweep corners
   and the 500 frozen held-out airframes repeat exactly. The hit rate is
@@ -207,7 +220,7 @@ checks them.
 | Worst-corner stall (1.80 kg, `clmax-scale` 0.85, area × 0.95) | 9.17 m/s |
 | Nominal best L/D | 16.75 at 9.1 m/s (16.64 at the 9.5 m/s floor) |
 | Longest flight: lightest/cleanest at min sink in range | 59.5 s from 30 m; **63.1 s** from the highest start energy (31.8 m) |
-| Shortest flight: heaviest/draggiest at its best L/D | **36.1 s** from 30 m |
+| Shortest flight: heaviest/draggiest at its best L/D | **37.5 s** from 30 m (36.1 s before Phase 5's `cd0_add` narrowing) |
 | Expected flight: nominal airframe at best L/D in range | 52.5 s from 30 m |
 | Truncation | 1520 steps = 76 s = 1.2 × longest |
 
@@ -270,3 +283,80 @@ On the same airframe it read 12.87 when started 1.8% below trim speed and
 regardless of start speed. The V19 figure of 12.87 was a transient artifact
 of the fixed 10 m/s start. The start speed has been derived from mass since
 Phase 1; Phase 5 adds a settling period before the measurement.
+
+## Phase 5: physics gates at the range corners
+
+`python validate_glide.py --sweep` gates 45 configurations: nominal, every
+single-parameter extreme (each DR range at its low and high end, others
+nominal), the heaviest-and-draggiest and lightest-and-least-stable corners,
+and the two ixz variants. `--random 300` gates 300 airframes sampled the
+way the environment samples them (seed 20261110), because the sweep does
+not cover joint combinations. Results are committed as
+`analysis/gate_sweep_{elevator,fixed,random}.json`.
+
+**Nominal** means the aircraft as modelled: aerodynamic hooks at the
+aircraft file's defaults, and mass, CG and inertia at the YAML nominal.
+
+### Gate definition: trimmed for speed, not fixed at zero elevator
+
+The original gates start every airframe from its trim with the elevator
+command at zero. For sampled airframes that conflates two things:
+
+- **Mis-trimmed.** CG ±15 mm alone moved the zero-elevator trim to the stall
+  (aft: 12.95°, 8 m/s, L/D 1.3) or to 16.3 m/s (forward: L/D 9.7). Both
+  airframes are statically stable and trim with about 9% elevator.
+- **Uncontrollable.** No stable trim at a flyable condition exists at all.
+
+The gates now trim each airframe's elevator so it flies at the nominal
+airframe's trim **lift coefficient** (CL 0.458), the way a glider is trimmed
+on the field for speed. The trim must use no more than 50% of the elevator
+throw. Gates 2, 4 and 5 then test the stick-fixed glide and stability there.
+
+An intermediate version trimmed every airframe to the nominal trim
+*alpha*. That left 11 of 300 random airframes just under L/D 10, all with a
+low lift slope and high drag. Trimmed to one alpha, a low-slope airframe
+flies at CL 0.37, fast and far from its best glide. Trimming to one CL
+removed every one of those failures. Neither narrowing boundary below
+changed between the two references.
+
+The zero-elevator definition is still available (`--trim fixed`), and its
+sweep is committed for the record: 42 of 45 pass, failing exactly the two
+CG extremes and the least-stable corner.
+
+### Results and narrowings
+
+Before narrowing, the elevator-trimmed sweep failed three configurations:
+
+| Config | Gate | Value | Cause |
+|---|---|---|---|
+| `corner_lightest_least_stable` | trimmed stability | no stable pre-stall trim | negative static margin: CG 15 mm aft, `cmalpha_mult` 0.75, `cl_mult` 1.2 |
+| `cd0_add_hi` (0.015) | glide ratio | 9.7 | drag |
+| `corner_heaviest_draggiest` | glide ratio | 9.2 | drag |
+
+Rule applied: narrow the offending range (preferred) rather than reject
+and resample. The boundary of each was found by bisection with the gates
+themselves.
+
+| Range | Was | Now | Boundary | Recorded in |
+|---|---|---|---|---|
+| `cg_x_m` (+fwd) | −0.015 – +0.015 | **−0.013** – +0.015 | corner passes with CG ≤ 13.15 mm aft | YAML `dr_range` + `dr_reason` |
+| `cd0_add` | 0 – 0.015 | 0 – **0.010** | corner passes with `cd0_add` ≤ 0.0109 | `env/curriculum.py` + here |
+
+`cd0_add` is not a mass property, so its narrowing is recorded in the
+curriculum table's comment and in this document rather than in
+`mass_properties.yaml`.
+
+After narrowing: **45 / 45** sweep configurations and **300 / 300** random
+full-range airframes pass all five gates. Across the random set the glide
+ratio runs from 10.27 to 15.16, and trims need at most 21% of the elevator
+throw.
+
+**Reading for the stage-3 baseline crashes.** The baseline crashed 10 of 20
+stage-3 episodes before this phase. Only one corner of the ranges failed a
+stability gate, by a small margin (13.15 mm against 15 mm). So the ranges
+did not, by and large, contain uncontrollable aircraft. The crashes come
+from the baseline's fixed gains meeting widely varied airframes, which is
+genuine separation between baseline and policy rather than a "task too
+hard" artefact. The re-measured baseline is in
+`analysis/baseline_benchmark_v20.json`.
+

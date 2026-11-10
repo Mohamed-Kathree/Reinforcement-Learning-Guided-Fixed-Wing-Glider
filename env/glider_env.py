@@ -120,7 +120,7 @@ N_SUBSTEPS: int = 10      # DT_RL / DT_PHYS
 # FLIGHT_TIME_LONGEST_S from the highest start energy in any stage.
 # tests/test_domain_rand.py recomputes it and checks the margin.
 FLIGHT_TIME_LONGEST_S: float = 63.1    # s from 31.8 m energy height (59.5 s from 30 m)
-FLIGHT_TIME_SHORTEST_S: float = 36.1   # s from 30 m: heaviest, draggiest airframe at its best L/D
+FLIGHT_TIME_SHORTEST_S: float = 37.5   # s from 30 m: heaviest, draggiest airframe at its best L/D
 FLIGHT_TIME_EXPECTED_S: float = 52.5   # s from 30 m: nominal airframe at best L/D in range
 MAX_STEPS: int = 1520     # 76 s at DT_RL: 1.2x the longest flight
 

@@ -336,3 +336,58 @@ def test_cl_mult_scales_slope_not_peak():
     slope = lambda row: row[1] / row[0]
     assert slope(steep[i3]) / slope(base[i3]) == pytest.approx(1.2, rel=1e-3)
     assert steep[:, 1].max() == pytest.approx(base[:, 1].max(), rel=2e-3)
+
+
+# ---------------------------------------------------------------------------
+# Lift-table coverage
+# ---------------------------------------------------------------------------
+
+def _cl_table_ends() -> list[tuple[float, float]]:
+    import xml.etree.ElementTree as ET
+    root = ET.parse(os.path.join(PROJ_ROOT, "aircraft", "rlglider", "rlglider.xml")).getroot()
+    ends = []
+    for td in root.iter("tableData"):
+        col = [float(line.split()[0]) for line in td.text.strip().splitlines()]
+        ends.append((min(col), max(col)))
+    return ends
+
+
+def test_lift_table_covers_reachable_lookup():
+    """The CL lookup angle alpha * cl_mult / clmax_scale can never leave the
+    table: clamped deep-stall lift would make the worst airframes behave
+    better than they should."""
+    from env.curriculum import DR_RANGES
+    reach = 180.0 * DR_RANGES["cl_mult"][1] / DR_RANGES["clmax_scale"][0]
+    ends = _cl_table_ends()
+    assert len(ends) == 2
+    for lo, hi in ends:
+        assert lo <= -reach and hi >= reach, f"table {lo}..{hi} deg, lookup reaches +/-{reach:.1f} deg"
+
+
+def test_lift_lookup_in_table_through_full_range_episodes():
+    """Empirical check of the same bound: stage-3 (full-range) episodes under
+    the baseline and a random policy, every airborne step."""
+    from baseline.deterministic_rtl import DeterministicRTL
+    from env.curriculum import STAGES
+    from env.glider_env import GliderEnv
+
+    (lo, hi), _ = _cl_table_ends()
+    env = GliderEnv(cfg=dict(STAGES[3]))
+    f = env._fdm._fdm
+    rng = np.random.default_rng(2026)
+    worst = 0.0
+    for policy in ("baseline", "random"):
+        ctrl = DeterministicRTL()
+        for _ in range(6):
+            ctrl.reset()
+            obs, _ = env.reset(seed=int(rng.integers(0, 2**31)))
+            while True:
+                act = ctrl.act(obs) if policy == "baseline" else rng.uniform(-1, 1, 2).astype(np.float32)
+                obs, _, terminated, truncated, _ = env.step(act)
+                if f["position/h-agl-ft"] > 1.0:
+                    look = f["aero/misc/alpha-deg-cl-lookup"]
+                    worst = max(worst, abs(look))
+                    assert lo < look < hi, f"CL lookup {look:.1f} deg outside table {lo}..{hi}"
+                if terminated or truncated:
+                    break
+    assert worst > 0.0
