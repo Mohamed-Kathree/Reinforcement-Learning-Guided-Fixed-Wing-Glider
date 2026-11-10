@@ -624,63 +624,49 @@ def test_episode_terminates_on_touchdown():
 
 
 # ---------------------------------------------------------------------------
-# 17. Fixed-seed regression: 20 baseline episodes must match a stored
-#     reference to high precision, so any future change to physics/sensors/
-#     control trips a visible test rather than silently drifting.
+# 17. Fixed-seed regression: 20 baseline episodes, checked as a distribution
+#     (mean, spread, every episode lands) so a real break in physics/sensors/
+#     control trips the test while chaotic reshuffling of single episodes
+#     does not.
 # ---------------------------------------------------------------------------
 
+# Pinned from the SPEC V20 Phase 2 aircraft (1.64 kg stage-0, ixz 0); exact
+# per-episode values live in tests/data/baseline_distances.json.
+BASELINE_DIST_MEAN_M = 37.23
+BASELINE_DIST_STD_M  = 16.22
+# Tolerance on both. Calibration (SPEC V20 Phase 3): 1e-4 perturbations of
+# CD0 or CL, and ixz = +/-0.01, moved single episodes by up to 12 m but the
+# mean and std by at most 0.7 m; the standard error of a 20-episode mean at
+# this spread is ~3.6 m. A broken controller or sign error shows up as
+# non-landing outcomes or a mean far outside this band.
+BASELINE_DIST_TOL_M  = 5.0
+
+
 def test_baseline_fixed_seed_regression():
-    """Reference array regenerated for the Phase 4 precision-landing task
-    (touchdown-based termination, three-phase pattern controller with the
-    glide_slope=10/margin=1/r_pattern_m=40 tuning and wings-level flare
-    blend -- see baseline/deterministic_rtl.py's tuning notes). The old
-    ~24.7-25.0 m values were all clustered near R_home_m because they were
-    the position at the moment the episode ended by CROSSING that radius;
-    under the new task the episode runs to touchdown, so final distances
-    vary with wherever the controller actually lands.
+    """Distributional regression on 20 fixed-seed baseline episodes.
 
-    Regenerated again for SPEC V20 Phase 1: the aircraft file is now generated
-    from aircraft/mass_properties.yaml, taking the airframe from the 1.1 kg
-    design mass to the as-built estimate (emptywt 1.50 kg, stage-0 mass 1.64 kg
-    via ballast; inertia at the bottom of the YAML ranges). The baseline
-    controller was not retuned, so distances moved (mean 25.9 -> 36.6 m).
-    Phase 2 moved them again (mean 36.6 -> 37.2 m): ixz 0.01 -> 0.0, the
-    midpoint of the new [-0.010, +0.010] range (CAD and V19 disagree in sign).
-    The four zero-weight inertia point masses added in Phase 2 change
-    nothing; checked by regenerating with ixz = 0.01, which reproduced the
-    Phase 1 distances exactly."""
-    from env.glider_env import GliderEnv
-    from baseline.deterministic_rtl import DeterministicRTL
+    History: this pinned all 20 final distances to 1e-6 until SPEC V20
+    Phase 3. That pin was regenerated for the Phase 4 precision-landing
+    task, then for V20 Phase 1 (1.1 -> 1.64 kg, mean 25.9 -> 36.6 m) and
+    Phase 2 (ixz 0.01 -> 0, mean 36.6 -> 37.2 m), and would have needed it
+    again in every later phase. Single episodes are chaotic over a ~30 s
+    flight: a 1e-4 change in CD0 moves one by 11.75 m. A test regenerated
+    every phase stops being a test, so it now checks the distribution. The
+    exact values are still committed in tests/data/baseline_distances.json
+    as a change detector; regenerate with `python -m analysis.baseline_distances`
+    and read the diff."""
+    from analysis.baseline_distances import run_baseline_episodes
 
-    expected_final_dist = np.array([
-         5.72110184, 19.03033138, 35.95059005, 24.45709200, 52.10715228,
-        36.79729720, 37.83419090,  4.20019923, 43.38989693, 49.99905931,
-        47.59407795, 45.21849841, 27.40092681, 27.27707152, 21.35342753,
-        48.98217851, 58.51073480, 58.03949723, 48.18514386, 52.48440871,
-    ])
-
-    env  = GliderEnv(cfg=dict(STAGES[0]))
-    ctrl = DeterministicRTL()
-    rng  = np.random.default_rng(12345)
-
-    final_dist = []
-    for _ in range(20):
-        seed = int(rng.integers(0, 2**31))
-        ctrl.reset()
-        obs, _ = env.reset(seed=seed)
-        while True:
-            obs, _, terminated, truncated, info = env.step(ctrl.act(obs))
-            if terminated or truncated:
-                final_dist.append(info['dist_home'])
-                break
-
-    np.testing.assert_allclose(
-        np.array(final_dist), expected_final_dist, atol=1e-6,
-        err_msg=(
-            "Final-distance regression mismatch -- an unintended change to "
-            "physics, sensors, or control has altered baseline behaviour. "
-            "If this change is deliberate, regenerate the reference array."
-        ),
+    dists, outcomes = run_baseline_episodes()
+    d = np.array(dists)
+    assert set(outcomes) == {'landed'}, f"not every baseline episode landed: {outcomes}"
+    assert abs(d.mean() - BASELINE_DIST_MEAN_M) <= BASELINE_DIST_TOL_M, (
+        f"baseline mean final distance {d.mean():.2f} m vs pinned "
+        f"{BASELINE_DIST_MEAN_M} +/- {BASELINE_DIST_TOL_M} m"
+    )
+    assert abs(d.std(ddof=1) - BASELINE_DIST_STD_M) <= BASELINE_DIST_TOL_M, (
+        f"baseline final-distance std {d.std(ddof=1):.2f} m vs pinned "
+        f"{BASELINE_DIST_STD_M} +/- {BASELINE_DIST_TOL_M} m"
     )
 
 
