@@ -37,8 +37,10 @@ TIMESTAMP_PREFIX = "     Generated : "
 
 
 def _sha256(path: str) -> str:
+    # Line endings normalised so a CRLF checkout (git autocrlf on Windows)
+    # hashes the same as the LF content in the repository.
     with open(path, "rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()
+        return hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def _fmt(x: float) -> str:
