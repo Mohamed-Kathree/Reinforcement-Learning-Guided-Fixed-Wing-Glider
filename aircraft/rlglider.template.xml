@@ -25,12 +25,13 @@
   Domain randomisation properties (set per-episode from JSBSimFDM.apply_domain_rand();
   declared with their neutral defaults at the top of <aerodynamics> and in
   <flight_control>):
-    aero/cl-mult       CL table multiplier                 (default 1.0)
+    aero/cl-mult       lift-curve slope at constant peak   (default 1.0)
     aero/clmax-scale   CL peak scale at constant slope     (default 1.0)
     aero/cd0-add       CD0 additive offset                 (default 0.0)
     aero/k-induced     induced-drag factor k               (default 0.03566)
     aero/cm0-offset    Cm0 additive offset                 (default 0.0)
     aero/c*-mult       per-derivative multipliers          (default 1.0)
+    aero/*-eff-mult    per-surface control effectiveness   (default 1.0)
     fcs/trim-bias-*    surface command bias, pre-actuator  (default 0.0)
   Geometry: metrics/Sw-sqft is writable at runtime and survives run_ic();
   metrics/bw-ft and metrics/cbarw-ft are NOT (writes silently no-op on
@@ -248,9 +249,11 @@
        Domain randomisation properties: see the file header. Control
        effectiveness is per surface, and each multiplier scales every term
        that surface produces:
-         aero/clda-mult  aileron : Clda, Cnda (adverse yaw)
-         aero/cmde-mult  elevator: Cmde, CLde (and the elevator term in CLtotal)
-         aero/cndr-mult  rudder  : Cndr, Cldr
+         aero/ail-eff-mult   aileron : Clda, Cnda (adverse yaw)
+         aero/elev-eff-mult  elevator: Cmde, CLde (and the elevator term in CLtotal)
+         aero/rud-eff-mult   rudder  : Cndr, Cldr
+       A servo, linkage or surface-area error scales every term its surface
+       produces together; stability derivatives keep independent multipliers.
 
        CL table breakpoints from aerodynamics.py CL(alpha) evaluated at
        the listed angles (pre-stall linear a0*alpha; post-stall exponential
@@ -259,12 +262,24 @@
 
        CDi = k*CL^2 with k = aero/k-induced (default 1/(pi*e*AR) = 0.03566).
 
-       aero/clmax-scale (s) rescales the CL table about the origin:
-         CL(alpha) = s * table(alpha / s)
-       which keeps the pre-stall slope (s * a0 * alpha/s = a0 * alpha) while
-       scaling CLmax and the stall angle by s. A plain multiplier on the table
-       would duplicate aero/cl-mult exactly. At s = 1 both operations are
-       exact in floating point, so the default reproduces the unscaled table.
+       Lift peak and lift slope are set independently:
+         CL(alpha) = s * table(alpha * m / s)
+           s = aero/clmax-scale : CLmax scaled by s, stall angle by s/m
+           m = aero/cl-mult     : pre-stall slope scaled by m, CLmax unchanged
+       (pre-stall: s * a0 * alpha * m / s = m * a0 * alpha). Holding the slope
+       while lowering the peak requires the stall angle to drop, so the
+       coupling is the only consistent choice, not a convenience. A plain
+       multiplier on the table would move slope and peak together and make
+       the two parameters indistinguishable. At s = m = 1 every operation is
+       exact in floating point, so the defaults reproduce the unscaled table.
+       The lookup clamps at the table's +/-30 deg ends. The +/-30 deg rows were
+       added in SPEC V20 Phase 4 (the scaled lookup reaches 25 deg at only 17.7 deg
+       of true alpha at the cl-mult 1.2 / clmax-scale 0.85 corner, and stage-3
+       episodes crossed it regularly). They come from the same generating formula
+       as every other row (the original sim/aerodynamics.py CL()):
+         CL = a0*alpha                                   |alpha| <= 12 deg
+         CL = sign(alpha) * max(CLpk*exp(-3*excess), 0.9*sin(2*alpha))   beyond
+       with a0 = 5.5, CLpk = 1.1519; it reproduces all 15 original rows to 4 dp.
        ================================================================ -->
   <aerodynamics>
 
@@ -276,17 +291,17 @@
     <property value="0.0">aero/cm0-offset</property>
     <property value="1.0">aero/cmalpha-mult</property>
     <property value="1.0">aero/cmq-mult</property>
-    <property value="1.0">aero/cmde-mult</property>
+    <property value="1.0">aero/elev-eff-mult</property>
     <property value="1.0">aero/clp-mult</property>
-    <property value="1.0">aero/clda-mult</property>
+    <property value="1.0">aero/ail-eff-mult</property>
     <property value="1.0">aero/clbeta-mult</property>
     <property value="1.0">aero/cnbeta-mult</property>
     <property value="1.0">aero/cnr-mult</property>
-    <property value="1.0">aero/cndr-mult</property>
+    <property value="1.0">aero/rud-eff-mult</property>
     <!-- cd-mult=0 disables all drag (used in energy-conservation gate) -->
     <property value="1.0">aero/cd-mult</property>
 
-    <!-- Total instantaneous CL (table lookup * cl-mult, plus elevator lift),
+    <!-- Total instantaneous CL (scaled table lookup, plus elevator lift),
          defined here (outside any axis block) purely as a reusable named
          value; it does NOT itself contribute force: only functions nested
          inside an axis element are summed into the aircraft's total forces.
@@ -296,10 +311,13 @@
          coefficient; otherwise cl-mult could change lift without changing
          induced drag, describing an aircraft with a physically impossible
          polar. -->
-    <!-- alpha / clmax-scale: the CL table's lookup angle (see header). -->
-    <function name="aero/misc/alpha-deg-clmax">
+    <!-- alpha * cl-mult / clmax-scale: the CL table's lookup angle (see header). -->
+    <function name="aero/misc/alpha-deg-cl-lookup">
       <quotient>
-        <property>aero/alpha-deg</property>
+        <product>
+          <property>aero/alpha-deg</property>
+          <property>aero/cl-mult</property>
+        </product>
         <property>aero/clmax-scale</property>
       </quotient>
     </function>
@@ -307,11 +325,11 @@
     <function name="aero/coefficient/CLtotal">
       <sum>
         <product>
-          <property>aero/cl-mult</property>
           <property>aero/clmax-scale</property>
           <table>
-            <independentVar lookup="row">aero/misc/alpha-deg-clmax</independentVar>
+            <independentVar lookup="row">aero/misc/alpha-deg-cl-lookup</independentVar>
             <tableData>
+              -30   -0.4489
               -25   -0.5832
               -18   -0.8414
               -14   -1.0374
@@ -327,12 +345,13 @@
                14    1.0374
                18    0.8414
                25    0.6894
+               30    0.7794
             </tableData>
           </table>
         </product>
         <product>
           <value>0.30</value>
-          <property>aero/cmde-mult</property>
+          <property>aero/elev-eff-mult</property>
           <property>fcs/elevator-pos-rad</property>
         </product>
       </sum>
@@ -397,11 +416,11 @@
         <product>
           <property>aero/qbar-psf</property>
           <property>metrics/Sw-sqft</property>
-          <property>aero/cl-mult</property>
           <property>aero/clmax-scale</property>
           <table>
-            <independentVar lookup="row">aero/misc/alpha-deg-clmax</independentVar>
+            <independentVar lookup="row">aero/misc/alpha-deg-cl-lookup</independentVar>
             <tableData>
+              -30   -0.4489
               -25   -0.5832
               -18   -0.8414
               -14   -1.0374
@@ -417,6 +436,7 @@
                14    1.0374
                18    0.8414
                25    0.6894
+               30    0.7794
             </tableData>
           </table>
         </product>
@@ -428,7 +448,7 @@
           <property>aero/qbar-psf</property>
           <property>metrics/Sw-sqft</property>
           <value>0.30</value>
-          <property>aero/cmde-mult</property>
+          <property>aero/elev-eff-mult</property>
           <property>fcs/elevator-pos-rad</property>
         </product>
       </function>
@@ -553,7 +573,7 @@
           <property>metrics/Sw-sqft</property>
           <property>metrics/bw-ft</property>
           <value>0.15</value>
-          <property>aero/clda-mult</property>
+          <property>aero/ail-eff-mult</property>
           <property>fcs/aileron-pos-rad</property>
         </product>
       </function>
@@ -573,7 +593,7 @@
           <property>metrics/Sw-sqft</property>
           <property>metrics/bw-ft</property>
           <value>0.005</value>
-          <property>aero/cndr-mult</property>
+          <property>aero/rud-eff-mult</property>
           <property>fcs/rudder-pos-rad</property>
         </product>
       </function>
@@ -632,7 +652,7 @@
           <property>metrics/Sw-sqft</property>
           <property>metrics/cbarw-ft</property>
           <value>-1.2</value>
-          <property>aero/cmde-mult</property>
+          <property>aero/elev-eff-mult</property>
           <property>fcs/elevator-pos-rad</property>
         </product>
       </function>
@@ -689,7 +709,7 @@
           <property>metrics/Sw-sqft</property>
           <property>metrics/bw-ft</property>
           <value>-0.05</value>
-          <property>aero/cndr-mult</property>
+          <property>aero/rud-eff-mult</property>
           <property>fcs/rudder-pos-rad</property>
         </product>
       </function>
@@ -711,7 +731,7 @@
           <property>metrics/Sw-sqft</property>
           <property>metrics/bw-ft</property>
           <value>-0.012</value>
-          <property>aero/clda-mult</property>
+          <property>aero/ail-eff-mult</property>
           <property>fcs/aileron-pos-rad</property>
         </product>
       </function>

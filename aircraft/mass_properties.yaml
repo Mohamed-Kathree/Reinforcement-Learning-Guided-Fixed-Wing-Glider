@@ -2,6 +2,11 @@
 # `range` brackets BOTH the V19 build estimate and the CAD rebuild where they differ.
 # Narrow a range only when the corresponding quantity has been measured.
 #
+# `dr_range` (optional) is the range domain randomisation actually samples,
+# when it must be narrower than `range` for a reason other than measurement.
+# It always comes with `dr_reason`, must lie inside `range`, and must still
+# bracket both estimates. `range` keeps recording what is known.
+#
 # This file is the single source of truth for mass properties. After editing it,
 # regenerate the aircraft file:   python aircraft/generate_fdm.py
 # tests/test_mass_properties.py fails if aircraft/rlglider/rlglider.xml is stale.
@@ -20,7 +25,14 @@ cg:
 
 inertia:
   ixx: {value: 0.21, range: [0.14, 0.32], source: derived_cad}  # V19 0.28, CAD 0.16
-  iyy: {value: 0.16, range: [0.10, 0.26], source: derived_cad}  # V19 0.22, CAD 0.12
+  iyy: {value: 0.16, range: [0.10, 0.26], source: derived_cad,   # V19 0.22, CAD 0.12
+        dr_range: [0.110, 0.26],
+        dr_reason: "SPEC V20 Phase 4: 0.33% of full-range samples were unreachable by the
+          point-mass solver (heavy, |CG| >= 9 mm, Iyy <= 0.105). Moving the CG with ballast
+          near the reference point always adds pitch inertia, and the inertia pairs can only
+          add, so the lowest Iyy cannot be combined with a large CG shift. 0.110 removes
+          every failure (4000 random samples, 343-point grid at the floor) and still
+          brackets both estimates. Not a measurement."}
   # izz is NOT an entry. Modelling assumption: izz = ixx + iyy exactly.
   # A rigid body satisfies ixx + iyy >= izz, with equality for a flat plate
   # (all mass in the x-y plane), so this is the physical UPPER bound on yaw

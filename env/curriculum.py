@@ -82,13 +82,89 @@ from __future__ import annotations
 from collections import Counter, deque
 from typing import Deque
 
-from sim.mass_properties import nominal as _nominal_mass_properties
+from sim.mass_properties import load_mass_properties as _load_mass_properties
 
-# Central all-up mass estimate from aircraft/mass_properties.yaml. Interim
-# (SPEC V20 Phase 1): the per-stage mass_range half-widths below are the
-# V19 ones (0 / 0.10 / 0.20 / 0.25 kg) re-centred on this value instead of
-# the old 1.1 kg design mass. Phase 4 replaces them with the DR_RANGES table.
-_M_NOM: float = _nominal_mass_properties()["mass_kg"]
+# ---------------------------------------------------------------------------
+# Domain randomisation (SPEC V20 Phase 4)
+# ---------------------------------------------------------------------------
+# One central table. Each range brackets BOTH independent estimates (the V19
+# build estimate and the CAD rebuild). Narrow only on measurement, and record
+# any narrowing in aircraft/mass_properties.yaml with its reason.
+#
+# Mass, CG, roll/pitch inertia and wing area are read from
+# aircraft/mass_properties.yaml rather than repeated here, so the YAML stays
+# the single source of truth; tests/test_domain_rand.py checks they still
+# bracket both estimates. Deliberately absent:
+#   izz  -- follows as ixx + iyy (flat-plate upper bound; docs/SPEC_V20_decisions.md)
+#   ixz  -- fixed at the YAML midpoint; sensitivity measured in the Phase 5 sweep
+#   cm0_offset -- hook exists in the aircraft file, but no range is specified
+#
+# Key -> aircraft-file hook mapping lives in sim/jsbsim_fdm.py (DR_PROPERTY_MAP).
+_MP = _load_mass_properties()
+
+
+def _yaml_range(section: str, key: str) -> tuple[float, float]:
+    """The sampled range: `dr_range` where the YAML narrows it (with its
+    `dr_reason`), otherwise the full `range`."""
+    entry = _MP[section][key]
+    lo, hi = entry.get("dr_range", entry["range"])
+    return (float(lo), float(hi))
+
+
+_SW_NOM = float(_MP["geometry"]["wing_area_m2"]["value"])
+_SW_LO, _SW_HI = _yaml_range("geometry", "wing_area_m2")
+
+DR_RANGES: dict[str, tuple[float, float]] = {
+    'mass_kg':        _yaml_range("mass", "flying_kg"),     # (1.50, 1.80): V19 1.64, CAD 1.62
+    'cg_x_m':         _yaml_range("cg", "residual_m"),      # (-0.015, 0.015) after ballasting to 362 mm; +fwd
+    'ixx':            _yaml_range("inertia", "ixx"),        # (0.14, 0.32): CAD 0.16, V19 0.28
+    'iyy':            _yaml_range("inertia", "iyy"),        # (0.110, 0.26): CAD 0.12, V19 0.22; dr_range, see YAML
+
+    # Lift: clmax_scale sets the PEAK (CLmax and stall angle) at constant
+    # slope; cl_mult sets the lift-curve SLOPE at constant peak. Orthogonal
+    # by construction; see the aircraft file's aerodynamics header.
+    'clmax_scale':    (0.85, 1.15),   # V19 stall 8.8 m/s, XML lift table 7.75 m/s
+    'cl_mult':        (0.80, 1.20),
+    'k_induced':      (0.024, 0.048),
+    'cmalpha_mult':   (0.75, 1.25),   # narrow: CG randomisation also moves this
+    'cmq_mult':       (0.60, 1.40),
+    'clp_mult':       (0.60, 1.40),
+    'clbeta_mult':    (0.60, 1.40),
+    'cnbeta_mult':    (0.50, 1.50),
+    'cnr_mult':       (0.50, 1.50),
+
+    # Control effectiveness, per surface: a servo, linkage or surface-area
+    # error scales every term that surface produces, coherently.
+    'elev_eff_mult':  (0.60, 1.40),   # Cmde, CLde, elevator term in CLtotal
+    'ail_eff_mult':   (0.60, 1.40),   # Clda, Cnda
+    'rud_eff_mult':   (0.60, 1.40),   # Cndr, Cldr
+
+    'sw_mult':        (_SW_LO / _SW_NOM, _SW_HI / _SW_NOM),   # (0.95, 1.05): geometry known from CAD
+    'trim_bias_roll':  (-0.04, 0.04),   # normalised surface units
+    'trim_bias_pitch': (-0.03, 0.03),
+}
+
+# One-directional: real drag is never better than the model. Scaled from the
+# lower bound, not the midpoint, so 0 (the model as written) is in every stage.
+DR_ONESIDED: dict[str, tuple[float, float]] = {'cd0_add': (0.0, 0.015)}
+
+# Fraction of the full range used at each curriculum stage.
+DR_SCALE: list[float] = [0.25, 0.50, 0.75, 1.00]
+
+
+def stage_ranges(scale: float) -> dict[str, tuple[float, float]]:
+    """Every DR range at `scale` of its full width.
+
+    Two-sided ranges shrink about their midpoint; one-sided ranges shrink
+    toward their lower bound.
+    """
+    out = {}
+    for key, (lo, hi) in DR_RANGES.items():
+        mid, half = 0.5 * (lo + hi), 0.5 * (hi - lo) * scale
+        out[key] = (mid - half, mid + half)
+    for key, (lo, hi) in DR_ONESIDED.items():
+        out[key] = (lo, lo + (hi - lo) * scale)
+    return out
 
 # The 4-way episode-outcome bucket used throughout the dashboard
 # (backend/recorder.py, scratch/final_benchmark.py) -- NOT the 3-way
@@ -115,8 +191,7 @@ STAGES: list[dict] = [
         alt0_m              = 25.0,
         launch_offset_min_m = 50.0,
         launch_offset_max_m = 90.0,
-        aero_scale_range    = (1.0,  1.0),
-        mass_range          = (_M_NOM,        _M_NOM),
+        dr_scale            = DR_SCALE[0],
         sigma_centre_m      = 15.0,
         sink_bad            = 3.5,
         roll_bad_deg        = 45.0,
@@ -131,8 +206,7 @@ STAGES: list[dict] = [
         alt0_m              = 23.0,
         launch_offset_min_m = 45.0,
         launch_offset_max_m = 80.0,
-        aero_scale_range    = (0.9,  1.1),
-        mass_range          = (_M_NOM - 0.10, _M_NOM + 0.10),
+        dr_scale            = DR_SCALE[1],
         sigma_centre_m      = 13.0,
         sink_bad            = 3.0,
         roll_bad_deg        = 40.0,
@@ -147,8 +221,7 @@ STAGES: list[dict] = [
         alt0_m              = 21.0,
         launch_offset_min_m = 40.0,
         launch_offset_max_m = 70.0,
-        aero_scale_range    = (0.85, 1.15),
-        mass_range          = (_M_NOM - 0.20, _M_NOM + 0.20),
+        dr_scale            = DR_SCALE[2],
         sigma_centre_m      = 11.0,
         sink_bad            = 2.75,
         roll_bad_deg        = 37.0,
@@ -163,8 +236,7 @@ STAGES: list[dict] = [
         alt0_m              = 20.0,
         launch_offset_min_m = 40.0,
         launch_offset_max_m = 70.0,
-        aero_scale_range    = (0.8,  1.2),
-        mass_range          = (_M_NOM - 0.25, _M_NOM + 0.25),
+        dr_scale            = DR_SCALE[3],
         sigma_centre_m      = 10.0,
         sink_bad            = 2.5,
         roll_bad_deg        = 35.0,

@@ -44,6 +44,10 @@ def test_yaml_schema_valid(mp):
         if "range" in entry:
             lo, hi = entry["range"]
             assert lo <= entry["value"] <= hi, f"{name}: value {entry['value']} outside range [{lo}, {hi}]"
+        if "dr_range" in entry:
+            dlo, dhi = entry["dr_range"]
+            assert entry.get("dr_reason"), f"{name}: dr_range without dr_reason"
+            assert lo <= dlo <= entry["value"] <= dhi <= hi, f"{name}: dr_range {entry['dr_range']} not inside range"
 
 
 def test_generated_xml_parses():

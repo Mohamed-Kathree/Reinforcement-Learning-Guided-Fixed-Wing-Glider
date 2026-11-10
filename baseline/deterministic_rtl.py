@@ -73,7 +73,8 @@ Observation index contract (must match env/glider_env.py):
 
 Action convention (must match env/glider_env.py denormalisation):
     action[0] = bank_cmd_rad  / radians(45)   -- normalised bank ∈ [-1, 1]
-    action[1] = (speed_cmd_ms - 9.0) / 4.0   -- normalised speed ∈ [-1, 1]
+    action[1] = (speed_cmd_ms - SPEED_CMD_CENTRE_MS) / SPEED_CMD_SCALE_MS
+                                              -- normalised speed ∈ [-1, 1]
 
 Coordinate frames used:
     NED : North-East-Down inertial frame (world)
@@ -91,6 +92,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
+from env.glider_env import SPEED_CMD_CENTRE_MS, SPEED_CMD_MIN_MS, SPEED_CMD_SCALE_MS
 from sim.math_utils import wrap_pi
 
 
@@ -99,8 +101,18 @@ from sim.math_utils import wrap_pi
 # ---------------------------------------------------------------------------
 
 _BANK_SCALE_RAD:   float = np.radians(45.0)   # ±1 -> ±45°
-_SPEED_CENTRE_MS:  float = 9.0
-_SPEED_SCALE_MS:   float = 4.0                # ±1 -> 5–13 m/s
+# Speed normalisation is imported from env/glider_env.py rather than copied:
+# a stale copy here would silently command different speeds than intended.
+
+# Speed schedule fitted to the aircraft model's polar (SPEC V20 Phase 4,
+# analysis/flight_envelope.py). Best L/D falls at 8.7-9.5 m/s across the
+# mass range, at or below the 9.5 m/s command floor, so the min-sink and
+# flare commands sit on the floor (they were 9.0 and 7.0 m/s under the old
+# 5-13 m/s range) and cruise stays 0.5 m/s above it (L/D at 10 m/s is
+# within 2% of the maximum for the nominal airframe).
+_BEST_GLIDE_MS: float = 10.0
+_MIN_SINK_MS:   float = SPEED_CMD_MIN_MS
+_FLARE_MS:      float = SPEED_CMD_MIN_MS
 
 # RL/policy step rate (must match env/glider_env.py DT_RL). Not imported
 # directly to avoid baseline/ depending on env/ for a single constant.
@@ -181,15 +193,15 @@ class DeterministicRTL:
         self,
         kp_bank:             float = 1.5,
         max_bank_deg:        float = 30.0,
-        best_glide_speed_ms: float = 10.0,
+        best_glide_speed_ms: float = _BEST_GLIDE_MS,
         r_pattern_m:         float = 40.0,
         glide_slope:         float = 10.0,
         orbit_bank_deg:      float = 25.0,
-        min_sink_speed_ms:   float = 9.0,
+        min_sink_speed_ms:   float = _MIN_SINK_MS,
         altitude_margin_m:   float = 1.0,
         speed_alt_gain:      float = 0.08,
         h_flare_m:           float = 3.0,
-        flare_speed_ms:      float = 7.0,
+        flare_speed_ms:      float = _FLARE_MS,
         dt:                  float = _DT_RL,
     ) -> None:
         self.kp_bank             = float(kp_bank)
@@ -369,7 +381,7 @@ class DeterministicRTL:
 
         # Normalise to ±1 action space
         action_bank  = bank_cmd_rad / _BANK_SCALE_RAD
-        action_speed = (speed_cmd_ms - _SPEED_CENTRE_MS) / _SPEED_SCALE_MS
+        action_speed = (speed_cmd_ms - SPEED_CMD_CENTRE_MS) / SPEED_CMD_SCALE_MS
 
         return np.array(
             [np.clip(action_bank, -1.0, 1.0),

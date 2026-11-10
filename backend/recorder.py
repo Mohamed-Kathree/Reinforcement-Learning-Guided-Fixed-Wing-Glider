@@ -119,7 +119,7 @@ def record_episode(
                      reward-fix retrain's best_model.zip, evaluated in
                      Rl-Glider-Context-File-Code-V14-RewardFix-Retrain-Final-Outcome.md).
         stage      : curriculum stage index (0-3), see env/curriculum.py STAGES.
-                     Supplies R_home_m/aero_scale_range/mass_range/
+                     Supplies R_home_m/dr_scale/
                      sigma_centre_m/sink_bad/roll_bad_deg and defaults for
                      anything not overridden below.
         seed       : episode RNG seed; drawn randomly if None.

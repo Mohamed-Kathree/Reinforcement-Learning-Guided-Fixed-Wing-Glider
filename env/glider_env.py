@@ -49,6 +49,7 @@ from sim.wind import WindModel
 from sim.sensor_models import SensorSuite
 from sim.math_utils import build_state, wrap_pi
 from env.reward import compute_reward, DEFAULT_REWARD_CFG
+from env.curriculum import DR_SCALE, stage_ranges
 
 
 # ---------------------------------------------------------------------------
@@ -74,8 +75,12 @@ KV_PITCH: float = 0.015
 # Yaw / coordinated-turn: rudder proportional to roll rate
 KR_RUDDER: float = 0.05
 
-# Trim reference
-V_TRIM:     float = 10.0           # m/s best-glide speed
+# Trim reference for the pitch schedule below: an inner-loop tuning pair with
+# ALPHA_TRIM, NOT a glide speed. SPEC V20 proposed 14.5 m/s here; measured
+# speed tracking got worse and non-monotonic with it (a 7 m/s command flew
+# faster than a 9 m/s one), so it stays at the tuned value. See
+# docs/SPEC_V20_decisions.md.
+V_TRIM:     float = 10.0           # m/s
 ALPHA_TRIM: float = np.radians(2.5)  # reduced from 4.8°: JSBSim trims lower; 4.8° trapped speed at 7 m/s
 
 # Safety shield thresholds
@@ -107,13 +112,28 @@ DT_PHYS:  float = 0.005   # 200 Hz
 DT_RL:    float = 0.050   # 20 Hz
 N_SUBSTEPS: int = 10      # DT_RL / DT_PHYS
 
-# Episode limits
-MAX_STEPS: int = 2000     # ~100 s of flight
+# Episode limits. Truncation is sized from the LONGEST possible flight in
+# the domain-randomisation table, not the typical one, so the best airframes
+# are never cut off and the timeout bucket stays honest. From
+# analysis/flight_envelope.py (SPEC V20 Phase 4): the lightest, cleanest
+# airframe at its minimum sink inside the command range stays aloft
+# FLIGHT_TIME_LONGEST_S from the highest start energy in any stage.
+# tests/test_domain_rand.py recomputes it and checks the margin.
+FLIGHT_TIME_LONGEST_S: float = 63.1    # s from 31.8 m energy height (59.5 s from 30 m)
+FLIGHT_TIME_SHORTEST_S: float = 36.1   # s from 30 m: heaviest, draggiest airframe at its best L/D
+FLIGHT_TIME_EXPECTED_S: float = 52.5   # s from 30 m: nominal airframe at best L/D in range
+MAX_STEPS: int = 1520     # 76 s at DT_RL: 1.2x the longest flight
 
 # Action scaling (denormalise ±1 -> physical units)
 BANK_CMD_SCALE_RAD:  float = np.radians(45.0)   # ±45° bank
-SPEED_CMD_CENTRE_MS: float = 9.0
-SPEED_CMD_SCALE_MS:  float = 4.0                # range 5–13 m/s
+# Airspeed command range. The floor must exceed the stall speed of the worst
+# airframe in DR_RANGES (heaviest, lowest lift peak, smallest wing): 9.17 m/s
+# per analysis/flight_envelope.py, checked by
+# tests/test_domain_rand.py::test_airspeed_floor_above_stall.
+SPEED_CMD_MIN_MS:    float = 9.5
+SPEED_CMD_MAX_MS:    float = 16.0
+SPEED_CMD_CENTRE_MS: float = 0.5 * (SPEED_CMD_MIN_MS + SPEED_CMD_MAX_MS)
+SPEED_CMD_SCALE_MS:  float = 0.5 * (SPEED_CMD_MAX_MS - SPEED_CMD_MIN_MS)
 
 # Launch state randomisation (fallback defaults; overridable via cfg -- see
 # training/configs/base.yaml launch.speed_{min,max}_ms / pitch_{min,max}_deg).
@@ -133,12 +153,6 @@ LAUNCH_SPEED_MAX_MS: float = 15.0
 LAUNCH_PITCH_MIN_DEG: float = 0.0
 LAUNCH_PITCH_MAX_DEG: float = 15.0     # nose-up (positive pitch)
 
-# CG placement uncertainty (m), FRD convention (+ = forward of nominal CG).
-# Like launch speed/pitch, this is a fixed hardware build-tolerance
-# uncertainty, not a per-stage difficulty knob: every curriculum stage
-# samples within +/- this range regardless of mass_range (which sets the
-# TOTAL mass sampled via the ballast point mass; see _sample_domain_rand()).
-CG_OFFSET_RANGE_M: float = 0.01
 
 # Per-episode reward-component accumulation keys (V16 Phase A / dashboard
 # streaming backbone). The first 6 are exactly the keys env/reward.py's
@@ -291,7 +305,7 @@ class GliderEnv(gym.Env):
         cfg : dict of overrides merged into DEFAULT_REWARD_CFG. Also accepts
               curriculum stage keys (wind_speed, gust_intensity, sensor_noise,
               dropout_prob, R_home_m, alt0_m, launch_offset_min_m,
-              launch_offset_max_m, aero_scale_range, mass_range) — these are
+              launch_offset_max_m, dr_scale) — these are
               applied at each reset(). launch_speed_min_ms/max_ms and
               launch_pitch_min_deg/max_deg are accepted too but are NOT
               curriculum-stage-dependent (same range at every stage; see
@@ -356,6 +370,10 @@ class GliderEnv(gym.Env):
         self._episode_reward_components: dict[str, float] = {
             k: 0.0 for k in _REWARD_COMPONENT_KEYS
         }
+
+        # This episode's sampled airframe (keys of env/curriculum.py's DR
+        # table), set by _sample_domain_rand() at reset.
+        self._dr: dict[str, float] = {}
 
         # Observation/action transport-delay state (sampled per episode in
         # reset(); see OBS_DELAY_MAX_STEPS / ACTION_DELAY_*_SUBSTEPS above).
@@ -439,7 +457,7 @@ class GliderEnv(gym.Env):
         # --- Launch state ------------------------------------------------
         launch_state = self._build_launch_state()
         self._fdm.reset(launch_state)
-        self._fdm.apply_domain_rand(**dr)
+        self._fdm.apply_domain_rand(dr)
 
         # Seed sensors from initial state
         self._sensors.reset(
@@ -605,6 +623,7 @@ class GliderEnv(gym.Env):
 
         if terminated or truncated:
             info['episode_reward_components'] = dict(self._episode_reward_components)
+            info['dr_params'] = dict(self._dr)
 
         # Update previous step cache
         self._prev_state  = self._fdm.state.copy()
@@ -639,34 +658,17 @@ class GliderEnv(gym.Env):
     # ------------------------------------------------------------------
 
     def _sample_domain_rand(self) -> dict:
-        """Sample per-episode domain-randomisation parameters for JSBSim.
+        """Sample this episode's airframe from env/curriculum.py's DR table.
 
-        Returns a dict suitable for **kwargs to JSBSimFDM.apply_domain_rand().
-        Ranges match the old GliderParams randomisation ranges for continuity.
+        Every range in DR_RANGES / DR_ONESIDED is scaled by the stage's
+        dr_scale (stage_ranges()) and sampled uniformly, in table order.
+        Sampled once per reset and held for the whole episode. The result is
+        kept as self._dr and reported in the terminal step's info['dr_params'].
         """
-        aero_lo, aero_hi = self.cfg.get('aero_scale_range', (1.0, 1.0))
-        cd0_scale    = float(self._rng.uniform(aero_lo, aero_hi))
-        cl_mult      = float(self._rng.uniform(0.9, 1.1))
-        # One control-effectiveness draw applied to all three surfaces:
-        # identical physics and RNG stream to the single multiplier it
-        # replaces (SPEC V20 Phase 3). Phase 4 samples them independently.
-        control_eff  = float(self._rng.uniform(0.75, 1.10))
-
-        # Convert multiplicative CD0 factor to additive offset (CD0_nominal = 0.025)
-        cd0_add = 0.025 * (cd0_scale - 1.0)
-
-        # Mass/CG: previously dead config -- STAGES declared mass_range per
-        # stage but nothing read it, so mass and CG were fixed at the design mass /
-        # nominal for every episode despite being the two largest build-to-
-        # build uncertainties on a hand-built airframe. Wired to the BALLAST
-        # point mass in rlglider.xml via JSBSimFDM.apply_domain_rand().
-        mass_lo, mass_hi = self.cfg.get('mass_range', (None, None))
-        mass_kg     = None if mass_lo is None else float(self._rng.uniform(mass_lo, mass_hi))
-        cg_offset_m = float(self._rng.uniform(-CG_OFFSET_RANGE_M, CG_OFFSET_RANGE_M))
-
-        return dict(cl_mult=cl_mult, cd0_add=cd0_add,
-                    clda_mult=control_eff, cmde_mult=control_eff, cndr_mult=control_eff,
-                    mass_kg=mass_kg, cg_offset_m=cg_offset_m)
+        ranges = stage_ranges(float(self.cfg.get('dr_scale', DR_SCALE[0])))
+        params = {key: float(self._rng.uniform(lo, hi)) for key, (lo, hi) in ranges.items()}
+        self._dr = params
+        return params
 
     def _build_launch_state(self) -> npt.NDArray:
         """Construct the 13-element launch state for a new episode.

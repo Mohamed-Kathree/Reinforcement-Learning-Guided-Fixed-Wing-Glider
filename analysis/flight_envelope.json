@@ -1,0 +1,18 @@
+{
+  "v_cmd_min": 9.5,
+  "v_cmd_max": 16.0,
+  "worst_stall_ms": 9.1687,
+  "worst_stall_cl_mult_spread_ms": 0.002,
+  "longest_minsink_ms": 0.5043,
+  "longest_v_ms": 9.5246,
+  "longest_t30_s": 59.4844,
+  "longest_t_start_s": 63.1411,
+  "start_energy_height_m": 31.8442,
+  "shortest_bestld": 11.4102,
+  "shortest_v_ms": 9.5211,
+  "shortest_t30_s": 36.0904,
+  "nominal_bestld": 16.6402,
+  "nominal_v_bestld_ms": 9.5229,
+  "nominal_t30_s": 52.5161,
+  "reference_height_m": 30.0
+}

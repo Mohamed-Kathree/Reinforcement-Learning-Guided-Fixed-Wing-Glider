@@ -56,6 +56,7 @@ import jsbsim
 import numpy as np
 from numpy.typing import NDArray
 
+from sim.mass_solver import N_POINT_MASSES, MassPropertySolver
 from sim.math_utils import euler_from_quat, euler_to_quat
 
 # ---------------------------------------------------------------------------
@@ -88,11 +89,35 @@ RUDDER_MAX_RAD   = np.radians(25.0)
 DR_PROPERTIES: tuple[str, ...] = (
     "aero/cl-mult", "aero/clmax-scale", "aero/cd0-add", "aero/cd-mult",
     "aero/k-induced", "aero/cm0-offset",
-    "aero/cmalpha-mult", "aero/cmq-mult", "aero/cmde-mult",
-    "aero/clp-mult", "aero/clda-mult", "aero/clbeta-mult",
-    "aero/cnbeta-mult", "aero/cnr-mult", "aero/cndr-mult",
+    "aero/cmalpha-mult", "aero/cmq-mult", "aero/elev-eff-mult",
+    "aero/clp-mult", "aero/ail-eff-mult", "aero/clbeta-mult",
+    "aero/cnbeta-mult", "aero/cnr-mult", "aero/rud-eff-mult",
     "fcs/trim-bias-roll", "fcs/trim-bias-pitch",
 )
+
+# env/curriculum.py DR_RANGES / DR_ONESIDED key -> aircraft-file property,
+# for every key written directly. Keys handled specially in
+# apply_domain_rand(): MASS_KEYS (point-mass solver) and 'sw_mult'
+# (multiplies the model's own metrics/Sw-sqft).
+DR_PROPERTY_MAP: dict[str, str] = {
+    "cl_mult":         "aero/cl-mult",
+    "clmax_scale":     "aero/clmax-scale",
+    "cd0_add":         "aero/cd0-add",
+    "k_induced":       "aero/k-induced",
+    "cm0_offset":      "aero/cm0-offset",
+    "cmalpha_mult":    "aero/cmalpha-mult",
+    "cmq_mult":        "aero/cmq-mult",
+    "elev_eff_mult":   "aero/elev-eff-mult",
+    "clp_mult":        "aero/clp-mult",
+    "ail_eff_mult":    "aero/ail-eff-mult",
+    "clbeta_mult":     "aero/clbeta-mult",
+    "cnbeta_mult":     "aero/cnbeta-mult",
+    "cnr_mult":        "aero/cnr-mult",
+    "rud_eff_mult":    "aero/rud-eff-mult",
+    "trim_bias_roll":  "fcs/trim-bias-roll",
+    "trim_bias_pitch": "fcs/trim-bias-pitch",
+}
+MASS_KEYS: tuple[str, ...] = ("mass_kg", "cg_x_m", "ixx", "iyy")
 
 # Number of <contact> elements in aircraft/rlglider/rlglider.xml
 # (NOSE, TAIL, LEFT_WINGTIP, RIGHT_WINGTIP) -- belly-skid ground contact points.
@@ -160,6 +185,14 @@ class JSBSimFDM:
         # Neutral values of the domain-randomisation hooks, as declared by
         # the aircraft file.
         self._dr_defaults: dict[str, float] = {p: float(self._fdm[p]) for p in DR_PROPERTIES}
+        # Wing area as declared; sw_mult scales this (writable, survives run_ic).
+        self._dr_defaults["metrics/Sw-sqft"] = float(self._fdm["metrics/Sw-sqft"])
+
+        # Per-episode mass/CG/inertia via point masses (sim/mass_solver.py).
+        # Its cache rarely hits in training (continuous targets) but nearly
+        # always in evaluation, where the Phase 5 sweep corners and the
+        # frozen held-out airframes repeat exactly.
+        self.mass_solver = MassPropertySolver()
 
     # ------------------------------------------------------------------
     # Private setup
@@ -218,9 +251,13 @@ class JSBSimFDM:
 
         fdm = self._fdm
 
-        # Neutral domain-randomisation properties (apply_domain_rand overrides)
+        # Neutral domain-randomisation properties and an empty point-mass set
+        # (apply_domain_rand overrides), so no episode inherits the last one's.
         for prop, value in self._dr_defaults.items():
             fdm[prop] = value
+        for i in range(N_POINT_MASSES):
+            fdm[f"inertia/pointmass-weight-lbs[{i}]"] = 0.0
+        fdm["inertia/pointmass-location-X-inches[0]"] = 0.0
 
         # Geographic reference: fixed at equator/prime meridian.
         # Absolute position does not matter for the RTL task -- only relative
@@ -324,57 +361,45 @@ class JSBSimFDM:
     # Domain randomisation
     # ------------------------------------------------------------------
 
-    def apply_domain_rand(
-        self,
-        *,
-        cl_mult:       float = 1.0,
-        cd0_add:       float = 0.0,
-        clda_mult:     float = 1.0,
-        cmde_mult:     float = 1.0,
-        cndr_mult:     float = 1.0,
-        mass_kg:       float | None = None,
-        cg_offset_m:   float = 0.0,
-    ) -> None:
-        """Write per-episode domain-randomisation scale factors to JSBSim.
+    def apply_domain_rand(self, params: dict[str, float]) -> None:
+        """Write one episode's sampled airframe to JSBSim.
 
-        Call this after reset() and before the first step().  These properties
-        are referenced inside aircraft/rlglider/rlglider.xml and scale the
-        aerodynamic model without reloading the XML.
+        Call this after reset() and before the first step(). `params` uses the
+        keys of env/curriculum.py's DR_RANGES / DR_ONESIDED; any key left out
+        keeps the aircraft file's default. Unknown keys raise, so a renamed
+        range cannot be silently dropped.
 
-        Args:
-            cl_mult       : CL table multiplier (nominal 1.0; range 0.9–1.1)
-            cd0_add       : additive CD0 offset (nominal 0.0; range −0.005–0.010)
-            clda_mult     : aileron effectiveness (Clda, Cnda), nominal 1.0
-            cmde_mult     : elevator effectiveness (Cmde, CLde), nominal 1.0
-            cndr_mult     : rudder effectiveness (Cndr, Cldr), nominal 1.0
-            mass_kg       : total aircraft mass (None = the model's <emptywt>,
-                            i.e. zero ballast). Achieved via the BALLAST point
-                            mass (signed: mass_kg < empty_weight_kg gives
-                            negative ballast), representing build-to-build
-                            mass variance (battery choice, airframe tolerance).
-            cg_offset_m   : CG shift along the body X axis (m), FRD convention
-                            (positive = forward), nominal 0.0. Representing
-                            build tolerance in ballast/component placement.
+            DR_PROPERTY_MAP keys -> written to their property directly
+            sw_mult              -> metrics/Sw-sqft = declared area * sw_mult
+            mass_kg, cg_x_m, ixx, iyy (all four, or none)
+                                 -> point masses solved by MassPropertySolver
+                                    against JSBSim's own readback; cg_x_m is
+                                    body frame, positive forward. Raises
+                                    UnreachableTarget if a guard trips.
 
-        Mass/CG changes require a second run_ic() to take effect -- JSBSim
-        only recomputes total mass/inertia at run_ic() time, and reset()
-        already called it once (with the ballast still at its default 0)
-        before this method runs. The second call is a no-op for position/
-        velocity/attitude since none of the ic/* properties have changed
-        since reset() set them; verified empirically that state is
-        preserved bit-for-bit across the extra call.
+        The solver ends with run_ic(), which JSBSim needs to recompute mass
+        properties. reset() already ran it once with an empty point-mass set;
+        the second call leaves position, velocity and attitude unchanged since
+        no ic/* property has changed.
         """
-        fdm = self._fdm
-        fdm["aero/cl-mult"]       = float(cl_mult)
-        fdm["aero/cd0-add"]       = float(cd0_add)
-        fdm["aero/clda-mult"]     = float(clda_mult)
-        fdm["aero/cmde-mult"]     = float(cmde_mult)
-        fdm["aero/cndr-mult"]     = float(cndr_mult)
+        unknown = set(params) - set(DR_PROPERTY_MAP) - set(MASS_KEYS) - {"sw_mult"}
+        if unknown:
+            raise KeyError(f"unknown domain-randomisation keys: {sorted(unknown)}")
 
-        ballast_kg = 0.0 if mass_kg is None else float(mass_kg) - self.empty_weight_kg
-        fdm["inertia/pointmass-weight-lbs[0]"]      = ballast_kg * KG2LBS
-        fdm["inertia/pointmass-location-X-inches[0]"] = -float(cg_offset_m) * M2IN
-        fdm.run_ic()
+        fdm = self._fdm
+        for key, prop in DR_PROPERTY_MAP.items():
+            if key in params:
+                fdm[prop] = float(params[key])
+        if "sw_mult" in params:
+            fdm["metrics/Sw-sqft"] = self._dr_defaults["metrics/Sw-sqft"] * float(params["sw_mult"])
+
+        present = [k for k in MASS_KEYS if k in params]
+        if present and len(present) != len(MASS_KEYS):
+            raise KeyError(f"mass properties need all of {MASS_KEYS}, got {present}")
+        if present:
+            self.mass_solver.solve(fdm, *(float(params[k]) for k in MASS_KEYS))
+        else:
+            fdm.run_ic()
 
     # ------------------------------------------------------------------
     # State read-outs  (SI, NED/FRD frames)

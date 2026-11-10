@@ -63,7 +63,7 @@ from stable_baselines3.common.callbacks import (
     CheckpointCallback,
     EvalCallback,
 )
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize, DummyVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize, DummyVecEnv, VecFrameStack
 from stable_baselines3.common.monitor import Monitor
 
 from env.glider_env import GliderEnv
@@ -210,7 +210,19 @@ def make_env(cfg: dict, rank: int, seed: int = 0):
 
 
 def build_venv(cfg: dict, seed: int = 0, force_dummy: bool = False) -> VecNormalize:
-    """Create a VecNormalize-wrapped vectorised environment.
+    """Create a frame-stacked, VecNormalize-wrapped vectorised environment.
+
+    Frame stacking (cfg['ppo']['n_stack'] frames, SPEC V20 Phase 4): with
+    domain randomisation this wide, a memoryless policy on a single 12-element
+    observation cannot tell which airframe it is flying. Eight frames at
+    20 Hz is 0.4 s of history, enough to infer control effectiveness from
+    the roll-response lag. Training AND eval envs are both built here, so
+    their observation shapes cannot diverge.
+
+    Wrapper order is VecNormalize(VecFrameStack(base)): VecNormalize must
+    stay outermost so `venv.training = False` / `venv.norm_reward = False`
+    and VecNormalize.save()/load() act on it directly (attributes set on an
+    outer VecFrameStack would not reach it).
 
     Uses SubprocVecEnv for multi-process parallelism (default) or
     DummyVecEnv for single-process debugging (force_dummy=True or n_envs=1).
@@ -231,6 +243,7 @@ def build_venv(cfg: dict, seed: int = 0, force_dummy: bool = False) -> VecNormal
     else:
         venv = SubprocVecEnv(fns, start_method='spawn')
 
+    venv = VecFrameStack(venv, n_stack=int(cfg['ppo']['n_stack']))
     venv = VecNormalize(
         venv,
         norm_obs    = bool(cfg['ppo']['normalize_obs']),

@@ -49,13 +49,13 @@ DEFAULTS = {
     "aero/cm0-offset":    0.0,
     "aero/cmalpha-mult":  1.0,
     "aero/cmq-mult":      1.0,
-    "aero/cmde-mult":     1.0,
+    "aero/elev-eff-mult":     1.0,
     "aero/clp-mult":      1.0,
-    "aero/clda-mult":     1.0,
+    "aero/ail-eff-mult":     1.0,
     "aero/clbeta-mult":   1.0,
     "aero/cnbeta-mult":   1.0,
     "aero/cnr-mult":      1.0,
-    "aero/cndr-mult":     1.0,
+    "aero/rud-eff-mult":     1.0,
     "fcs/trim-bias-roll":  0.0,
     "fcs/trim-bias-pitch": 0.0,
 }
@@ -155,7 +155,7 @@ def test_refactor_matches_pre_refactor_file(tmp_path, control_eff, nominal_mass)
         if nominal_mass:
             MassPropertySolver().solve(fdm, nom["mass_kg"], 0.004, nom["ixx"], nom["iyy"])
     old["aero/" + "ctrl" + "-eff-mult"] = control_eff   # retired name; old file only
-    for prop in ("aero/clda-mult", "aero/cmde-mult", "aero/cndr-mult"):
+    for prop in ("aero/ail-eff-mult", "aero/elev-eff-mult", "aero/rud-eff-mult"):
         new[prop] = control_eff
 
     a, b = _fly(old, 1200), _fly(new, 1200)
@@ -188,14 +188,14 @@ CASES = [
     ("aero/cm0-offset",   0.05,          5.0, {"aero/moment/Cm0": 2.0}),
     ("aero/cmalpha-mult", 1.5,           5.0, {"aero/moment/Cmalpha": 1.5}),
     ("aero/cmq-mult",     1.5,           5.0, {"aero/moment/Cmq": 1.5}),
-    ("aero/cmde-mult",    1.5,           5.0, {"aero/moment/Cmde": 1.5, "aero/coefficient/CLde": 1.5,
+    ("aero/elev-eff-mult",    1.5,           5.0, {"aero/moment/Cmde": 1.5, "aero/coefficient/CLde": 1.5,
                                                "aero/coefficient/CLtotal": None, "aero/coefficient/CDi": None}),
     ("aero/clp-mult",     1.5,           5.0, {"aero/moment/Clp": 1.5}),
-    ("aero/clda-mult",    1.5,           5.0, {"aero/moment/Clda": 1.5, "aero/moment/Cnda": 1.5}),
+    ("aero/ail-eff-mult",    1.5,           5.0, {"aero/moment/Clda": 1.5, "aero/moment/Cnda": 1.5}),
     ("aero/clbeta-mult",  1.5,           5.0, {"aero/moment/Clbeta": 1.5}),
     ("aero/cnbeta-mult",  1.5,           5.0, {"aero/moment/Cnbeta": 1.5}),
     ("aero/cnr-mult",     1.5,           5.0, {"aero/moment/Cnr": 1.5}),
-    ("aero/cndr-mult",    1.5,           5.0, {"aero/moment/Cndr": 1.5, "aero/moment/Cldr": 1.5}),
+    ("aero/rud-eff-mult",    1.5,           5.0, {"aero/moment/Cndr": 1.5, "aero/moment/Cldr": 1.5}),
     # Past the 12 deg stall: a higher CL peak means more lift at 14 deg.
     ("aero/clmax-scale",  1.5,          14.0, {"aero/coefficient/CLalpha": None,
                                                "aero/coefficient/CLtotal": None, "aero/coefficient/CDi": None}),
@@ -310,3 +310,29 @@ def test_ctrl_eff_mult_removed():
             text = f.read().decode("utf-8", errors="ignore").lower()
         hits += [f"{rel}: {n}" for n in needles if n in text]
     assert not hits, "retired control-effectiveness multiplier still referenced:\n" + "\n".join(hits)
+
+
+def test_cl_mult_scales_slope_not_peak():
+    """cl_mult sets the lift-curve slope only (SPEC V20 Phase 4): pre-stall CL
+    scales with it, CLmax does not. A whole-table multiplier would also move
+    the peak and compound with clmax-scale at the stall corner."""
+    def cl_curve(cl_mult):
+        fdm = _fdm()
+        _set_ic(fdm, beta_deg=0.0, p=0.0, q=0.0, r=0.0)
+        fdm["aero/cl-mult"] = cl_mult
+        out = []
+        for a in np.arange(1.0, 24.0, 0.05):
+            fdm["ic/alpha-deg"] = a
+            fdm.run_ic()
+            fdm.run()
+            # CL and the alpha JSBSim actually evaluated it at (one step on
+            # from the IC, so not exactly `a`, and not the same in both runs).
+            out.append((fdm["aero/alpha-deg"], fdm["aero/coefficient/CLtotal"]))
+        return np.array(out)
+
+    base, steep = cl_curve(1.0), cl_curve(1.2)
+    # ~3 deg: both on the table's 0-4 deg segment, so the slope ratio is the multiplier.
+    i3 = int(round((3.0 - 1.0) / 0.05))
+    slope = lambda row: row[1] / row[0]
+    assert slope(steep[i3]) / slope(base[i3]) == pytest.approx(1.2, rel=1e-3)
+    assert steep[:, 1].max() == pytest.approx(base[:, 1].max(), rel=2e-3)

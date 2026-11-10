@@ -630,10 +630,11 @@ def test_episode_terminates_on_touchdown():
 #     does not.
 # ---------------------------------------------------------------------------
 
-# Pinned from the SPEC V20 Phase 2 aircraft (1.64 kg stage-0, ixz 0); exact
-# per-episode values live in tests/data/baseline_distances.json.
-BASELINE_DIST_MEAN_M = 37.23
-BASELINE_DIST_STD_M  = 16.22
+# Pinned from the SPEC V20 Phase 4 environment (stage 0 samples every DR range
+# at 25% width; 9.5-16 m/s command range); exact per-episode values live in
+# tests/data/baseline_distances.json. Phase 2/3 pin was 37.23 / 16.22.
+BASELINE_DIST_MEAN_M = 33.31
+BASELINE_DIST_STD_M  = 19.49
 # Tolerance on both. Calibration (SPEC V20 Phase 3): 1e-4 perturbations of
 # CD0 or CL, and ixz = +/-0.01, moved single episodes by up to 12 m but the
 # mean and std by at most 0.7 m; the standard error of a 20-episode mean at

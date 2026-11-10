@@ -98,8 +98,10 @@ DEFAULT_REWARD_CFG: dict = {
     'sink_bad':          2.5,   # m/s; curriculum-overridden (widens at easy stages)
     'roll_ok_deg':      10.0,   # deg; wingtip geometry allows ~6 deg before contact
     'roll_bad_deg':     35.0,   # deg; curriculum-overridden
-    'vtd_ok':            9.0,   # m/s; ~1.4x V_stall (6.35 m/s)
-    'vtd_bad':          13.0,   # m/s; ~2.0x V_stall
+    'vtd_ok':           10.85,  # m/s; 1.4x V_stall. V_stall 7.75 m/s: as-built nominal
+                                #   1.64 kg (SPEC V20 Phase 4; was 9.0 = 1.4x the 1.1 kg
+                                #   design's 6.35 m/s, unreachable above the 9.5 m/s floor)
+    'vtd_bad':          15.5,   # m/s; 2.0x V_stall (was 13.0)
     'alpha_ok_deg':     10.0,   # deg; brackets the 12 deg stall angle
     'alpha_bad_deg':    14.0,   # deg
 

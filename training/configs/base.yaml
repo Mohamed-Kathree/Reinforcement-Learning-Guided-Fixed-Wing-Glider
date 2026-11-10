@@ -38,12 +38,9 @@
 #                   values live in env/curriculum.py STAGES, applied via
 #                   env.set_stage(). The value here is just a Stage-0-ish
 #                   nominal default for eyeballing.
-#   domain_rand: -- per-stage aero_scale_range now lives in env/curriculum.py
-#                   STAGES (superseding this flat section); cl_mult and
-#                   control-effectiveness ranges are hardcoded in
-#                   env/glider_env.py::_sample_domain_rand(). mass_range /
-#                   inertia_scale_range / servo_* are not used at all with
-#                   JSBSim (mass/inertia/actuators are fixed in rlglider.xml).
+#   domain_rand: -- the live table is env/curriculum.py DR_RANGES /
+#                   DR_ONESIDED / DR_SCALE; this section only records the
+#                   steady-glide envelope derived from it.
 
 # ---------------------------------------------------------------------------
 # Simulation timing (REFERENCE ONLY -- see note above; real values are the
@@ -53,7 +50,7 @@ sim:
   dt_phys:    0.005       # physics integration step (s)  -- 200 Hz
   dt_rl:      0.050       # RL policy step (s)            -- 20 Hz
   substeps:   10          # dt_rl / dt_phys; kept explicit for readability
-  max_steps:  2000        # maximum policy steps per episode (~100 s of flight)
+  max_steps:  1520        # maximum policy steps per episode (76 s; sized from the longest flight, see domain_rand)
   rho:        1.225       # air density (kg/m^3), sea-level ISA
 
 # ---------------------------------------------------------------------------
@@ -118,8 +115,9 @@ reward:
   sink_bad:      2.5      # m/s; overridden per curriculum stage
   roll_ok_deg:   10.0     # deg; wingtip geometry allows ~6 deg before contact
   roll_bad_deg:  35.0     # deg; overridden per curriculum stage
-  vtd_ok:        9.0      # m/s; ~1.4x V_stall (6.35 m/s)
-  vtd_bad:       13.0     # m/s; ~2.0x V_stall
+  vtd_ok:        10.85    # m/s; 1.4x V_stall (7.75 m/s, as-built nominal 1.64 kg; was 9.0
+                          # for the 1.1 kg design's 6.35 m/s, SPEC V20 Phase 4)
+  vtd_bad:       15.5     # m/s; 2.0x V_stall (was 13.0)
   alpha_ok_deg:  10.0     # deg; brackets the 12 deg stall angle
   alpha_bad_deg: 14.0     # deg
 
@@ -175,6 +173,11 @@ ppo:
   learning_rate:    3.0e-4          # Adam learning rate
   clip_range:       0.2             # PPO clipping epsilon
   net_arch:         [128, 128]      # shared MLP hidden layer sizes
+  n_stack:          8               # observation frames stacked (VecFrameStack) on BOTH the
+                                     # training and eval venvs: 8 x 50 ms = 0.4 s of history, so
+                                     # the policy can infer which randomised airframe it is flying
+                                     # (SPEC V20 Phase 4). A model trained with this needs it at
+                                     # load time too: obs shape is 12 * n_stack.
   total_timesteps:  20_000_000      # smoke-check / initial-run budget. At ~7x longer episodes
                                      # this buys ~7x fewer episodes than pre-Phase-4 for the same
                                      # step count (~150k -> ~20k); RLGlider_Phase4_Landing_Task_
@@ -236,20 +239,24 @@ logging:
   verbose:          1               # SB3 verbosity (0=silent, 1=info, 2=debug)
 
 # ---------------------------------------------------------------------------
-# Domain randomisation ranges -- REFERENCE ONLY, superseded by curriculum.
-# Curriculum integration (mentioned as future work in an earlier revision of
-# this comment) has since landed: per-stage aero_scale_range now lives in
-# env/curriculum.py STAGES and is the value actually applied via
-# JSBSimFDM.apply_domain_rand(). aero_scale_range below happens to equal
-# Stage 3's range, but changing it here has no effect.
+# Domain randomisation -- REFERENCE ONLY. The live table is DR_RANGES /
+# DR_ONESIDED / DR_SCALE in env/curriculum.py (mass, CG, Ixx, Iyy and wing
+# area there are read from aircraft/mass_properties.yaml). Each stage
+# samples every range at DR_SCALE[stage] of its width (0.25/0.50/0.75/1.00).
+# Nothing in this section is read by code; it records the derived envelope.
 # ---------------------------------------------------------------------------
 domain_rand:
-  aero_scale_range:     [0.80,  1.20]  # additive CD0 offset scale (cd0_add = 0.025*(scale-1))
-  # cl_mult and control-effectiveness (clda/cmde/cndr_mult, one shared draw)
-  # ranges are hardcoded in env/glider_env.py::_sample_domain_rand()
-  # (0.9-1.1 and 0.75-1.10 respectively).
-  #
-  # NOT used with JSBSim (actuator dynamics fixed in aircraft/rlglider/rlglider.xml):
-  #   servo_tau_range, servo_rate_scale, servo_max_scale
-  # NOT used with JSBSim (mass/inertia fixed in rlglider.xml; pending per-episode XML reload):
-  #   mass_range, inertia_scale_range
+  # Steady-glide envelope of the DR table, from the aircraft model itself
+  # (python -m analysis.flight_envelope -> analysis/flight_envelope.json,
+  # SPEC V20 Phase 4). Live copies: env/glider_env.py FLIGHT_TIME_* and
+  # MAX_STEPS; tests/test_domain_rand.py recomputes and checks them.
+  worst_stall_ms:          9.17   # heaviest, lowest lift peak, smallest wing; command floor 9.5
+  flight_time_longest_s:   63.1   # lightest/cleanest at min sink in range, 31.8 m start energy
+                                  # (59.5 s from 30 m). Truncation is sized from THIS, not the
+                                  # typical flight: 1520 steps = 76 s = 1.2x.
+  flight_time_shortest_s:  36.1   # heaviest/draggiest at its best L/D, from 30 m
+  flight_time_expected_s:  52.5   # nominal airframe at best L/D in range, from 30 m. Episodes
+                                  # start at 20-25 m (STAGES alt0_m), so real flights are shorter.
+  # Launch height: alt0_m (20-25 m, env/curriculum.py STAGES) still reflects
+  # the hand-launch zoom-climb assumption. The hi-start release height has
+  # NOT been measured; left unchanged pending that measurement.
