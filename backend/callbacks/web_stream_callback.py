@@ -35,6 +35,7 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Any
 
+import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import DummyVecEnv
 
@@ -78,6 +79,23 @@ _REWARD_COMPONENT_NAMES = (
     'r_path', 'penalty_unreach', 'penalty_stall', 'penalty_bank',
     'penalty_smooth', 'r_terminal', 'penalty_truncate',
 )
+
+
+def _json_default(obj: Any) -> Any:
+    """json.dumps fallback for numpy values. SB3 logs some metrics as numpy
+    scalars json cannot encode: train/approx_kl is np.mean over float32 torch
+    outputs, i.e. np.float32 (np.float64 only works because it subclasses
+    float). This crashed the first V20 training run at the first emission
+    after a PPO update."""
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
+def dumps_record(record: dict) -> str:
+    return json.dumps(record, default=_json_default)
 
 
 class WebStreamCallback(BaseCallback):
@@ -279,7 +297,7 @@ class WebStreamCallback(BaseCallback):
         if self._last_completed_episode is None:
             return
         with open(config.DATA_DIR / "live_episode.json", "w") as f:
-            json.dump(self._last_completed_episode, f)
+            json.dump(self._last_completed_episode, f, default=_json_default)
 
     def _on_step(self) -> bool:
         self._accumulate_rollout_frame()
@@ -290,7 +308,7 @@ class WebStreamCallback(BaseCallback):
         info0 = self.locals.get('infos', [{}])[0]
         record = self._build_record(self.model.logger.name_to_value, info0)
         with open(self._run_path, "a") as f:
-            f.write(json.dumps(record) + "\n")
+            f.write(dumps_record(record) + "\n")
 
         if self._rollout_dump_enabled:
             self._maybe_dump_live_episode()
