@@ -637,15 +637,21 @@ def test_baseline_fixed_seed_regression():
     ~24.7-25.0 m values were all clustered near R_home_m because they were
     the position at the moment the episode ended by CROSSING that radius;
     under the new task the episode runs to touchdown, so final distances
-    vary with wherever the controller actually lands."""
+    vary with wherever the controller actually lands.
+
+    Regenerated again for SPEC V20 Phase 1: the aircraft file is now generated
+    from aircraft/mass_properties.yaml, taking the airframe from the 1.1 kg
+    design mass to the as-built estimate (emptywt 1.50 kg, stage-0 mass 1.64 kg
+    via ballast; inertia at the bottom of the YAML ranges). The baseline
+    controller was not retuned, so distances moved (mean 25.9 -> 36.6 m)."""
     from env.glider_env import GliderEnv
     from baseline.deterministic_rtl import DeterministicRTL
 
     expected_final_dist = np.array([
-        47.12624594, 39.17500110, 43.15555920, 25.45874363, 11.64544601,
-        41.07336285, 26.22067733, 48.45388996, 21.37594191,  9.86971285,
-         1.81280433, 36.07644867, 41.39158878, 21.42766124, 48.03224165,
-        16.71123792,  3.52328116, 11.81277227,  5.59599839, 18.44716598,
+         5.55799262, 19.09537498, 35.98826689, 24.58299058, 53.39656774,
+        36.62068506, 37.98133217,  3.95646650, 43.45450656, 50.52864540,
+        47.48038777, 44.85414416, 27.45086912, 27.32059293, 21.54355806,
+        48.97413109, 46.37931487, 55.07829553, 48.48398769, 52.55188813,
     ])
 
     env  = GliderEnv(cfg=dict(STAGES[0]))

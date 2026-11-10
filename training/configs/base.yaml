@@ -57,19 +57,11 @@ sim:
   rho:        1.225       # air density (kg/m^3), sea-level ISA
 
 # ---------------------------------------------------------------------------
-# Glider physical parameters (nominal; domain randomisation scales these)
+# Glider physical parameters
+# Not configured here. Mass, balance, inertia and reference geometry live in
+# aircraft/mass_properties.yaml (with ranges and provenance tags) and are
+# baked into aircraft/rlglider/rlglider.xml by aircraft/generate_fdm.py.
 # ---------------------------------------------------------------------------
-glider:
-  m:    1.1               # all-up mass (kg)
-  S:    0.38              # wing area (m^2)
-  b:    2.0               # wingspan (m)
-  c:    0.19              # mean aerodynamic chord (m)  ~= S/b
-  AR:   10.5              # aspect ratio               ~= b^2/S
-  # Inertia tensor diagonal (kg*m^2, FRD body frame)
-  Ixx:  0.18              # roll inertia
-  Iyy:  0.10              # pitch inertia
-  Izz:  0.26              # yaw inertia
-  Ixz:  0.01              # roll-yaw cross term (small; symmetric glider)
 
 # ---------------------------------------------------------------------------
 # Launch conditions

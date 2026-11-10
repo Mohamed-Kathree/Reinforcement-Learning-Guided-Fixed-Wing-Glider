@@ -27,16 +27,28 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 PROJ_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, PROJ_ROOT)
+
+from sim.mass_properties import fdm_baseline  # noqa: E402
+
 M2FT   = 3.280839895
 FT2M   = 1.0 / M2FT
 FPS2MS = FT2M               # 1 fps = FT2M m/s
 MS2FPS = M2FT
 
-MASS = 1.1    # kg  (GliderParams.m)
-G    = 9.81   # m/s²
-IXX  = 0.18   # kg·m²  (GliderParams.Ixx)
-IYY  = 0.10
-IZZ  = 0.26
+# Mass and inertia of the aircraft file as generated (aircraft/mass_properties.yaml
+# via aircraft/generate_fdm.py): the bottom of each range, no point masses.
+_BASE = fdm_baseline()
+MASS = _BASE["mass_kg"]   # kg
+G    = 9.81               # m/s²
+IXX  = _BASE["ixx"]       # kg·m²
+IYY  = _BASE["iyy"]
+IZZ  = _BASE["izz"]
+
+# Trim angle of attack: Cm0 + Cm_alpha * alpha = 0 → alpha = 0.05/0.60 = 4.77°.
+# Independent of mass while the CG stays on the aero reference point.
+ALPHA_TRIM_DEG = 4.78
+GAMMA_TRIM_DEG = -4.0
 
 DT   = 1.0 / 200.0   # physics step, 200 Hz
 
@@ -57,21 +69,50 @@ def _make_fdm() -> jsbsim.FGFDMExec:
     return fdm
 
 
+def trim_speed_ms(
+    mass_kg: float = MASS,
+    *,
+    alt_m: float = 300.0,
+    alpha_deg: float = ALPHA_TRIM_DEG,
+    gamma_deg: float = GAMMA_TRIM_DEG,
+) -> float:
+    """Airspeed at which lift balances weight at the trim alpha.
+
+    L = qbar * S * CL = m * g * cos(gamma). CL, wing area and air density are
+    read from the loaded model at the trim alpha, so this follows the aircraft
+    file rather than a copied constant. Replaces the fixed 10 m/s start speed,
+    which was trim only for the 1.1 kg V19 aircraft.
+    """
+    fdm = _make_fdm()
+    fdm["ic/h-agl-ft"]   = alt_m * M2FT
+    fdm["ic/vt-fps"]     = 10.0 * MS2FPS
+    fdm["ic/alpha-deg"]  = alpha_deg
+    fdm["ic/gamma-deg"]  = gamma_deg
+    fdm.run_ic()
+    cl   = fdm["aero/coefficient/CLtotal"]
+    s_m2 = fdm["metrics/Sw-sqft"] * FT2M * FT2M
+    rho  = fdm["atmosphere/rho-slugs_ft3"] * 515.378818   # slug/ft³ → kg/m³
+    return float(np.sqrt(2.0 * mass_kg * G * np.cos(np.radians(gamma_deg)) / (rho * s_m2 * cl)))
+
+
 def _set_near_trim_ic(
     fdm,
     *,
     alt_m: float = 300.0,
-    vt_ms: float = 10.0,
-    alpha_deg: float = 4.78,
-    gamma_deg: float = -4.0,
+    vt_ms: float | None = None,
+    alpha_deg: float = ALPHA_TRIM_DEG,
+    gamma_deg: float = GAMMA_TRIM_DEG,
     heading_deg: float = 0.0,
 ) -> None:
     """Apply analytically computed near-trim IC and prime the sim.
 
     Trim point: Cm0 + Cm_alpha * alpha = 0 → alpha = 0.05/0.60 = 4.77°.
-    At V=10 m/s: L = qbar*S*CL ≈ 10.6 N ≈ mg — within 2%.
+    vt_ms defaults to trim_speed_ms() for the model's mass, so that
+    L = qbar*S*CL = mg cos(gamma) at the start.
     Elevator command zero (trim elevator is ~0 rad).
     """
+    if vt_ms is None:
+        vt_ms = trim_speed_ms(alt_m=alt_m, alpha_deg=alpha_deg, gamma_deg=gamma_deg)
     fdm["aero/cl-mult"]       = 1.0
     fdm["aero/cd0-add"]       = 0.0
     fdm["aero/cd-mult"]       = 1.0
@@ -246,7 +287,7 @@ def test_trimmed_stability() -> None:
     is stable — pitch rate remains negligible throughout the 15 s run.
     """
     fdm = _make_fdm()
-    _set_near_trim_ic(fdm, alt_m=300.0, vt_ms=10.0)
+    _set_near_trim_ic(fdm, alt_m=300.0)
 
     PITCH_LIMIT = 0.10   # rad/s
     max_q = 0.0
@@ -278,7 +319,7 @@ def test_attitude_integrity() -> None:
     altitude to avoid ground contact during the full 30 s glide.
     """
     fdm = _make_fdm()
-    _set_near_trim_ic(fdm, alt_m=500.0, vt_ms=10.0)
+    _set_near_trim_ic(fdm, alt_m=500.0)
 
     max_abs_phi   = 0.0
     max_abs_theta = 0.0

@@ -653,12 +653,12 @@ class GliderEnv(gym.Env):
         cd0_add = 0.025 * (cd0_scale - 1.0)
 
         # Mass/CG: previously dead config -- STAGES declared mass_range per
-        # stage but nothing read it, so mass and CG were fixed at 1.1 kg /
+        # stage but nothing read it, so mass and CG were fixed at the design mass /
         # nominal for every episode despite being the two largest build-to-
         # build uncertainties on a hand-built airframe. Wired to the BALLAST
         # point mass in rlglider.xml via JSBSimFDM.apply_domain_rand().
-        mass_lo, mass_hi = self.cfg.get('mass_range', (1.1, 1.1))
-        mass_kg     = float(self._rng.uniform(mass_lo, mass_hi))
+        mass_lo, mass_hi = self.cfg.get('mass_range', (None, None))
+        mass_kg     = None if mass_lo is None else float(self._rng.uniform(mass_lo, mass_hi))
         cg_offset_m = float(self._rng.uniform(-CG_OFFSET_RANGE_M, CG_OFFSET_RANGE_M))
 
         return dict(cl_mult=cl_mult, cd0_add=cd0_add, ctrl_eff_mult=ctrl_eff_mult,

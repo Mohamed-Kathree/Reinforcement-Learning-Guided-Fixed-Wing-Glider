@@ -69,11 +69,6 @@ FPS2MS = FT2M            # 1 fps = FT2M m/s
 KG2LBS = 2.20462
 M2IN   = 39.3701
 
-# Nominal empty weight (must match aircraft/rlglider/rlglider.xml's <emptywt>).
-# apply_domain_rand()'s mass_kg is achieved via the BALLAST point mass rather
-# than by editing this, so it stays a fixed, documented reference point.
-EMPTYWT_KG = 1.1
-
 # WGS84 semi-major axis (m). Used for a local tangent-plane (equirectangular)
 # projection of lat/lon onto NED North/East -- see position_ned's docstring
 # for why this replaced JSBSim's distance-from-start-lat/lon-mt properties.
@@ -143,6 +138,12 @@ class JSBSimFDM:
 
         # Create the FGFDMExec (expensive — done once)
         self._fdm: jsbsim.FGFDMExec = self._make_fdm()
+
+        # <emptywt> as loaded, read back from JSBSim rather than hard-coded:
+        # the XML is generated from aircraft/mass_properties.yaml, so this
+        # follows it automatically. apply_domain_rand()'s mass_kg is reached
+        # via the BALLAST point mass relative to this reference.
+        self.empty_weight_kg: float = float(self._fdm["inertia/empty-weight-lbs"]) / KG2LBS
 
     # ------------------------------------------------------------------
     # Private setup
@@ -315,7 +316,7 @@ class JSBSimFDM:
         cl_mult:       float = 1.0,
         cd0_add:       float = 0.0,
         ctrl_eff_mult: float = 1.0,
-        mass_kg:       float = EMPTYWT_KG,
+        mass_kg:       float | None = None,
         cg_offset_m:   float = 0.0,
     ) -> None:
         """Write per-episode domain-randomisation scale factors to JSBSim.
@@ -328,9 +329,10 @@ class JSBSimFDM:
             cl_mult       : CL table multiplier (nominal 1.0; range 0.9–1.1)
             cd0_add       : additive CD0 offset (nominal 0.0; range −0.005–0.010)
             ctrl_eff_mult : control-effectiveness scale (nominal 1.0; range 0.75–1.10)
-            mass_kg       : total aircraft mass (nominal EMPTYWT_KG=1.1). Achieved
-                            via the BALLAST point mass (signed: mass_kg < 1.1
-                            gives negative ballast), representing build-to-build
+            mass_kg       : total aircraft mass (None = the model's <emptywt>,
+                            i.e. zero ballast). Achieved via the BALLAST point
+                            mass (signed: mass_kg < empty_weight_kg gives
+                            negative ballast), representing build-to-build
                             mass variance (battery choice, airframe tolerance).
             cg_offset_m   : CG shift along the body X axis (m), FRD convention
                             (positive = forward), nominal 0.0. Representing
@@ -349,7 +351,7 @@ class JSBSimFDM:
         fdm["aero/cd0-add"]       = float(cd0_add)
         fdm["aero/ctrl-eff-mult"] = float(ctrl_eff_mult)
 
-        ballast_kg = float(mass_kg) - EMPTYWT_KG
+        ballast_kg = 0.0 if mass_kg is None else float(mass_kg) - self.empty_weight_kg
         fdm["inertia/pointmass-weight-lbs[0]"]      = ballast_kg * KG2LBS
         fdm["inertia/pointmass-location-X-inches[0]"] = -float(cg_offset_m) * M2IN
         fdm.run_ic()

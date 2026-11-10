@@ -82,6 +82,14 @@ from __future__ import annotations
 from collections import Counter, deque
 from typing import Deque
 
+from sim.mass_properties import nominal as _nominal_mass_properties
+
+# Central all-up mass estimate from aircraft/mass_properties.yaml. Interim
+# (SPEC V20 Phase 1): the per-stage mass_range half-widths below are the
+# V19 ones (0 / 0.10 / 0.20 / 0.25 kg) re-centred on this value instead of
+# the old 1.1 kg design mass. Phase 4 replaces them with the DR_RANGES table.
+_M_NOM: float = _nominal_mass_properties()["mass_kg"]
+
 # The 4-way episode-outcome bucket used throughout the dashboard
 # (backend/recorder.py, scratch/final_benchmark.py) -- NOT the 3-way
 # success/crash/timeout some older docs describe. "soft_landing" (touched
@@ -108,7 +116,7 @@ STAGES: list[dict] = [
         launch_offset_min_m = 50.0,
         launch_offset_max_m = 90.0,
         aero_scale_range    = (1.0,  1.0),
-        mass_range          = (1.1,  1.1),
+        mass_range          = (_M_NOM,        _M_NOM),
         sigma_centre_m      = 15.0,
         sink_bad            = 3.5,
         roll_bad_deg        = 45.0,
@@ -124,7 +132,7 @@ STAGES: list[dict] = [
         launch_offset_min_m = 45.0,
         launch_offset_max_m = 80.0,
         aero_scale_range    = (0.9,  1.1),
-        mass_range          = (1.0,  1.2),
+        mass_range          = (_M_NOM - 0.10, _M_NOM + 0.10),
         sigma_centre_m      = 13.0,
         sink_bad            = 3.0,
         roll_bad_deg        = 40.0,
@@ -140,7 +148,7 @@ STAGES: list[dict] = [
         launch_offset_min_m = 40.0,
         launch_offset_max_m = 70.0,
         aero_scale_range    = (0.85, 1.15),
-        mass_range          = (0.9,  1.3),
+        mass_range          = (_M_NOM - 0.20, _M_NOM + 0.20),
         sigma_centre_m      = 11.0,
         sink_bad            = 2.75,
         roll_bad_deg        = 37.0,
@@ -156,7 +164,7 @@ STAGES: list[dict] = [
         launch_offset_min_m = 40.0,
         launch_offset_max_m = 70.0,
         aero_scale_range    = (0.8,  1.2),
-        mass_range          = (0.85, 1.35),
+        mass_range          = (_M_NOM - 0.25, _M_NOM + 0.25),
         sigma_centre_m      = 10.0,
         sink_bad            = 2.5,
         roll_bad_deg        = 35.0,

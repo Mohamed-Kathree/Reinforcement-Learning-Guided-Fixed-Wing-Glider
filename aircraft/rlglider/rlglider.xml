@@ -1,8 +1,20 @@
 <?xml version="1.0"?>
+<!-- GENERATED FILE: DO NOT EDIT BY HAND.
+     Generator : aircraft/generate_fdm.py
+     Source    : aircraft/mass_properties.yaml  sha256=fec28e86eec5ae888074a379510c9f020dda49246ef57eef833309fceaea8c96
+     Template  : aircraft/rlglider.template.xml sha256=58efd1bb31cdbd2cda8afbad5079011a7749a00469e4484cde1f142733c8f94b
+     Generated : 2026-11-10T12:41:03+00:00
+     Edit the YAML or the template, then rerun the generator. -->
 <!--
   rlglider.xml
   ============
-  JSBSim Flight Dynamics Model for the 1.1 kg hand-launched RTL fixed-wing glider.
+  JSBSim Flight Dynamics Model for the as-built RTL fixed-wing glider.
+
+  Mass, inertia and geometry are NOT written here by hand: they come from
+  aircraft/mass_properties.yaml (values, ranges and provenance tags) and are
+  substituted into aircraft/rlglider.template.xml by aircraft/generate_fdm.py.
+  The baked-in mass and inertia are the BOTTOM of each YAML range; per-episode
+  point masses can only add inertia, never remove it.
 
   All physical parameters are sourced from GliderParams (sim/glider_dynamics.py).
   Aerodynamic coefficients are translated from sim/aerodynamics.py.
@@ -26,16 +38,16 @@
 
   <fileheader>
     <author>RL-Glider project</author>
-    <description>1.1 kg hand-launched return-to-launch fixed-wing glider</description>
+    <description>As-built return-to-launch fixed-wing glider (mass properties generated from mass_properties.yaml)</description>
   </fileheader>
 
   <!-- ================================================================
        METRICS  (SI units; JSBSim auto-converts to English internally)
        ================================================================ -->
   <metrics>
-    <wingarea  unit="M2">0.38</wingarea>    <!-- S = 0.38 m^2 -->
-    <wingspan  unit="M">2.0</wingspan>      <!-- b = 2.0 m    -->
-    <chord     unit="M">0.19</chord>        <!-- c = 0.19 m   -->
+    <wingarea  unit="M2">0.38</wingarea>
+    <wingspan  unit="M">2</wingspan>
+    <chord     unit="M">0.19</chord>
     <!-- Aero reference point at CG (body-frame origin) -->
     <location name="AERORP"   unit="M"><x>0.0</x><y>0.0</y><z>0.0</z></location>
     <location name="EYEPOINT" unit="M"><x>0.1</x><y>0.0</y><z>-0.05</z></location>
@@ -46,17 +58,20 @@
        MASS & INERTIA  (kg, kg*m^2, FRD body frame)
        ================================================================ -->
   <mass_balance>
-    <ixx unit="KG*M2">0.18</ixx>   <!-- roll  inertia -->
-    <iyy unit="KG*M2">0.10</iyy>   <!-- pitch inertia -->
-    <izz unit="KG*M2">0.26</izz>   <!-- yaw   inertia -->
+    <!-- Bottom of each mass_properties.yaml range. izz = (ixx + iyy) * izz_factor
+         with the factor's nominal value, so the point masses (which add equal
+         amounts to izz and to ixx or iyy) keep izz on the flat-plate relation. -->
+    <ixx unit="KG*M2">0.14</ixx>   <!-- roll  inertia -->
+    <iyy unit="KG*M2">0.1</iyy>   <!-- pitch inertia -->
+    <izz unit="KG*M2">0.24</izz>   <!-- yaw   inertia -->
     <ixz unit="KG*M2">0.01</ixz>   <!-- roll-yaw cross term -->
-    <emptywt unit="KG">1.1</emptywt>
+    <emptywt unit="KG">1.5</emptywt>
     <location name="CG" unit="M"><x>0.0</x><y>0.0</y><z>0.0</z></location>
     <!-- Movable ballast point mass: the per-episode hook for mass/CG domain
          randomisation (JSBSimFDM.apply_domain_rand()'s mass_kg/cg_offset_m).
-         Weight is signed: a build lighter than the nominal 1.1 kg airframe
-         is represented as negative ballast rather than by editing emptywt,
-         so the nominal mass stays a fixed, documented reference point. This
+         Weight is signed: a build lighter than emptywt is represented as
+         negative ballast rather than by editing emptywt, so emptywt stays a
+         fixed, generated reference point. This
          is the single largest build-to-build uncertainty on a hand-built
          airframe (mass and CG position) and was previously not randomised
          at all despite STAGES declaring a mass_range per curriculum stage.
