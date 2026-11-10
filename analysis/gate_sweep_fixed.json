@@ -1,0 +1,3391 @@
+{
+ "spec": "V20 Phase 5 \u2014 physics gates at the domain-randomisation corners",
+ "trim_mode": "fixed",
+ "random": null,
+ "cl_ref": null,
+ "provenance": {
+  "utc_timestamp": "2026-11-10T19:18:10+00:00",
+  "git_sha": "6cb7421daa3449a40e72e1a86c079afcd940b21b",
+  "jsbsim": "1.3.1",
+  "runtime_s": 11.0
+ },
+ "n_configs": 45,
+ "n_passed": 42,
+ "configs": [
+  {
+   "name": "nominal",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880532397454183e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027607416493,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008940174304,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.984736469502843e-06,
+      "max_abs_theta_rad": 0.02021025636116451
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "mass_kg_lo",
+   "params": {
+    "mass_kg": 1.5,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 11.898521349802753,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0011004605194954e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.171825156960221,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.025589568331342,
+      "10.00": 4.8544451166275415,
+      "12.00": 5.7965995816340214,
+      "14.00": 5.3701944203337995,
+      "22.00": 3.8756498351380557
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010454234590918773,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 3.128130830635659e-06,
+      "max_abs_theta_rad": 0.020208711787604316
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "mass_kg_hi",
+   "params": {
+    "mass_kg": 1.8,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 13.03417708848757,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.1855403599974137e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.194270445395464,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0394922374835267,
+      "10.00": 4.889503121958919,
+      "12.00": 5.838850979125293,
+      "14.00": 5.348875705827937,
+      "22.00": 3.8699823370771824
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010462599827936792,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.8428456855366845e-06,
+      "max_abs_theta_rad": 0.0202093108927964
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cg_x_m_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": -0.013,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 12.16860676126305,
+    "gamma_deg": -3.5831379798637757,
+    "vt_ms": 7.883257151377252,
+    "cl": 1.142247262917686,
+    "cd": 0.071526621274329,
+    "dm_dalpha": -0.06649430728741423,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 3.5315379469803626e-05,
+     "passed": true,
+     "detail": "drift=0.004% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 2.9888475236798464,
+     "passed": false,
+     "detail": "L/D=3.0 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.10129494963775837,
+     "passed": false,
+     "detail": "|q|=0.101 rad/s at t=4.96 s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 3.137910859460112,
+      "max_abs_theta_rad": 1.569529228733471
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": false
+  },
+  {
+   "name": "cg_x_m_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.015,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 2.765487935851411,
+    "gamma_deg": -5.916662909210351,
+    "vt_ms": 16.324101899036886,
+    "cl": 0.2654868418417401,
+    "cd": 0.02751343272903482,
+    "dm_dalpha": -0.08244534752169252,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 4.058383214532636e-05,
+     "passed": true,
+     "detail": "drift=0.004% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 9.669200342729937,
+     "passed": false,
+     "detail": "L/D=9.7 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.87239923184467,
+      "12.00": 5.81823652459665,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.001075753062737307,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 1.916281452664346e-05,
+      "max_abs_theta_rad": 0.06309559514260364
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": false
+  },
+  {
+   "name": "ixx_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.14,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880519684222132e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027623090993,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008935950439,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.3857165508556155e-06,
+      "max_abs_theta_rad": 0.02021025642343189
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "ixx_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.32,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880528578710678e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027583784641,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.001035201050619019,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 3.911509857757102e-06,
+      "max_abs_theta_rad": 0.02021025624169903
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "iyy_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.11,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 1.9645304306661733e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.163505225508764,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.87239923184467,
+      "12.00": 5.81823652459665,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010728181852135222,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.5722131309804153e-06,
+      "max_abs_theta_rad": 0.019513822050796527
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "iyy_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.26,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.3428631615847657e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.240002949207932,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.87239923184467,
+      "12.00": 5.81823652459665,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0013390310039350752,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 3.79487080912653e-06,
+      "max_abs_theta_rad": 0.02517595169034834
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "clmax_scale_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 0.85,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.054899574455114,
+    "vt_ms": 12.441604054325827,
+    "cl": 0.45833186989733277,
+    "cd": 0.03249102725115589,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.088134212588241e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.185776373790981,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "3.40": 1.7485396382176122,
+      "8.50": 4.162757781419341,
+      "10.20": 4.967081229458357,
+      "11.90": 4.54369329117671,
+      "18.70": 3.287410050602277
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=10.2 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.001035174189625755,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.984758595123049e-06,
+      "max_abs_theta_rad": 0.02020889286197251
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "clmax_scale_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.15,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.054757037685948,
+    "vt_ms": 12.441197990258585,
+    "cl": 0.45836186989733274,
+    "cd": 0.03249200792994847,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0879798202683906e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186278822833142,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.60": 2.316861038114814,
+      "11.50": 5.5817560075265495,
+      "13.80": 6.668904387655943,
+      "16.10": 6.174486598812534,
+      "25.30": 4.457939603266738
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=13.8 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352275949652907,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.9847143330063563e-06,
+      "max_abs_theta_rad": 0.020211621203899483
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cl_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 0.8,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.645260206722051,
+    "vt_ms": 13.904164583619888,
+    "cl": 0.3666929888837214,
+    "cd": 0.029794976424659187,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.6576088164718928e-05,
+     "passed": true,
+     "detail": "drift=0.003% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 12.357405810432617,
+     "passed": true,
+     "detail": "L/D=12.4 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "5.00": 2.020198678272253,
+      "12.50": 4.882512914126723,
+      "15.00": 5.835891827795317,
+      "17.50": 5.35142633369263,
+      "27.50": 3.8722834363042984
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=15.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.001065367463341447,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 5.0224508079024456e-06,
+      "max_abs_theta_rad": 0.009402356712879072
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cl_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.2,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -3.7228576183063757,
+    "vt_ms": 11.359836686349574,
+    "cl": 0.5499962438767994,
+    "cd": 0.035787000790071244,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 1.7654511273464863e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 15.43354136372205,
+     "passed": true,
+     "detail": "L/D=15.4 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "3.33": 2.0452217034555855,
+      "8.33": 4.862285549562629,
+      "10.00": 5.800581221397997,
+      "11.67": 5.36712002121444,
+      "18.33": 3.873208898471949
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=10.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0011446267342720606,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.8983515453578625e-06,
+      "max_abs_theta_rad": 0.027653275130253622
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "k_induced_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.024,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -3.750040151280984,
+    "vt_ms": 12.443658583164789,
+    "cl": 0.4583468698973328,
+    "cd": 0.030041963600131477,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 1.938550582771331e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 15.350689047170006,
+     "passed": true,
+     "detail": "L/D=15.4 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327581074070653,
+      "10.00": 4.873132095183387,
+      "12.00": 5.819499897508639,
+      "14.00": 5.360206441149703,
+      "22.00": 3.8731040944086925
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010378235014312919,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.726603090281214e-06,
+      "max_abs_theta_rad": 0.025567503645873214
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "k_induced_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.048,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.377140870752292,
+    "vt_ms": 12.438821661718865,
+    "cl": 0.4583468698973328,
+    "cd": 0.03508392720026295,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.2451241105830843e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 13.131793350202859,
+     "passed": true,
+     "detail": "L/D=13.1 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.032659480488977,
+      "10.00": 4.871623688644635,
+      "12.00": 5.816899622363442,
+      "14.00": 5.358285575212516,
+      "22.00": 3.872367384421908
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010324337166580499,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 3.645438942411461e-06,
+      "max_abs_theta_rad": 0.014545173244178942
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cmalpha_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 0.75,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 6.366197723675782,
+    "gamma_deg": -3.5878508160784346,
+    "vt_ms": 10.777796479605522,
+    "cl": 0.611095826529787,
+    "cd": 0.03831680066220316,
+    "dm_dalpha": -0.035838333587736804,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 1.573925646438725e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 15.992383819001333,
+     "passed": true,
+     "detail": "L/D=16.0 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0011593766457276152,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 9.132754537319334e-06,
+      "max_abs_theta_rad": 0.05831737813681035
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cmalpha_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.25,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 3.8197186342055147,
+    "gamma_deg": -4.64526020672195,
+    "vt_ms": 13.904164583619664,
+    "cl": 0.3666929888837333,
+    "cd": 0.029794976424659496,
+    "dm_dalpha": -0.05973055597956234,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.683656704847091e-05,
+     "passed": true,
+     "detail": "drift=0.003% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 12.359106036862226,
+     "passed": true,
+     "detail": "L/D=12.4 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.001058143515328209,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 8.38690738243419e-06,
+      "max_abs_theta_rad": 0.022490584635325897
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cmq_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 0.6,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.1695105784864024e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.08547603438442,
+     "passed": true,
+     "detail": "L/D=14.1 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0017402777955312211,
+     "passed": true,
+     "detail": "max|q|=0.002 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.9879375028056182e-06,
+      "max_abs_theta_rad": 0.027429080881692193
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cmq_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.4,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0454045241997192e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.152731516236994,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.000867639502568434,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.982115194819094e-06,
+      "max_abs_theta_rad": 0.018775357441255084
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "clp_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 0.6,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880521881312467e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027523083416,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008787103276,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 4.440584986262919e-06,
+      "max_abs_theta_rad": 0.020210256183128616
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "clp_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.4,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880514665763752e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027654484343,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352009031315836,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.2424743704913444e-06,
+      "max_abs_theta_rad": 0.02021025645681068
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "clbeta_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 0.6,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880509619947316e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186028617693921,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.00103520065325438,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 7.46705009779979e-05,
+      "max_abs_theta_rad": 0.020210257381989154
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "clbeta_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.4,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880512478221196e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027277634945,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352010199328975,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 1.1280324411974384e-05,
+      "max_abs_theta_rad": 0.02021025572023089
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cnbeta_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 0.5,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880572169636553e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027118281954,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352012931174159,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 1.324957803601986e-05,
+      "max_abs_theta_rad": 0.020210255065286547
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cnbeta_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.5,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.088052393353365e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186028321224892,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352007313083284,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 4.640061716775506e-05,
+      "max_abs_theta_rad": 0.02021025714151518
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cnr_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 0.5,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.08805233318401e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186028712335311,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352005019214057,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 9.743472075338997e-05,
+      "max_abs_theta_rad": 0.020210257349175267
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cnr_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.5,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880509310562627e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027233716121,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352011413566895,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 1.223023396299222e-05,
+      "max_abs_theta_rad": 0.020210255591861348
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "elev_eff_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 0.6,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880532397454183e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027607416493,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008940174304,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.984736469502843e-06,
+      "max_abs_theta_rad": 0.02021025636116451
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "elev_eff_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.4,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880532397454183e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027607416493,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008940174304,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.984736469502843e-06,
+      "max_abs_theta_rad": 0.02021025636116451
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "ail_eff_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 0.6,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880532397454183e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027607416493,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008940174304,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.984736469502843e-06,
+      "max_abs_theta_rad": 0.02021025636116451
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "ail_eff_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.4,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880532397454183e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027607416493,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008940174304,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.984736469502843e-06,
+      "max_abs_theta_rad": 0.02021025636116451
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "rud_eff_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 0.6,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880532397454183e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027607416493,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008940174304,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.984736469502843e-06,
+      "max_abs_theta_rad": 0.02021025636116451
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "rud_eff_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.4,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880532397454183e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027607416493,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008940174304,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.984736469502843e-06,
+      "max_abs_theta_rad": 0.02021025636116451
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "sw_mult_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 0.95,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.764608113395678,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04539522254446737,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.1615148339413848e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.198816421318025,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 1.9346987802122264,
+      "10.00": 4.637918620303855,
+      "12.00": 5.53833965058435,
+      "14.00": 5.0857529474636705,
+      "22.00": 3.6776317585913265
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010368921134373775,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 3.0645170735264467e-06,
+      "max_abs_theta_rad": 0.020322796711688018
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "sw_mult_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.05,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.141564160398948,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.05017366702283221,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0202358832192693e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.17427996632511,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.130340279929617,
+      "10.00": 5.105919340669251,
+      "12.00": 6.096976472016953,
+      "14.00": 5.633379512736492,
+      "22.00": 4.0680165685045395
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010326050613459748,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.9106938989588502e-06,
+      "max_abs_theta_rad": 0.020098367246912312
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "trim_bias_roll_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": -0.04,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880532397637793e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027607416491,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.001035200894017742,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.9847395517860165e-06,
+      "max_abs_theta_rad": 0.02021025636116341
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "trim_bias_roll_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.04,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.088053239727057e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027607416808,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008940168933,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.9847333924322896e-06,
+      "max_abs_theta_rad": 0.0202102563611642
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "trim_bias_pitch_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": -0.03,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 5.974765690437948,
+    "gamma_deg": -3.671631411092408,
+    "vt_ms": 11.155267166580492,
+    "cl": 0.5703862371397835,
+    "cd": 0.03660163877225565,
+    "dm_dalpha": -0.047784444783648905,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 1.642264308549302e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 15.556086889897074,
+     "passed": true,
+     "detail": "L/D=15.6 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0333299310960897,
+      "10.00": 4.8730306963417975,
+      "12.00": 5.818873912711697,
+      "14.00": 5.3589218412646495,
+      "22.00": 3.872615588733614
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0013220884118564779,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 5.777025783348518e-06,
+      "max_abs_theta_rad": 0.05014943480271689
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "trim_bias_pitch_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.03,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 3.5745308950757817,
+    "gamma_deg": -4.832371061332244,
+    "vt_ms": 14.305832541135372,
+    "cl": 0.3462968659272792,
+    "cd": 0.029276400637627986,
+    "dm_dalpha": -0.04778444478365243,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.9844749792924e-05,
+     "passed": true,
+     "detail": "drift=0.003% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 11.856709699740051,
+     "passed": true,
+     "detail": "L/D=11.9 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0320904337569607,
+      "10.00": 4.8717677258115835,
+      "12.00": 5.8175990867375065,
+      "14.00": 5.359624465288622,
+      "22.00": 3.8728767114749805
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0009119248609573553,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 1.005137838622526e-05,
+      "max_abs_theta_rad": 0.029519058534248126
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cd0_add_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880532397454183e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027607416493,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008940174304,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.984736469502843e-06,
+      "max_abs_theta_rad": 0.02021025636116451
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "cd0_add_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.01
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -5.29652523906333,
+    "vt_ms": 12.430379424584542,
+    "cl": 0.4583468698973328,
+    "cd": 0.04249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.6873510468462102e-05,
+     "passed": true,
+     "detail": "drift=0.003% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 10.823901928554385,
+     "passed": true,
+     "detail": "L/D=10.8 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0324315099613646,
+      "10.00": 4.871717142753874,
+      "12.00": 5.817420008381262,
+      "14.00": 5.358529508704257,
+      "22.00": 3.872207025431981
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010118461397890237,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 8.108033593315203e-06,
+      "max_abs_theta_rad": 0.016706187986869018
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "corner_heaviest_draggiest",
+   "params": {
+    "mass_kg": 1.8,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 0.85,
+    "cl_mult": 1.0,
+    "k_induced": 0.048,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 0.95,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.01
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -5.617759364383139,
+    "vt_ms": 13.357577687059976,
+    "cl": 0.45833186989733277,
+    "cd": 0.045083267191684886,
+    "dm_dalpha": -0.04539522254446737,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 3.077026948061339e-05,
+     "passed": true,
+     "detail": "drift=0.003% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 10.20276088473344,
+     "passed": true,
+     "detail": "L/D=10.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "3.40": 1.6691698975790064,
+      "8.50": 3.9745797885520595,
+      "10.20": 4.7425553922293995,
+      "11.90": 4.302717378442594,
+      "18.70": 3.119066537545792
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=10.2 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010390597750750533,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 9.974070670222942e-06,
+      "max_abs_theta_rad": 0.022522277515904993
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "corner_lightest_least_stable",
+   "params": {
+    "mass_kg": 1.5,
+    "cg_x_m": -0.013,
+    "ixx": 0.14,
+    "iyy": 0.11,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.2,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 0.75,
+    "cmq_mult": 0.6,
+    "clp_mult": 0.6,
+    "clbeta_mult": 0.6,
+    "cnbeta_mult": 0.5,
+    "cnr_mult": 0.5,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": ".",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 14.05820420364364,
+    "gamma_deg": -3.4254478646659856,
+    "vt_ms": 8.509493007362122,
+    "cl": 0.8967775928257505,
+    "cd": 0.053678125439617204,
+    "dm_dalpha": -0.05483147561739399,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 1.941400752250439e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 10.691983725924908,
+     "passed": true,
+     "detail": "L/D=10.7 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "3.33": 2.036692862778157,
+      "8.33": 4.840812073250702,
+      "10.00": 5.774721743851689,
+      "11.67": 5.380309339418645,
+      "18.33": 3.8767384180351594
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=10.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.10135614514356894,
+     "passed": false,
+     "detail": "|q|=0.101 rad/s at t=2.06 s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 0.002095466262525862,
+      "max_abs_theta_rad": 0.46258400496431257
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": false
+  },
+  {
+   "name": "ixz_lo",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": "analysis\\fdm_variants\\ixz_lo",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.0880522859041535e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027604057438,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.0010352008292463478,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 2.9641378437518907e-06,
+      "max_abs_theta_rad": 0.020210256418735303
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  },
+  {
+   "name": "ixz_hi",
+   "params": {
+    "mass_kg": 1.64,
+    "cg_x_m": 0.0,
+    "ixx": 0.21,
+    "iyy": 0.16,
+    "clmax_scale": 1.0,
+    "cl_mult": 1.0,
+    "k_induced": 0.03566,
+    "cmalpha_mult": 1.0,
+    "cmq_mult": 1.0,
+    "clp_mult": 1.0,
+    "clbeta_mult": 1.0,
+    "cnbeta_mult": 1.0,
+    "cnr_mult": 1.0,
+    "elev_eff_mult": 1.0,
+    "ail_eff_mult": 1.0,
+    "rud_eff_mult": 1.0,
+    "sw_mult": 1.0,
+    "trim_bias_roll": 0.0,
+    "trim_bias_pitch": 0.0,
+    "cd0_add": 0.0
+   },
+   "root": "analysis\\fdm_variants\\ixz_hi",
+   "trim_mode": "fixed",
+   "trim": {
+    "alpha_deg": 4.774648292756751,
+    "gamma_deg": -4.0548283027464995,
+    "vt_ms": 12.441401017334758,
+    "cl": 0.4583468698973328,
+    "cd": 0.03249151758252868,
+    "dm_dalpha": -0.04778444478364985,
+    "statically_stable": true,
+    "elevator_cmd": 0.0,
+    "mode": "fixed"
+   },
+   "gates": {
+    "energy_conservation": {
+     "value": 2.088053221017087e-05,
+     "passed": true,
+     "detail": "drift=0.002% (threshold < 0.1%)"
+    },
+    "glide_ratio": {
+     "value": 14.186027610761307,
+     "passed": true,
+     "detail": "L/D=14.2 (threshold 10-20)"
+    },
+    "stall": {
+     "value": {
+      "4.00": 2.0327101908639196,
+      "10.00": 4.872399231844671,
+      "12.00": 5.818236524596651,
+      "14.00": 5.359273177453529,
+      "22.00": 3.8727461673881276
+     },
+     "passed": true,
+     "detail": "CL drops past alpha=12.0 deg"
+    },
+    "trimmed_stability": {
+     "value": 0.001035200958353404,
+     "passed": true,
+     "detail": "max|q|=0.001 rad/s (threshold < 0.1)"
+    },
+    "attitude_integrity": {
+     "value": {
+      "max_abs_phi_rad": 3.003489328730635e-06,
+      "max_abs_theta_rad": 0.0202102563036148
+     },
+     "passed": true,
+     "detail": "Euler angles finite over 30s"
+    }
+   },
+   "passed": true
+  }
+ ]
+}
