@@ -44,6 +44,7 @@ KG_PER_SLUG      = 14.5939029
 KGM2_PER_SLUGFT2 = 1.35581795
 
 BALLAST, IN_Y_R, IN_Y_L, IN_X_F, IN_X_A = range(5)
+N_POINT_MASSES = 5
 
 MAX_POINT_MASS_KG = 1.5     # conditioning guard on every point mass
 MAX_BALLAST_X_M   = 1.0     # ballast travel either side of the reference CG
@@ -143,17 +144,20 @@ class MassPropertySolver:
     # ------------------------------------------------------------------
 
     def solve(self, fdm, mass_kg: float, cg_x_m: float, ixx: float, iyy: float) -> dict:
-        """Return point-mass weights reaching the targets, or raise UnreachableTarget.
+        """Solve, apply to `fdm`, and return the point-mass weights, or raise
+        UnreachableTarget.
 
         The returned dict holds the four unknowns plus `achieved` (JSBSim
         readback at the solution). Solutions are cached per target, quantised
-        to CACHE_QUANTUM; a hit returns the solution of the first target that
-        fell in that cell.
+        to CACHE_QUANTUM; a hit applies the solution of the first target that
+        fell in that cell. Either way the weights are on `fdm` on return.
         """
         key = self._key(mass_kg, cg_x_m, ixx, iyy)
         if key in self._cache:
             self.cache_hits += 1
-            return _copy(self._cache[key])
+            sol = _copy(self._cache[key])
+            self.apply(fdm, sol)
+            return sol
         self.cache_misses += 1
 
         check_point_mass_layout(fdm)

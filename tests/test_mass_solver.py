@@ -101,8 +101,13 @@ def test_cache_returns_same_solution(fdm):
         assert hit[k] == first[k], k
         assert hit[k] == pytest.approx(fresh[k], abs=0.02), k
 
-    # The cached weights, re-applied, still meet the nudged target.
-    solver.apply(fdm, hit)
+    # A hit must leave the weights ON the FDM, not just return them: zero the
+    # point masses, hit the cache again, and read back without apply().
+    for i in range(5):
+        fdm[f"inertia/pointmass-weight-lbs[{i}]"] = 0.0
+    fdm.run_ic()
+    solver.solve(fdm, *nudged)
+    assert solver.cache_hits == 2
     a = read_mass_properties(fdm)
     for name, idx in (("mass_kg", 0), ("ixx", 2), ("iyy", 3)):
         assert a[name] == pytest.approx(nudged[idx], rel=REL_TOL), name
