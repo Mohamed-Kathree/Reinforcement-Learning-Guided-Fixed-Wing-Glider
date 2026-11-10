@@ -63,13 +63,79 @@ ranges (for example a 200 mm CG shift at 1.64 kg). The guards check physical
 validity, not plausibility. The domain-randomisation ranges are what keep the
 sampled airframes plausible.
 
-## ixz: sign disputed, range not pinned
+## ixz: fixed at the midpoint, sensitivity measured rather than randomised
 
 The CAD rebuild gives +0.0036 kg·m² and V19 gives −0.008 kg·m², which
-disagree in sign. The YAML now carries
-`ixz: {value: 0.0, range: [-0.010, 0.010], source: estimated}`. The value is
-the range midpoint, not a preference for either estimate. The previous file
-pinned +0.01.
+disagree in sign. The YAML carries
+`ixz: {value: 0.0, range: [-0.010, 0.010], source: estimated}`. The previous
+aircraft file pinned +0.01.
+
+**Decision.** ixz is fixed at 0.0, the range midpoint, in the training
+aircraft, and is not in the domain-randomisation table. Its sensitivity is
+quantified in the Phase 5 gate sweep instead.
+
+**Justification.**
+
+- The term is small: |ixz| ≤ 0.010 against Ixx ≥ 0.14, under 7%.
+- The two estimates straddle zero, so the midpoint is the value that favours
+  neither.
+- Inertia is read-only in JSBSim, and the point masses (all at z = 0)
+  produce no ixz. Randomising it would mean switching between several
+  loaded aircraft files per environment, a structural change to the FDM
+  wrapper.
+- The measured effect is inside the chaotic noise band. On the 20 fixed-seed
+  baseline episodes:
+
+  | Change | Mean shift | Worst single episode |
+  |---|---|---|
+  | ixz 0.0 → +0.010 | −0.66 m | 12.1 m |
+  | ixz 0.0 → −0.010 | +0.15 m | 2.6 m |
+  | CD0 −1e-4 (0.4% of CD0) | −0.59 m | 11.8 m |
+  | CL × (1 + 1e-4) | −0.06 m | 0.9 m |
+
+**Mechanism.** `python aircraft/generate_fdm.py --ixz-variants` writes
+aircraft files at the range low, value and high to `analysis/fdm_variants/`
+(gitignored). The Phase 5 sweep flies them sequentially. The environment
+never loads them.
+
+## clmax-scale: peak lift at constant slope
+
+SPEC V20 lists `aero/clmax-scale` as a multiplier on the CLalpha function.
+Applied literally, it would multiply the whole CL table, which is exactly
+what `aero/cl-mult` already does. The two domain-randomisation parameters
+would then be indistinguishable, and the Phase 7 regression could not
+separate them.
+
+It is implemented as a rescaling of the table about the origin,
+CL(α) = s · table(α / s). This keeps the pre-stall lift slope and scales
+both CLmax and the stall angle by s, which is what the `clmax` range
+(V19 stall 8.8 m/s against the table's 7.75 m/s) describes. At s = 1 both
+operations are exact in floating point. In the pre-stall region lift
+changes by at most 3e-5 relative (the table's segments differ slightly in
+slope), against 15% for a plain multiplier at s = 1.15.
+
+## Control effectiveness: per surface
+
+The retired single control multiplier scaled seven terms. Each now belongs
+to the surface that produces it:
+
+| Multiplier | Surface | Terms |
+|---|---|---|
+| `clda-mult` | aileron | Clda, Cnda (adverse yaw) |
+| `cmde-mult` | elevator | Cmde, CLde, and the elevator term in CLtotal |
+| `cndr-mult` | rudder | Cndr, Cldr |
+
+With all three set to one value the physics is identical to the old
+multiplier, which `tests/test_dr_hooks.py` checks to 1e-9 over 6 s of
+doublets. Until Phase 4 the environment draws one value and applies it to
+all three, which keeps the random stream and the physics unchanged.
+
+## Geometry
+
+Wing area (`metrics/Sw-sqft`) is writable at runtime and survives
+`run_ic()`. Span (`metrics/bw-ft`) and mean chord (`metrics/cbarw-ft`) are
+not: writes silently do nothing on JSBSim 1.3.1. Span and chord are
+therefore fixed at their YAML values, and only area is randomised.
 
 ## Glide-ratio gate: 5 s window is start-speed sensitive
 

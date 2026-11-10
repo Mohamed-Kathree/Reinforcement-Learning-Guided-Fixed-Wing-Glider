@@ -95,3 +95,27 @@ def test_no_handwritten_drift():
         "produces. Edit mass_properties.yaml or rlglider.template.xml, never the XML, "
         "then run: python aircraft/generate_fdm.py"
     )
+
+
+def test_ixz_variants_differ_only_in_ixz(mp):
+    """The ixz validation variants (fixed at the YAML value in training; the
+    sensitivity is measured on these instead) span the YAML range and change
+    nothing but the ixz element and the header note."""
+    from aircraft.generate_fdm import ixz_variant_values
+
+    values = ixz_variant_values()
+    assert [values["lo"], values["hi"]] == mp["inertia"]["ixz"]["range"]
+    assert values["mid"] == mp["inertia"]["ixz"]["value"]
+
+    base = strip_timestamp(render(timestamp="T")).splitlines()
+    for label, value in values.items():
+        var = strip_timestamp(render(timestamp="T", ixz=value)).splitlines()
+        var = [ln for ln in var if "VALIDATION VARIANT" not in ln]
+        diff = [(a, b) for a, b in zip(base, var) if a != b]
+        assert len(var) == len(base), label
+        if value == mp["inertia"]["ixz"]["value"]:
+            assert diff == [], label
+        else:
+            assert len(diff) == 1 and "<ixz" in diff[0][0], (label, diff)
+            root = ET.fromstring("\n".join(var).encode("utf-8"))
+            assert float(root.find("mass_balance/ixz").text) == pytest.approx(value)

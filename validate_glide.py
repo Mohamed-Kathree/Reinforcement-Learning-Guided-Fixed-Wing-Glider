@@ -116,7 +116,6 @@ def _set_near_trim_ic(
     fdm["aero/cl-mult"]       = 1.0
     fdm["aero/cd0-add"]       = 0.0
     fdm["aero/cd-mult"]       = 1.0
-    fdm["aero/ctrl-eff-mult"] = 1.0
     fdm["ic/h-agl-ft"]        = alt_m * M2FT
     fdm["ic/vt-fps"]          = vt_ms * MS2FPS
     fdm["ic/alpha-deg"]       = alpha_deg

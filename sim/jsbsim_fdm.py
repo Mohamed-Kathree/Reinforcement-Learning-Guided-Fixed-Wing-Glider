@@ -82,6 +82,18 @@ AILERON_MAX_RAD  = np.radians(25.0)
 ELEVATOR_MAX_RAD = np.radians(20.0)
 RUDDER_MAX_RAD   = np.radians(25.0)
 
+# Domain-randomisation hooks declared in aircraft/rlglider/rlglider.xml.
+# reset() restores each to the default the loaded model declares (read back
+# at construction, never copied here), so no episode inherits the last one's.
+DR_PROPERTIES: tuple[str, ...] = (
+    "aero/cl-mult", "aero/clmax-scale", "aero/cd0-add", "aero/cd-mult",
+    "aero/k-induced", "aero/cm0-offset",
+    "aero/cmalpha-mult", "aero/cmq-mult", "aero/cmde-mult",
+    "aero/clp-mult", "aero/clda-mult", "aero/clbeta-mult",
+    "aero/cnbeta-mult", "aero/cnr-mult", "aero/cndr-mult",
+    "fcs/trim-bias-roll", "fcs/trim-bias-pitch",
+)
+
 # Number of <contact> elements in aircraft/rlglider/rlglider.xml
 # (NOSE, TAIL, LEFT_WINGTIP, RIGHT_WINGTIP) -- belly-skid ground contact points.
 N_CONTACT_POINTS = 4
@@ -145,6 +157,10 @@ class JSBSimFDM:
         # via the BALLAST point mass relative to this reference.
         self.empty_weight_kg: float = float(self._fdm["inertia/empty-weight-lbs"]) / KG2LBS
 
+        # Neutral values of the domain-randomisation hooks, as declared by
+        # the aircraft file.
+        self._dr_defaults: dict[str, float] = {p: float(self._fdm[p]) for p in DR_PROPERTIES}
+
     # ------------------------------------------------------------------
     # Private setup
     # ------------------------------------------------------------------
@@ -203,10 +219,8 @@ class JSBSimFDM:
         fdm = self._fdm
 
         # Neutral domain-randomisation properties (apply_domain_rand overrides)
-        fdm["aero/cl-mult"]       = 1.0
-        fdm["aero/cd0-add"]       = 0.0
-        fdm["aero/cd-mult"]       = 1.0
-        fdm["aero/ctrl-eff-mult"] = 1.0
+        for prop, value in self._dr_defaults.items():
+            fdm[prop] = value
 
         # Geographic reference: fixed at equator/prime meridian.
         # Absolute position does not matter for the RTL task -- only relative
@@ -315,7 +329,9 @@ class JSBSimFDM:
         *,
         cl_mult:       float = 1.0,
         cd0_add:       float = 0.0,
-        ctrl_eff_mult: float = 1.0,
+        clda_mult:     float = 1.0,
+        cmde_mult:     float = 1.0,
+        cndr_mult:     float = 1.0,
         mass_kg:       float | None = None,
         cg_offset_m:   float = 0.0,
     ) -> None:
@@ -328,7 +344,9 @@ class JSBSimFDM:
         Args:
             cl_mult       : CL table multiplier (nominal 1.0; range 0.9–1.1)
             cd0_add       : additive CD0 offset (nominal 0.0; range −0.005–0.010)
-            ctrl_eff_mult : control-effectiveness scale (nominal 1.0; range 0.75–1.10)
+            clda_mult     : aileron effectiveness (Clda, Cnda), nominal 1.0
+            cmde_mult     : elevator effectiveness (Cmde, CLde), nominal 1.0
+            cndr_mult     : rudder effectiveness (Cndr, Cldr), nominal 1.0
             mass_kg       : total aircraft mass (None = the model's <emptywt>,
                             i.e. zero ballast). Achieved via the BALLAST point
                             mass (signed: mass_kg < empty_weight_kg gives
@@ -349,7 +367,9 @@ class JSBSimFDM:
         fdm = self._fdm
         fdm["aero/cl-mult"]       = float(cl_mult)
         fdm["aero/cd0-add"]       = float(cd0_add)
-        fdm["aero/ctrl-eff-mult"] = float(ctrl_eff_mult)
+        fdm["aero/clda-mult"]     = float(clda_mult)
+        fdm["aero/cmde-mult"]     = float(cmde_mult)
+        fdm["aero/cndr-mult"]     = float(cndr_mult)
 
         ballast_kg = 0.0 if mass_kg is None else float(mass_kg) - self.empty_weight_kg
         fdm["inertia/pointmass-weight-lbs[0]"]      = ballast_kg * KG2LBS

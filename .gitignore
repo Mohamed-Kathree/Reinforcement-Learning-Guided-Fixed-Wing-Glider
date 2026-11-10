@@ -265,3 +265,6 @@ data/train_stream.jsonl
 
 # Claude Code project-local skills/config -- never committed
 .claude/
+
+# Generated ixz validation variants (aircraft/generate_fdm.py --ixz-variants)
+analysis/fdm_variants/

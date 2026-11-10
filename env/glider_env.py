@@ -647,7 +647,10 @@ class GliderEnv(gym.Env):
         aero_lo, aero_hi = self.cfg.get('aero_scale_range', (1.0, 1.0))
         cd0_scale    = float(self._rng.uniform(aero_lo, aero_hi))
         cl_mult      = float(self._rng.uniform(0.9, 1.1))
-        ctrl_eff_mult = float(self._rng.uniform(0.75, 1.10))
+        # One control-effectiveness draw applied to all three surfaces:
+        # identical physics and RNG stream to the single multiplier it
+        # replaces (SPEC V20 Phase 3). Phase 4 samples them independently.
+        control_eff  = float(self._rng.uniform(0.75, 1.10))
 
         # Convert multiplicative CD0 factor to additive offset (CD0_nominal = 0.025)
         cd0_add = 0.025 * (cd0_scale - 1.0)
@@ -661,7 +664,8 @@ class GliderEnv(gym.Env):
         mass_kg     = None if mass_lo is None else float(self._rng.uniform(mass_lo, mass_hi))
         cg_offset_m = float(self._rng.uniform(-CG_OFFSET_RANGE_M, CG_OFFSET_RANGE_M))
 
-        return dict(cl_mult=cl_mult, cd0_add=cd0_add, ctrl_eff_mult=ctrl_eff_mult,
+        return dict(cl_mult=cl_mult, cd0_add=cd0_add,
+                    clda_mult=control_eff, cmde_mult=control_eff, cndr_mult=control_eff,
                     mass_kg=mass_kg, cg_offset_m=cg_offset_m)
 
     def _build_launch_state(self) -> npt.NDArray:
