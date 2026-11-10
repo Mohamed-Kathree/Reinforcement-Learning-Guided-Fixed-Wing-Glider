@@ -21,12 +21,18 @@ cg:
 inertia:
   ixx: {value: 0.21, range: [0.14, 0.32], source: derived_cad}  # V19 0.28, CAD 0.16
   iyy: {value: 0.16, range: [0.10, 0.26], source: derived_cad}  # V19 0.22, CAD 0.12
-  # izz is NOT independent. The flat-plate relation izz = (ixx + iyy) * factor holds
-  # for this airframe on both estimates (CAD: 0.16+0.12 = 0.28 = its izz exactly;
-  # V19: 0.28+0.22 = 0.50 against its 0.45). Do not randomise izz directly.
-  izz_factor: {value: 1.0, range: [0.95, 1.05], source: derived_cad}
-  # Carried over unchanged from the V19 (1.1 kg) aircraft file; no CAD figure yet.
-  ixz: {value: 0.01, source: estimated}
+  # izz is NOT an entry. Modelling assumption: izz = ixx + iyy exactly.
+  # A rigid body satisfies ixx + iyy >= izz, with equality for a flat plate
+  # (all mass in the x-y plane), so this is the physical UPPER bound on yaw
+  # inertia: the most sluggish yaw response, i.e. the conservative end.
+  # Both estimates put the real ratio izz / (ixx + iyy) in 0.90-1.00
+  # (CAD 0.28/0.28 = 1.00; V19 0.45/0.50 = 0.90). Only a mass offset in z can
+  # lower it; see docs/SPEC_V20_decisions.md (known extension, unbuilt).
+  #
+  # ixz: the two estimates disagree in SIGN (CAD rebuild +0.0036, V19 -0.008).
+  # Not pinned; the range brackets both and Phase 4 randomises it. The value is
+  # the range midpoint, not a preference for either estimate.
+  ixz: {value: 0.0, range: [-0.010, 0.010], source: estimated}
 
 geometry:
   wing_area_m2: {value: 0.38, range: [0.361, 0.399], source: derived_cad}

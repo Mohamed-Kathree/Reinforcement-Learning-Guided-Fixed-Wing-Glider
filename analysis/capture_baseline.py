@@ -4,17 +4,22 @@ capture_baseline.py
 Part of: RL-Guided Return-to-Launch Fixed-Wing Glider
 
 SPEC V20 Phase 0 — capture the pre-change reference that every later
-regression claim is measured against.
+regression claim is measured against. Reused at the end of Phase 2 for the
+generated aircraft at its defaults (--nominal-mass adds a snapshot with the
+point-mass solver at the mass_properties.yaml nominal).
+
+    analysis/baseline_v19.json          captured at 34d2aad, the 1.1 kg aircraft
+    analysis/baseline_v20_defaults.json end of Phase 2, the generated aircraft
 
 Records:
-    * pytest tests/test_dynamics.py pass/fail counts
+    * pytest pass/fail counts (tests/test_dynamics.py, or --suite)
     * validate_glide.py exit code and its printed gate lines
     * the numeric value behind each of the five gates, recomputed with
       validate_glide's own helpers (the script prints only some of them)
     * a short near-trim trajectory snapshot, so a later refactor of the
       aircraft file can be checked state-by-state, not just gate-by-gate
 
-Run:   python -m analysis.capture_baseline [--out analysis/baseline_v19.json]
+Run:   python -m analysis.capture_baseline [--out PATH] [--suite tests/] [--nominal-mass]
 """
 
 from __future__ import annotations
@@ -47,15 +52,15 @@ def _sha256(path: str) -> str:
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def run_pytest() -> dict:
+def run_pytest(suite: str = "tests/test_dynamics.py") -> dict:
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", "tests/test_dynamics.py", "-v", "-p", "no:cacheprovider"],
+        [sys.executable, "-m", "pytest", suite, "-v", "-p", "no:cacheprovider"],
         cwd=PROJ_ROOT, capture_output=True, text=True,
     )
-    tests = dict(re.findall(r"::(\w+) (PASSED|FAILED|ERROR|SKIPPED)", proc.stdout))
+    tests = dict(re.findall(r"(\S+::\S+) (PASSED|FAILED|ERROR|SKIPPED)", proc.stdout))
     summary = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else ""
     return {
-        "command": "pytest tests/test_dynamics.py -v",
+        "command": f"pytest {suite} -v",
         "exit_code": proc.returncode,
         "passed": sum(v == "PASSED" for v in tests.values()),
         "failed": sum(v in ("FAILED", "ERROR") for v in tests.values()),
@@ -148,8 +153,12 @@ def gate_values() -> dict:
     }
 
 
-def trim_snapshot() -> dict:
-    """State at t = 0, 1, 2, 5, 10 s from validate_glide's near-trim IC."""
+def trim_snapshot(nominal_mass: bool = False) -> dict:
+    """State at t = 0, 1, 2, 5, 10 s from validate_glide's near-trim IC.
+
+    nominal_mass: solve the point masses for the mass_properties.yaml nominal
+    (mass, CG, Ixx, Iyy) and start at that mass's trim speed.
+    """
     keys = {
         "u_fps": "velocities/u-fps", "w_fps": "velocities/w-fps",
         "q_rad_s": "velocities/q-rad_sec", "theta_rad": "attitude/theta-rad",
@@ -160,7 +169,14 @@ def trim_snapshot() -> dict:
         "izz_slugs_ft2": "inertia/izz-slugs_ft2", "cg_x_in": "inertia/cg-x-in",
     }
     fdm = vg._make_fdm()
-    vg._set_near_trim_ic(fdm)
+    if nominal_mass:
+        from sim.mass_properties import nominal
+        from sim.mass_solver import MassPropertySolver
+        nom = nominal()
+        vg._set_near_trim_ic(fdm, vt_ms=vg.trim_speed_ms(nom["mass_kg"]))
+        MassPropertySolver().solve(fdm, nom["mass_kg"], nom["cg_x_m"], nom["ixx"], nom["iyy"])
+    else:
+        vg._set_near_trim_ic(fdm)
     marks = {0: "t0", int(1 / vg.DT): "t1", int(2 / vg.DT): "t2",
              int(5 / vg.DT): "t5", int(10 / vg.DT): "t10"}
     out = {}
@@ -174,12 +190,15 @@ def trim_snapshot() -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join("analysis", "baseline_v19.json"))
+    ap.add_argument("--suite", default="tests/test_dynamics.py")
+    ap.add_argument("--spec", default="V20 Phase 0 — baseline capture (V19 airframe state)")
+    ap.add_argument("--nominal-mass", action="store_true")
     args = ap.parse_args()
 
     import jsbsim
 
     record = {
-        "spec": "V20 Phase 0 — baseline capture (V19 airframe state)",
+        "spec": args.spec,
         "provenance": {
             "utc_timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "git_sha": _git("rev-parse", "HEAD"),
@@ -188,16 +207,19 @@ def main() -> None:
             "jsbsim": jsbsim.__version__,
             "aircraft_xml_sha256": _sha256(os.path.join(PROJ_ROOT, "aircraft", "rlglider", "rlglider.xml")),
         },
-        "pytest_dynamics": run_pytest(),
+        "pytest": run_pytest(args.suite),
         "validate_glide": run_validate_glide(),
         "gate_values": gate_values(),
         "trim_snapshot": trim_snapshot(),
     }
+    if args.nominal_mass:
+        from sim.mass_properties import nominal
+        record["trim_snapshot_nominal_mass"] = {"targets": nominal(), **trim_snapshot(nominal_mass=True)}
     path = os.path.join(PROJ_ROOT, args.out)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(record, f, indent=2)
         f.write("\n")
-    p, v = record["pytest_dynamics"], record["validate_glide"]
+    p, v = record["pytest"], record["validate_glide"]
     print(f"pytest: {p['passed']} passed, {p['failed']} failed (exit {p['exit_code']})")
     print(f"validate_glide: exit {v['exit_code']}")
     print(json.dumps(record["gate_values"], indent=2))

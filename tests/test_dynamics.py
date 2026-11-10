@@ -643,15 +643,20 @@ def test_baseline_fixed_seed_regression():
     from aircraft/mass_properties.yaml, taking the airframe from the 1.1 kg
     design mass to the as-built estimate (emptywt 1.50 kg, stage-0 mass 1.64 kg
     via ballast; inertia at the bottom of the YAML ranges). The baseline
-    controller was not retuned, so distances moved (mean 25.9 -> 36.6 m)."""
+    controller was not retuned, so distances moved (mean 25.9 -> 36.6 m).
+    Phase 2 moved them again (mean 36.6 -> 37.2 m): ixz 0.01 -> 0.0, the
+    midpoint of the new [-0.010, +0.010] range (CAD and V19 disagree in sign).
+    The four zero-weight inertia point masses added in Phase 2 change
+    nothing; checked by regenerating with ixz = 0.01, which reproduced the
+    Phase 1 distances exactly."""
     from env.glider_env import GliderEnv
     from baseline.deterministic_rtl import DeterministicRTL
 
     expected_final_dist = np.array([
-         5.55799262, 19.09537498, 35.98826689, 24.58299058, 53.39656774,
-        36.62068506, 37.98133217,  3.95646650, 43.45450656, 50.52864540,
-        47.48038777, 44.85414416, 27.45086912, 27.32059293, 21.54355806,
-        48.97413109, 46.37931487, 55.07829553, 48.48398769, 52.55188813,
+         5.72110184, 19.03033138, 35.95059005, 24.45709200, 52.10715228,
+        36.79729720, 37.83419090,  4.20019923, 43.38989693, 49.99905931,
+        47.59407795, 45.21849841, 27.40092681, 27.27707152, 21.35342753,
+        48.98217851, 58.51073480, 58.03949723, 48.18514386, 52.48440871,
     ])
 
     env  = GliderEnv(cfg=dict(STAGES[0]))

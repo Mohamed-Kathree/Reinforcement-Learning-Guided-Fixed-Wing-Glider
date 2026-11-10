@@ -53,9 +53,9 @@
        MASS & INERTIA  (kg, kg*m^2, FRD body frame)
        ================================================================ -->
   <mass_balance>
-    <!-- Bottom of each mass_properties.yaml range. izz = (ixx + iyy) * izz_factor
-         with the factor's nominal value, so the point masses (which add equal
-         amounts to izz and to ixx or iyy) keep izz on the flat-plate relation. -->
+    <!-- Bottom of each mass_properties.yaml range, with izz = ixx + iyy (the
+         flat-plate upper bound). The inertia point masses below add equal
+         amounts to izz and to ixx or iyy, so izz stays on that line. -->
     <ixx unit="KG*M2">@@IXX@@</ixx>   <!-- roll  inertia -->
     <iyy unit="KG*M2">@@IYY@@</iyy>   <!-- pitch inertia -->
     <izz unit="KG*M2">@@IZZ@@</izz>   <!-- yaw   inertia -->
@@ -75,6 +75,30 @@
     <pointmass name="BALLAST">
       <weight unit="KG">0.0</weight>
       <location name="POINTMASS" unit="M"><x>0.0</x><y>0.0</y><z>0.0</z></location>
+    </pointmass>
+    <!-- Inertia point masses, solved per episode by sim/mass_solver.py.
+         Symmetric pairs (equal weights) add inertia without moving the CG:
+           IN_Y_R / IN_Y_L at y = +/-0.9 m : add m*y^2 to ixx and izz
+           IN_X_F / IN_X_A at x = -/+0.5 m : add m*x^2 to iyy and izz
+         Structural frame (X aft): IN_X_F is forward, so its x is NEGATIVE.
+         JSBSim exposes point masses by index only, in declaration order:
+         BALLAST=0, IN_Y_R=1, IN_Y_L=2, IN_X_F=3, IN_X_A=4. The solver
+         depends on this order; tests/test_mass_solver.py checks it. -->
+    <pointmass name="IN_Y_R">
+      <weight unit="KG">0.0</weight>
+      <location name="POINTMASS" unit="M"><x>0.0</x><y>0.9</y><z>0.0</z></location>
+    </pointmass>
+    <pointmass name="IN_Y_L">
+      <weight unit="KG">0.0</weight>
+      <location name="POINTMASS" unit="M"><x>0.0</x><y>-0.9</y><z>0.0</z></location>
+    </pointmass>
+    <pointmass name="IN_X_F">
+      <weight unit="KG">0.0</weight>
+      <location name="POINTMASS" unit="M"><x>-0.5</x><y>0.0</y><z>0.0</z></location>
+    </pointmass>
+    <pointmass name="IN_X_A">
+      <weight unit="KG">0.0</weight>
+      <location name="POINTMASS" unit="M"><x>0.5</x><y>0.0</y><z>0.0</z></location>
     </pointmass>
   </mass_balance>
 

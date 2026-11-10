@@ -46,10 +46,12 @@ def _lo(entry: dict) -> float:
 def fdm_baseline(mp: dict | None = None) -> dict:
     """Mass properties baked into the generated aircraft file (SI units).
 
-    izz uses the factor's nominal value, not its low end: the point masses add
-    equal amounts to izz and to ixx (y-pair) or iyy (x-pair), so izz stays on
-    the flat-plate line izz = (ixx + iyy) * factor only if the baseline is on
-    it too.
+    izz = ixx + iyy (flat-plate upper bound; see mass_properties.yaml). The
+    point masses add equal amounts to izz and to ixx (y-pair) or iyy (x-pair),
+    so izz stays on that line only if the baseline is on it too.
+
+    ixz is the YAML value (range midpoint), not the low end: it is a signed
+    cross term, not something the point masses only add to.
     """
     mp = mp or load_mass_properties()
     ixx = _lo(mp["inertia"]["ixx"])
@@ -58,7 +60,7 @@ def fdm_baseline(mp: dict | None = None) -> dict:
         "mass_kg":      _lo(mp["mass"]["flying_kg"]),
         "ixx":          ixx,
         "iyy":          iyy,
-        "izz":          (ixx + iyy) * float(mp["inertia"]["izz_factor"]["value"]),
+        "izz":          ixx + iyy,
         "ixz":          float(mp["inertia"]["ixz"]["value"]),
         "wing_area_m2": float(mp["geometry"]["wing_area_m2"]["value"]),
         "span_m":       float(mp["geometry"]["span_m"]["value"]),
@@ -76,5 +78,5 @@ def nominal(mp: dict | None = None) -> dict:
         "cg_x_m":  float(mp["cg"]["residual_m"]["value"]),
         "ixx":     ixx,
         "iyy":     iyy,
-        "izz":     (ixx + iyy) * float(mp["inertia"]["izz_factor"]["value"]),
+        "izz":     ixx + iyy,
     }
