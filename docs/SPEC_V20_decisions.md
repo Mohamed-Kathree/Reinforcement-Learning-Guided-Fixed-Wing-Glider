@@ -360,3 +360,24 @@ genuine separation between baseline and policy rather than a "task too
 hard" artefact. The re-measured baseline is in
 `analysis/baseline_benchmark_v20.json`.
 
+
+### Baseline re-measured (post-Phase-5)
+
+`scratch/v20_baseline_benchmark.py`, DeterministicRTL, 100 episodes per
+stage, Wilson 95% intervals, at commit 8203aed (clean). The old 28–29%
+figure is void (GPS velocity bug). Phase 6's single evaluator supersedes
+this script.
+
+| Stage | Success | Soft landing | Crash | Timeout | Mean quality |
+|---|---|---|---|---|---|
+| 0 | 27% [19.3, 36.4] | 73% | 0% [0, 3.7] | 0% | 1.00 |
+| 1 | 25% [17.5, 34.3] | 75% | 0% [0, 3.7] | 0% | 0.91 |
+| 2 | 11% [6.3, 18.6] | 82% | 6% [2.8, 12.5] | 1% | 0.70 |
+| 3 | **8% [4.1, 15.0]** | 53% | **38% [29.1, 47.8]** | 1% | 0.32 |
+
+No single airframe parameter separates the stage-3 crashes from the other
+episodes by more than 0.42 standard deviations (largest: `clbeta_mult`,
+`mass_kg`, `cl_mult`). That is consistent with the sweep's verdict: hard,
+widely varied but flyable airframes, plus stage 3's wind and gusts, rather
+than one uncontrollable corner. Per-episode `dr_params` are in the JSON for
+the Phase 7 regression.
