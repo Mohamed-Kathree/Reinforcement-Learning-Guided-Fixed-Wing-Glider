@@ -39,3 +39,47 @@ def test_sb3_logged_approx_kl_type_is_handled():
     approx_kl = np.mean([np.float32(0.01), np.float32(0.02)])
     assert isinstance(approx_kl, np.float32)
     json.loads(dumps_record({"approx_kl": approx_kl}))
+
+
+def test_locked_stream_file_does_not_raise_and_is_retried(tmp_path, monkeypatch):
+    """A PermissionError on the stream file (OneDrive holding it open) ended
+    the V20 training run at 18.6M of 20M steps. The write must be held and
+    retried, never raised into PPO.learn()."""
+    import builtins
+
+    from backend.callbacks.web_stream_callback import append_lines_best_effort
+
+    path = tmp_path / "run.jsonl"
+    real_open = builtins.open
+    locked = {"on": True}
+
+    def flaky_open(file, *a, **k):
+        if locked["on"] and str(file) == str(path):
+            raise PermissionError(13, "Permission denied", str(file))
+        return real_open(file, *a, **k)
+
+    monkeypatch.setattr(builtins, "open", flaky_open)
+
+    pending = ['{"n": 1}']
+    assert append_lines_best_effort(path, pending) is False
+    assert pending == ['{"n": 1}'] and not path.exists()
+
+    pending.append('{"n": 2}')
+    assert append_lines_best_effort(path, pending) is False
+
+    locked["on"] = False
+    pending.append('{"n": 3}')
+    assert append_lines_best_effort(path, pending) is True
+    assert pending == []
+    assert [json.loads(x)["n"] for x in path.read_text().splitlines()] == [1, 2, 3]
+
+
+def test_callback_step_uses_the_guarded_writer():
+    """_on_step must not open the stream file directly."""
+    import inspect
+
+    from backend.callbacks.web_stream_callback import WebStreamCallback
+
+    src = inspect.getsource(WebStreamCallback._on_step)
+    assert "append_lines_best_effort" in src and "open(" not in src.replace(
+        "append_lines_best_effort(", "")

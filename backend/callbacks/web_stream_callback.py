@@ -98,6 +98,30 @@ def dumps_record(record: dict) -> str:
     return json.dumps(record, default=_json_default)
 
 
+def append_lines_best_effort(path, pending: list[str]) -> bool:
+    """Append every line in `pending` to `path`; never raise on an OS error.
+
+    The dashboard stream is telemetry, so a failed write must not end a
+    training run. The repository lives under OneDrive, whose sync client can
+    hold a file open briefly; that raised PermissionError from a bare open()
+    and killed the V20 run at 18.6M of 20M steps. On failure the lines stay in
+    `pending` and go out with the next successful write, so nothing is lost
+    unless the file stays locked for the rest of the run.
+    """
+    if not pending:
+        return True
+    try:
+        with open(path, "a") as f:
+            f.write("".join(line + "\n" for line in pending))
+    except OSError as exc:
+        if len(pending) in (1, 10, 100) or len(pending) % 1000 == 0:
+            print(f"[web_stream] write to {path} failed ({exc!r}); "
+                  f"{len(pending)} record(s) held for retry", flush=True)
+        return False
+    pending.clear()
+    return True
+
+
 class WebStreamCallback(BaseCallback):
     """Appends a TrainingMetric JSON line every `emit_freq` _on_step() calls
     to this run's own data/runs/<run_id>.jsonl file, and writes a sibling
@@ -143,6 +167,7 @@ class WebStreamCallback(BaseCallback):
         self._current_episode_frames: list[dict] = []
         self._last_completed_episode: dict | None = None
         self._emits_since_last_dump     = 0
+        self._pending_lines: list[str]  = []   # stream records not yet on disk
 
     def _on_training_start(self) -> None:
         config.RUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -282,8 +307,11 @@ class WebStreamCallback(BaseCallback):
 
         if self._last_completed_episode is None:
             return
-        with open(config.DATA_DIR / "live_episode.json", "w") as f:
-            json.dump(self._last_completed_episode, f, default=_json_default)
+        try:
+            with open(config.DATA_DIR / "live_episode.json", "w") as f:
+                json.dump(self._last_completed_episode, f, default=_json_default)
+        except OSError:
+            pass   # replay snapshot only; the next dump overwrites it anyway
 
     def _on_step(self) -> bool:
         self._accumulate_rollout_frame()
@@ -293,8 +321,8 @@ class WebStreamCallback(BaseCallback):
 
         info0 = self.locals.get('infos', [{}])[0]
         record = self._build_record(self.model.logger.name_to_value, info0)
-        with open(self._run_path, "a") as f:
-            f.write(dumps_record(record) + "\n")
+        self._pending_lines.append(dumps_record(record))
+        append_lines_best_effort(self._run_path, self._pending_lines)
 
         if self._rollout_dump_enabled:
             self._maybe_dump_live_episode()
