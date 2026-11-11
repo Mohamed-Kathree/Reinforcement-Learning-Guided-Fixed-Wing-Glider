@@ -423,3 +423,59 @@ dy_home, course angle), as specified. obs[11] (required glide ratio =
 distance to home / altitude) still carries the *distance* to home, though
 not its direction. The ablation therefore removes home direction but not
 home distance.
+
+## After the first V20 run: curriculum and model selection
+
+**What the run showed.** The 20M-step run (stopped at 18.6M by a locked
+dashboard log; fixed in `7f3e924`) finished below the baseline at every
+stage. A Stage 0 sweep of its checkpoints (100 paired episodes each,
+`results/benchmark_v20_*_stage0.json`) located the cause:
+
+| Checkpoint | Training stage | Stage 0 success (baseline 27%) |
+|---|---|---|
+| 1.5M | 0 | 24% |
+| 2.0M | 0 -> 1, earned | **51%** (McNemar p = 0.0009) |
+| 3.5M | 1 | 31% |
+| 4.0M | 2, forced at 3.8M | 8% |
+| 18.6M | 3, forced at 5.4M | 4% |
+
+The policy learned the calm-air task and then lost it. Stage 1 never
+reached the 0.60 threshold, both later advances were forced, and nothing in
+training kept earlier stages in the distribution. The Stage-3-pinned
+EvalCallback kept 9.0M as `best_model.zip`; it scored on reward, which
+stayed flat (-110 to -200) for the whole run.
+
+**Changes** (tests: `tests/test_curriculum_v21.py`):
+
+1. **Replay.** `curriculum.replay_frac: 0.25`. Once past Stage 0, each
+   training episode runs at an earlier stage with that probability, drawn
+   uniformly (`env/curriculum.py` `episode_stage()`). `GliderEnv`
+   `set_curriculum()` makes the draw at reset, from a separate RNG stream
+   so the episode's own random numbers are unchanged. The stage is
+   reported as `info['episode_stage']`. `CurriculumCallback` records only
+   current-stage episodes toward an advance. As a side effect, episodes
+   still in flight from the old stage when an advance lands are no longer
+   credited to the new one. With `replay_frac` 0, or without
+   `set_curriculum`, episodes are bit-identical to before (tested).
+2. **No forced advances.** `max_episodes_at_stage: null`. A stall is a
+   result to report. The original reason for forcing, model selection at
+   Stage 3 by a policy that never trained there, is gone with (3).
+3. **All-stage model selection.** `MultiStageEvalCallback` replaces SB3's
+   `EvalCallback`. Every 250k steps it flies 10 deterministic episodes per
+   stage through the single evaluator, scores the policy by mean success
+   (ties go to the lower crash rate), and writes `best_model.zip`,
+   `vecnormalize_best.pkl`, `best_model.json` and
+   `eval_logs/multistage.jsonl`. The selection seeds (`eval.seed: 1000`)
+   are disjoint from the benchmark's (seed 0), so selection never sees the
+   test episodes. One evaluation takes about 34 s, roughly 45 min over a
+   20M-step run. `best_model.json`'s figures are a max over 40-episode
+   estimates and run high; report the 100-episode benchmark.
+4. **Per-stage thresholds.** `advance_threshold: [0.35, 0.30, 0.15]` for
+   leaving stages 0, 1 and 2, each above the baseline's 27% / 25% / 11%. A
+   test pins that ordering. `rolling_window` goes back to 100 (about ±9
+   points rather than ±13).
+
+**Expectation, untested.** Under these rules the first run would have
+earned Stage 1 (its best Stage 0 window was 38%) and then held at Stage 1
+(best window 28% < 0.30). Whether replay and the longer stay lift Stage 1
+past 0.30 is what the next run measures.

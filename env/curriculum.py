@@ -80,7 +80,9 @@ Units: SI throughout (m, m/s, rad, rad/s, kg, N, N*m)
 from __future__ import annotations
 
 from collections import Counter, deque
-from typing import Deque
+from typing import Deque, Sequence
+
+import numpy as np
 
 from sim.mass_properties import load_mass_properties as _load_mass_properties
 
@@ -272,11 +274,38 @@ STAGES: list[dict] = [
 # Scheduler
 # ---------------------------------------------------------------------------
 
+def episode_stage(current_stage: int, replay_frac: float, rng: np.random.Generator) -> int:
+    """The stage one training episode runs at.
+
+    With probability replay_frac (and only once past Stage 0) the episode is
+    replayed at an earlier stage, drawn uniformly from 0 .. current_stage-1;
+    otherwise it runs at current_stage. Replay keeps earlier skills in the
+    training distribution: the V20 run's Stage 0 success fell from 51% at
+    2.0M steps to 4% at 18.6M once it trained only at later stages.
+
+    replay_frac == 0 never touches rng, so an environment without replay
+    draws exactly the random numbers it did before replay existed.
+    """
+    if not 0.0 <= replay_frac < 1.0:
+        raise ValueError(f"replay_frac must be in [0, 1); got {replay_frac}")
+    if replay_frac == 0.0 or current_stage == 0:
+        return int(current_stage)
+    if rng.random() < replay_frac:
+        return int(rng.integers(0, current_stage))
+    return int(current_stage)
+
+
 class CurriculumScheduler:
     """Tracks rolling episode success rate and advances the difficulty stage.
 
     Args:
-        advance_threshold    : success rate required to advance (default 0.80)
+        advance_threshold    : success rate required to advance (default 0.80).
+                               Either one value for every stage, or one value
+                               per advance (len(STAGES) - 1 entries: entry i
+                               is the rate needed to leave stage i). The
+                               per-stage form exists because one flat bar
+                               does not fit a task whose baseline succeeds
+                               27% at Stage 0 and 8% at Stage 3.
         rolling_window       : number of recent episodes used for the rate (default 100)
         max_episodes_at_stage: force an advance after this many episodes at the
                                current stage even if the threshold isn't met
@@ -300,18 +329,27 @@ class CurriculumScheduler:
 
     def __init__(
         self,
-        advance_threshold:     float     = 0.80,
+        advance_threshold:     float | Sequence[float] = 0.80,
         rolling_window:        int       = 100,
         max_episodes_at_stage: int | None = None,
     ) -> None:
-        if not 0.0 < advance_threshold <= 1.0:
-            raise ValueError(f"advance_threshold must be in (0, 1]; got {advance_threshold}")
+        if isinstance(advance_threshold, (int, float)):
+            thresholds = [float(advance_threshold)] * (len(STAGES) - 1)
+        else:
+            thresholds = [float(t) for t in advance_threshold]
+            if len(thresholds) != len(STAGES) - 1:
+                raise ValueError(
+                    f"advance_threshold needs one value per advance "
+                    f"({len(STAGES) - 1}); got {len(thresholds)}")
+        for t in thresholds:
+            if not 0.0 < t <= 1.0:
+                raise ValueError(f"advance_threshold must be in (0, 1]; got {t}")
         if rolling_window < 1:
             raise ValueError(f"rolling_window must be >= 1; got {rolling_window}")
         if max_episodes_at_stage is not None and max_episodes_at_stage < 1:
             raise ValueError(f"max_episodes_at_stage must be >= 1; got {max_episodes_at_stage}")
 
-        self._threshold: float = advance_threshold
+        self._thresholds: list[float] = thresholds
         self._window:    int   = rolling_window
         self._max_episodes_at_stage: int | None = max_episodes_at_stage
         self._stage:     int   = 0
@@ -472,8 +510,14 @@ class CurriculumScheduler:
 
     @property
     def advance_threshold(self) -> float:
-        """The configured rolling-success-rate threshold required to advance."""
-        return self._threshold
+        """Rolling success rate required to leave the current stage (at the
+        final stage, which never advances, the last configured value)."""
+        return self._thresholds[min(self._stage, len(self._thresholds) - 1)]
+
+    @property
+    def advance_thresholds(self) -> list[float]:
+        """Every configured threshold, entry i for leaving stage i."""
+        return list(self._thresholds)
 
     @property
     def outcome_counts(self) -> dict[str, int]:
@@ -508,7 +552,7 @@ class CurriculumScheduler:
         if self.at_final_stage:
             return False
 
-        if len(self._buffer) >= self._window and self.success_rate >= self._threshold:
+        if len(self._buffer) >= self._window and self.success_rate >= self.advance_threshold:
             self._stage += 1
             self._buffer.clear()   # re-evaluate from scratch on the new stage
             self._episodes_at_stage = 0
@@ -540,7 +584,7 @@ class CurriculumScheduler:
             f"stage={self._stage}/{len(STAGES)-1}, "
             f"success_rate={self.success_rate:.2%}, "
             f"window={len(self._buffer)}/{self._window}, "
-            f"threshold={self._threshold:.0%}, "
+            f"threshold={self.advance_threshold:.0%}, "
             f"{at_stage}, "
             f"last_advance={'forced' if self.last_advance_was_forced else 'earned'})"
         )

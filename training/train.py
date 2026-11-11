@@ -9,9 +9,12 @@ Architecture:
     SubprocVecEnv  -- n_envs parallel GliderEnv workers (separate processes)
     VecNormalize   -- running obs/reward normalisation (mandatory for 12-D obs)
     PPO            -- MlpPolicy, hyperparams from training/configs/base.yaml
-    CurriculumCallback -- advances difficulty stage when rolling success >= threshold
+    CurriculumCallback -- advances the stage when rolling success at the
+                          current stage >= that stage's threshold; earlier
+                          stages are replayed at curriculum.replay_frac
     CheckpointCallback -- periodic model + VecNormalize snapshots
-    EvalCallback   -- periodic deterministic evaluation; saves best model
+    MultiStageEvalCallback -- periodic deterministic evaluation at every
+                          stage; saves best model by mean success
 
 Usage:
     # Train from scratch with default config:
@@ -29,6 +32,8 @@ Outputs (all under logging.checkpoint_dir from the config):
     vecnormalize_<step>.pkl       -- matching VecNormalize stats
     best_model.zip                -- best evaluation policy so far
     vecnormalize_best.pkl         -- VecNormalize stats for best model
+    best_model.json               -- the evaluation that selected best_model
+    eval_logs/multistage.jsonl    -- every all-stage evaluation
 
 TensorBoard:
     tensorboard --logdir runs/
@@ -54,6 +59,7 @@ import re
 import time
 from typing import Any
 
+import numpy as np
 import yaml
 
 from stable_baselines3 import PPO
@@ -61,7 +67,6 @@ from stable_baselines3.common.callbacks import (
     BaseCallback,
     CallbackList,
     CheckpointCallback,
-    EvalCallback,
 )
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize, DummyVecEnv, VecFrameStack
 from stable_baselines3.common.monitor import Monitor
@@ -69,11 +74,12 @@ from stable_baselines3.common.monitor import Monitor
 from env.glider_env import GliderEnv
 from env.curriculum import CurriculumScheduler, STAGES, outcome_bucket
 
-# eval_venv is held at the FINAL curriculum stage for the entire run (see
-# train()) so that best_model.zip -- the artefact actually deployed -- is
-# selected at deployment difficulty, not whatever stage training happens to
-# be on. Do not call eval_venv.env_method('set_stage', ...) with anything
-# other than STAGES[-1]; CurriculumCallback only advances the training venv.
+# best_model.zip is selected by MultiStageEvalCallback: deterministic
+# success across EVERY curriculum stage, on a fixed seed set disjoint from
+# the benchmark's. It replaced SB3's EvalCallback pinned at the final stage,
+# which picked the V20 run's 9.0M checkpoint by Stage 3 reward while the
+# 2.0M checkpoint was the strongest policy the run produced (51% vs the
+# baseline's 27% at Stage 0; results/benchmark_v20_2.0M.json).
 
 # Optional dashboard hook: streams live metrics to data/train_stream.jsonl
 # for the showcase frontend's Training tab (backend/routers/training.py's
@@ -270,7 +276,16 @@ class CurriculumCallback(BaseCallback):
         scheduler          : CurriculumScheduler instance (shared state)
         venv               : the VecNormalize-wrapped env (workers are set_stage'd)
         success_reward_min : fallback: episode counts as success if ep_reward >= this
+        replay_frac        : share of episodes replayed at an earlier stage
+                             (passed to every worker's set_curriculum())
         verbose            : 1 to log stage advances
+
+    Only episodes that ran at the scheduler's current stage
+    (info['episode_stage']) are recorded toward an advance. Replayed
+    earlier-stage episodes would otherwise inflate the success rate, and
+    episodes still in flight from the previous stage when an advance lands
+    are no longer credited to the new one. An env that reports no
+    episode_stage (not under set_curriculum) is always recorded.
     """
 
     def __init__(
@@ -278,12 +293,15 @@ class CurriculumCallback(BaseCallback):
         scheduler:           CurriculumScheduler,
         venv:                VecNormalize,
         success_reward_min:  float = 400.0,
+        replay_frac:         float = 0.0,
         verbose:             int   = 1,
     ) -> None:
         super().__init__(verbose=verbose)
         self.scheduler          = scheduler
         self.venv               = venv
         self.success_reward_min = success_reward_min
+        self.replay_frac        = float(replay_frac)
+        self.replay_episodes    = 0
 
     @staticmethod
     def _outcome_bucket(info: dict) -> str:
@@ -306,6 +324,13 @@ class CurriculumCallback(BaseCallback):
                 success = float(ep['r']) >= self.success_reward_min
 
             outcome_bucket = self._outcome_bucket(info)
+
+            ep_stage = info.get('episode_stage')
+            if ep_stage is not None and ep_stage != self.scheduler.current_stage:
+                self.replay_episodes += 1
+                self.logger.record('curriculum/replay_episodes', self.replay_episodes)
+                self.logger.record(f'replay/success_stage{ep_stage}', float(success))
+                continue
 
             # Task/curriculum/reward-budget scalars -- the only way to see
             # curriculum stage, success rate, touchdown distance, and the
@@ -355,6 +380,7 @@ class CurriculumCallback(BaseCallback):
                 # Propagate to all parallel workers via set_attr (works for
                 # both DummyVecEnv and SubprocVecEnv).
                 self.venv.env_method('set_stage', stage_cfg)
+                self.venv.env_method('set_curriculum', stage, self.replay_frac)
 
                 # Also update the VecNormalize's wrapped env reference
                 # so any future env-level cfg reads are consistent.
@@ -418,45 +444,114 @@ class VecNormCheckpointCallback(BaseCallback):
         return True
 
 
-class SaveVecNormalizeOnBestCallback(BaseCallback):
-    """Saves VecNormalize stats whenever EvalCallback records a new best model.
+class MultiStageEvalCallback(BaseCallback):
+    """Selects best_model.zip by deterministic success across all stages.
 
-    EvalCallback saves best_model.zip on its own but has no equivalent for the
-    matching normalisation stats -- this module's own docstring has always
-    promised a vecnormalize_best.pkl output, but nothing ever produced it
-    (found during the Phase 5 throughput smoke-check; see
-    RLGlider_Phase5_Reward_Rescaling_Spec.md §5). Without this, best_model.zip
-    -- the artefact actually meant for deployment -- has no reliable
-    observation-normalisation stats to load it with; the periodic
-    vecnormalize_<step>.pkl snapshots are not guaranteed to land on the same
-    timestep as a new-best event.
+    Every eval_freq calls, the current policy flies n_per_stage episodes at
+    each stage in `stages` through training/benchmark.py's single evaluator
+    (fresh env per episode, deterministic actions, the training
+    VecNormalize statistics frozen at that instant). The seeds are the same
+    at every evaluation, so successive checkpoints are compared on identical
+    flights, and are drawn from `seed`, which must differ from the
+    benchmark's (default 0) so model selection never sees the test episodes.
 
-    Passed as EvalCallback's callback_on_new_best, so SB3 invokes it (via
-    BaseCallback.on_step -> _on_step) immediately after best_model.zip is
-    saved, at which point `venv` (the training VecNormalize) has already been
-    synced into eval_venv by EvalCallback itself -- either one's stats are
-    equivalent at this instant, so this saves `venv` directly.
+    Score: mean success rate over the stages; ties go to the lower mean
+    crash rate. A strictly better score saves best_model.zip,
+    vecnormalize_best.pkl and best_model.json (timestep, score, per-stage
+    rates). Every evaluation is appended to eval_logs/multistage.jsonl and
+    logged to TensorBoard as eval/success_stage<k>, eval/crash_stage<k> and
+    eval/score.
 
-    Args:
-        checkpoint_dir : directory to write vecnormalize_best.pkl into
-        venv           : the training VecNormalize instance
+    The score is a max over noisy estimates (10 episodes per stage by
+    default), so best_model.json's figures run high; the 100-episode
+    benchmark is still the reported number.
     """
 
     def __init__(
         self,
-        checkpoint_dir: str,
+        cfg:            dict,
         venv:           VecNormalize,
-        verbose:        int = 0,
+        checkpoint_dir: str | pathlib.Path,
+        eval_freq:      int,
+        n_per_stage:    int = 10,
+        stages:         list[int] | None = None,
+        seed:           int = 1000,
+        verbose:        int = 1,
     ) -> None:
         super().__init__(verbose=verbose)
-        self.checkpoint_dir = pathlib.Path(checkpoint_dir)
+        from training.benchmark import episode_seeds
+        if seed == 0:
+            raise ValueError("eval seed 0 is the benchmark's seed set; pick another")
+        self.cfg            = cfg
         self.venv           = venv
+        self.checkpoint_dir = pathlib.Path(checkpoint_dir)
+        self.eval_freq      = int(eval_freq)
+        self.stages         = list(range(len(STAGES))) if stages is None else [int(x) for x in stages]
+        self.seeds          = episode_seeds(int(n_per_stage), int(seed))
+        self.best_key: tuple[float, float] | None = None
+        self.log_path       = self.checkpoint_dir / 'eval_logs' / 'multistage.jsonl'
+        self._pending: list[str] = []
+
+    def evaluate(self) -> dict:
+        from training.benchmark import PolicyActor, evaluate_seed
+        actor = PolicyActor.from_model(self.model, self.venv)
+        per_stage = {}
+        for stage in self.stages:
+            eps = [evaluate_seed(self.cfg, stage, actor, s) for s in self.seeds]
+            n = len(eps)
+            per_stage[stage] = {
+                'success': sum(e['outcome'] == 'success' for e in eps) / n,
+                'crash':   sum(e['outcome'] == 'crash' for e in eps) / n,
+                'median_miss_m': float(np.median([e['miss_distance_m'] for e in eps])),
+            }
+        score = float(np.mean([v['success'] for v in per_stage.values()]))
+        crash = float(np.mean([v['crash'] for v in per_stage.values()]))
+        return {'timesteps': int(self.num_timesteps), 'score': score,
+                'mean_crash': crash, 'stages': per_stage}
 
     def _on_step(self) -> bool:
-        path = self.checkpoint_dir / 'vecnormalize_best.pkl'
-        self.venv.save(str(path))
+        if self.n_calls % self.eval_freq != 0:
+            return True
+        t0 = time.time()
+        result = self.evaluate()
+        result['seconds'] = round(time.time() - t0, 1)
+
+        for stage, v in result['stages'].items():
+            self.logger.record(f'eval/success_stage{stage}', v['success'])
+            self.logger.record(f'eval/crash_stage{stage}', v['crash'])
+        self.logger.record('eval/score', result['score'])
+        self.logger.record('eval/mean_crash', result['mean_crash'])
+
+        key = (result['score'], -result['mean_crash'])
+        result['new_best'] = False
+        if self.best_key is None or key > self.best_key:
+            try:
+                self.model.save(str(self.checkpoint_dir / 'best_model'))
+                self.venv.save(str(self.checkpoint_dir / 'vecnormalize_best.pkl'))
+                with open(self.checkpoint_dir / 'best_model.json', 'w') as f:
+                    json.dump({**result, 'new_best': True}, f, indent=1)
+            except OSError as exc:
+                # Not recorded as best, so the next evaluation tries again.
+                print(f"[Eval] WARNING: could not save best model ({exc!r})")
+            else:
+                self.best_key = key
+                result['new_best'] = True
+
+        self._pending.append(json.dumps(result))
+        try:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.log_path, 'a') as f:
+                f.write(''.join(line + '\n' for line in self._pending))
+            self._pending.clear()
+        except OSError:
+            pass   # kept in _pending and written with the next evaluation
+
         if self.verbose >= 1:
-            print(f"[VecNorm] Saved {path} (new best model)")
+            rates = '  '.join(f"s{k} {v['success']:.0%}/{v['crash']:.0%}"
+                              for k, v in result['stages'].items())
+            print(f"[Eval] {self.num_timesteps:,} steps  success/crash {rates}  "
+                  f"score {result['score']:.3f}{'  NEW BEST' if result['new_best'] else ''}"
+                  f"  ({result['seconds']:.0f} s)")
         return True
 
 
@@ -487,14 +582,12 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
     print(f"Building {ppo_cfg['n_envs']} parallel environments …")
     venv = build_venv(cfg, seed=seed)
 
-    # Separate eval env (single, deterministic, no reward normalisation)
-    eval_venv = build_venv(cfg, seed=seed + 10000, force_dummy=True)
-    eval_venv.training       = False   # freeze running stats during eval
-    eval_venv.norm_reward    = False   # eval on raw rewards
-
     # --- Curriculum scheduler --------------------------------------------
+    threshold = cur_cfg['advance_threshold']
+    replay_frac = float(cur_cfg.get('replay_frac', 0.0))
     scheduler = CurriculumScheduler(
-        advance_threshold     = float(cur_cfg['advance_threshold']),
+        advance_threshold     = ([float(t) for t in threshold]
+                                 if isinstance(threshold, (list, tuple)) else float(threshold)),
         rolling_window        = int(cur_cfg['rolling_window']),
         max_episodes_at_stage = (
             int(cur_cfg['max_episodes_at_stage'])
@@ -532,13 +625,9 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
     # with Stage 1's config. Apply the initial stage explicitly here, the same
     # way CurriculumCallback applies every later stage advance.
     venv.env_method('set_stage', scheduler.current_cfg)
-
-    # eval_venv is held PERMANENTLY at the final (hardest) stage -- not the
-    # scheduler's current stage. CurriculumCallback only ever calls set_stage
-    # on `venv` (the training env); if eval_venv started at Stage 0 it would
-    # stay there for the whole run, so best_model.zip would be selected on
-    # the easiest difficulty forever instead of deployment difficulty.
-    eval_venv.env_method('set_stage', dict(STAGES[-1]))
+    # ...and put every worker under the curriculum, so episodes replay
+    # earlier stages at replay_frac and report info['episode_stage'].
+    venv.env_method('set_curriculum', scheduler.current_stage, replay_frac)
 
     # --- Policy ----------------------------------------------------------
     policy_kwargs = dict(net_arch=list(ppo_cfg['net_arch']))
@@ -599,24 +688,21 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
     )
 
     curriculum_cb = CurriculumCallback(
-        scheduler = scheduler,
-        venv      = venv,
-        verbose   = 1,
+        scheduler   = scheduler,
+        venv        = venv,
+        replay_frac = replay_frac,
+        verbose     = 1,
     )
 
-    eval_cb = EvalCallback(
-        eval_venv,
-        best_model_save_path = str(checkpoint_dir),
-        log_path             = str(checkpoint_dir / 'eval_logs'),
-        eval_freq            = max(int(eval_cfg['eval_freq']) // int(ppo_cfg['n_envs']), 1),
-        n_eval_episodes      = int(eval_cfg['n_episodes']),
-        deterministic        = bool(eval_cfg['deterministic']),
-        callback_on_new_best = SaveVecNormalizeOnBestCallback(
-            checkpoint_dir = str(checkpoint_dir),
-            venv           = venv,
-            verbose        = 1,
-        ),
-        verbose              = 1,
+    eval_cb = MultiStageEvalCallback(
+        cfg            = cfg,
+        venv           = venv,
+        checkpoint_dir = checkpoint_dir,
+        eval_freq      = max(int(eval_cfg['eval_freq']) // int(ppo_cfg['n_envs']), 1),
+        n_per_stage    = int(eval_cfg.get('n_episodes_per_stage', 10)),
+        stages         = eval_cfg.get('stages'),
+        seed           = int(eval_cfg.get('seed', 1000)),
+        verbose        = 1,
     )
 
     callback_list = [curriculum_cb, checkpoint_cb, vecnorm_cb, eval_cb]

@@ -180,6 +180,26 @@ class ZeroActor:
         return np.zeros(2, dtype=np.float32)
 
 
+class _FrozenObsNorm:
+    """A copy of a VecNormalize's observation statistics, applied exactly as
+    VecNormalize.normalize_obs does (training's live wrapper keeps updating
+    its own statistics; this one never changes)."""
+
+    def __init__(self, vecnorm) -> None:
+        import copy
+        self.obs_rms = copy.deepcopy(vecnorm.obs_rms)
+        self.norm_obs = bool(vecnorm.norm_obs)
+        self.clip_obs = float(vecnorm.clip_obs)
+        self.epsilon = float(vecnorm.epsilon)
+        self.training = False
+
+    def normalize_obs(self, obs: np.ndarray) -> np.ndarray:
+        if not self.norm_obs:
+            return obs
+        return np.clip((obs - self.obs_rms.mean) / np.sqrt(self.obs_rms.var + self.epsilon),
+                       -self.clip_obs, self.clip_obs).astype(np.float32)
+
+
 class PolicyActor:
     """A trained SB3 policy fed through the training observation pipeline.
 
@@ -208,6 +228,28 @@ class PolicyActor:
                              f"model observation size {n_obs}")
         self.vecnorm.training = False
         self._frames: deque[np.ndarray] = deque(maxlen=self.n_stack)
+
+    @classmethod
+    def from_model(cls, model, vecnorm) -> "PolicyActor":
+        """Wrap a policy already in memory (training's all-stage evaluation).
+
+        `vecnorm` is any VecNormalize; its observation statistics are copied,
+        so training can keep updating its own while this actor evaluates the
+        frozen snapshot.
+        """
+        self = cls.__new__(cls)
+        self.model = model
+        n_obs = int(model.observation_space.shape[0])
+        if n_obs % OBS_DIM:
+            raise ValueError(f"model observation size {n_obs} is not a multiple of {OBS_DIM}")
+        self.n_stack = n_obs // OBS_DIM
+        self.vecnorm = _FrozenObsNorm(vecnorm)
+        if self.vecnorm.obs_rms.mean.shape != (n_obs,):
+            raise ValueError(f"vecnorm stats {self.vecnorm.obs_rms.mean.shape} do not match "
+                             f"model observation size {n_obs}")
+        self.vecnorm.training = False
+        self._frames = deque(maxlen=self.n_stack)
+        return self
 
     def stacked(self) -> np.ndarray:
         return np.concatenate(list(self._frames)).astype(np.float32)

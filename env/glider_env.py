@@ -49,7 +49,7 @@ from sim.wind import WindModel
 from sim.sensor_models import SensorSuite
 from sim.math_utils import build_state, wrap_pi
 from env.reward import compute_reward, DEFAULT_REWARD_CFG
-from env.curriculum import DR_SCALE, stage_ranges
+from env.curriculum import DR_SCALE, STAGES, episode_stage, stage_ranges
 
 
 # ---------------------------------------------------------------------------
@@ -374,6 +374,12 @@ class GliderEnv(gym.Env):
         # This episode's sampled airframe (keys of env/curriculum.py's DR
         # table), set by _sample_domain_rand() at reset.
         self._dr: dict[str, float] = {}
+        # Curriculum replay (set_curriculum). None = not under the curriculum:
+        # the env runs whatever cfg it was given, as before replay existed.
+        self._curriculum_stage: int | None = None
+        self._replay_frac: float = 0.0
+        self._replay_rng: np.random.Generator | None = None
+        self._episode_stage: int | None = None
 
         # Observation/action transport-delay state (sampled per episode in
         # reset(); see OBS_DELAY_MAX_STEPS / ACTION_DELAY_*_SUBSTEPS above).
@@ -402,6 +408,18 @@ class GliderEnv(gym.Env):
         """
         if seed is not None:
             self._rng = np.random.default_rng(seed)
+            # Separate stream for the replay draw, so replay never shifts the
+            # episode's own random numbers (wind, launch, airframe).
+            self._replay_rng = np.random.default_rng([seed, 0x5EED])
+
+        # Curriculum stage for this episode: the scheduler's current stage, or
+        # (with probability replay_frac) an earlier one -- see set_curriculum().
+        if self._curriculum_stage is not None:
+            if self._replay_rng is None:
+                self._replay_rng = np.random.default_rng()
+            self._episode_stage = episode_stage(
+                self._curriculum_stage, self._replay_frac, self._replay_rng)
+            self.cfg.update(STAGES[self._episode_stage])
 
         # Allow a one-shot cfg override via options
         if options is not None:
@@ -624,6 +642,7 @@ class GliderEnv(gym.Env):
         if terminated or truncated:
             info['episode_reward_components'] = dict(self._episode_reward_components)
             info['dr_params'] = dict(self._dr)
+            info['episode_stage'] = self._episode_stage
 
         # Update previous step cache
         self._prev_state  = self._fdm.state.copy()
@@ -640,6 +659,24 @@ class GliderEnv(gym.Env):
     # ------------------------------------------------------------------
     # Curriculum interface
     # ------------------------------------------------------------------
+
+    def set_curriculum(self, stage: int, replay_frac: float = 0.0) -> None:
+        """Put the env under the curriculum at `stage`, with replay.
+
+        From the next reset() on, each episode runs at `stage`, or with
+        probability replay_frac at an earlier stage drawn uniformly
+        (env/curriculum.py episode_stage()). The episode's stage is reported
+        as info['episode_stage'] on the terminal step, so the scheduler can
+        count only current-stage episodes toward an advance. Called by
+        training/train.py at start-up and on every advance; set_stage() is
+        unchanged for callers that pin a fixed stage (evaluation).
+        """
+        if not 0 <= stage < len(STAGES):
+            raise ValueError(f"stage must be in [0, {len(STAGES) - 1}]; got {stage}")
+        if not 0.0 <= replay_frac < 1.0:
+            raise ValueError(f"replay_frac must be in [0, 1); got {replay_frac}")
+        self._curriculum_stage = int(stage)
+        self._replay_frac = float(replay_frac)
 
     def set_stage(self, stage_cfg: dict) -> None:
         """Apply a curriculum stage config dict.
