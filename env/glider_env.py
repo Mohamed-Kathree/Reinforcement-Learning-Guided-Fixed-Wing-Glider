@@ -50,7 +50,9 @@ from sim.sensor_models import SensorSuite
 from sim.math_utils import build_state, wrap_pi
 from env.reward import compute_reward, DEFAULT_REWARD_CFG
 from env.curriculum import DR_SCALE, STAGES, episode_stage, stage_ranges
-from env.nav_features import OBS_DIMS, obs_v2_from_v1
+from env.nav_features import OBS_DIMS, obs_v2_from_v1, obs_v3_from_v1
+from env.reward import cone_potential
+from env.wind_estimate import WindEstimator
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +170,7 @@ LAUNCH_PITCH_MAX_DEG: float = 15.0     # nose-up (positive pitch)
 # whether the episode ended by landing or by timing out.
 _REWARD_COMPONENT_KEYS: tuple[str, ...] = (
     'r_path', 'penalty_unreach', 'penalty_stall', 'penalty_bank',
-    'penalty_smooth', 'r_terminal', 'penalty_truncate',
+    'penalty_smooth', 'r_terminal', 'r_shaping', 'penalty_truncate',
 )
 
 # Transport latency (sim-to-real gap: zero latency here vs. ~60-150 ms on
@@ -363,6 +365,10 @@ class GliderEnv(gym.Env):
         self._step_count: int         = 0
         self._prev_state: npt.NDArray = np.zeros(13, dtype=np.float64)
         self._prev_action: npt.NDArray = np.zeros(2, dtype=np.float32)
+        self._wind_est = WindEstimator(dt=DT_RL)
+        self._stage0_wind_ms: float = 0.0
+        self._phi: float = 0.0
+        self._phi0: float = 0.0
         self._home_ned: npt.NDArray   = np.zeros(3, dtype=np.float64)
 
         # Cached last observation (built in _build_obs; exposed for reward fn)
@@ -430,6 +436,10 @@ class GliderEnv(gym.Env):
             self._episode_stage = episode_stage(
                 self._curriculum_stage, self._replay_frac, self._replay_rng)
             self.cfg.update(STAGES[self._episode_stage])
+            # Training-only light wind at Stage 0 (curriculum.stage0_wind_ms):
+            # evaluation pins stages with set_stage() and never gets here.
+            if self._episode_stage == 0 and self._stage0_wind_ms > 0.0:
+                self.cfg['wind_speed'] = self._stage0_wind_ms
 
         # Allow a one-shot cfg override via options
         if options is not None:
@@ -515,6 +525,10 @@ class GliderEnv(gym.Env):
         obs = self._build_obs()
         self._last_obs = obs.copy()
         self._obs_buffer = deque([obs.copy() for _ in range(self._obs_delay_steps)])
+        self._wind_est.reset()
+        self._update_wind_estimate(obs, SPEED_CMD_CENTRE_MS)
+        self._phi = self._cone_phi()
+        self._phi0 = self._phi
         self._action_buffer = deque(
             [(0.0, SPEED_CMD_CENTRE_MS)] * self._action_delay_substeps
         )
@@ -631,6 +645,19 @@ class GliderEnv(gym.Env):
         )
         info['track_length'] = self._track_length_m
 
+        # Wind-aware glide-cone shaping, F = gamma*Phi(s') - Phi(s), with
+        # Phi = 0 once the episode ends (Ng, Harada & Russell 1999): the
+        # discounted sum over an episode is -Phi(s_0), whatever the policy.
+        r_shaping = 0.0
+        if self.cfg.get('cone_shaping', False):
+            ends = terminated or truncated_r or (self._step_count + 1 >= MAX_STEPS)
+            phi_next = 0.0 if ends else self._cone_phi()
+            r_shaping = float(self.cfg['cone_gamma']) * phi_next - self._phi
+            self._phi = phi_next
+            reward += r_shaping
+        info['r_shaping'] = r_shaping
+        self._update_wind_estimate(obs, speed_cmd_ms)
+
         # Accumulate this step's reward components into the running episode
         # totals (V16 Phase A) -- purely bookkeeping, does not touch `reward`
         # itself. compute_reward() always returns all 6 non-truncation keys
@@ -670,7 +697,8 @@ class GliderEnv(gym.Env):
     # Curriculum interface
     # ------------------------------------------------------------------
 
-    def set_curriculum(self, stage: int, replay_frac: float = 0.0) -> None:
+    def set_curriculum(self, stage: int, replay_frac: float = 0.0,
+                       stage0_wind_ms: float | None = None) -> None:
         """Put the env under the curriculum at `stage`, with replay.
 
         From the next reset() on, each episode runs at `stage`, or with
@@ -687,6 +715,10 @@ class GliderEnv(gym.Env):
             raise ValueError(f"replay_frac must be in [0, 1); got {replay_frac}")
         self._curriculum_stage = int(stage)
         self._replay_frac = float(replay_frac)
+        if stage0_wind_ms is not None:
+            if stage0_wind_ms < 0:
+                raise ValueError(f"stage0_wind_ms must be >= 0; got {stage0_wind_ms}")
+            self._stage0_wind_ms = float(stage0_wind_ms)
 
     def set_stage(self, stage_cfg: dict) -> None:
         """Apply a curriculum stage config dict.
@@ -769,6 +801,21 @@ class GliderEnv(gym.Env):
             omega  = np.zeros(3),
         )
 
+    def _cone_phi(self) -> float:
+        """Glide-cone potential from the TRUE state and mean wind (reward-side
+        information only; the policy never sees it)."""
+        if not self.cfg.get('cone_shaping', False):
+            return 0.0
+        pos = self._fdm.state[0:2] - self._home_ned[0:2]
+        h = -float(self._fdm.state[2])
+        return cone_potential(pos, h, self._wind._mean_ned[:2], self.cfg)
+
+    def _update_wind_estimate(self, sensor_obs: npt.NDArray, v_cmd: float) -> None:
+        """Advance the on-board wind estimate (env/wind_estimate.py) from the
+        delayed sensor vector and the airspeed command being flown."""
+        gs, course, yaw = float(sensor_obs[2]), float(sensor_obs[3]), float(sensor_obs[6])
+        self._wind_est.update(gs * np.cos(course), gs * np.sin(course), yaw, float(v_cmd))
+
     def _policy_obs(self, sensor_obs: npt.NDArray) -> npt.NDArray:
         """The observation the policy receives, from the (delayed) v1 sensor
         vector: unchanged for obs_version 1, the v2 track-frame vector
@@ -781,7 +828,9 @@ class GliderEnv(gym.Env):
         """
         if self.obs_version == 1:
             return sensor_obs
-        return obs_v2_from_v1(sensor_obs, self._prev_action)
+        if self.obs_version == 2:
+            return obs_v2_from_v1(sensor_obs, self._prev_action)
+        return obs_v3_from_v1(sensor_obs, self._prev_action, self._wind_est.w)
 
     def check_obs_version(self, model_obs_version: int) -> None:
         """Raise if a policy trained on one observation version is run here."""

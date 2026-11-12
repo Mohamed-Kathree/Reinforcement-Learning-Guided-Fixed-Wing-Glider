@@ -49,9 +49,14 @@ OBS_V2_FIELDS: tuple[str, ...] = (
     "course_valid", "roll", "pitch", "baro_alt", "vertical_speed", "lidar_agl",
     "lidar_valid", "req_glide_ratio", "prev_bank", "prev_speed",
 )
-OBS_DIMS: dict[int, int] = {1: len(OBS_V1_FIELDS), 2: len(OBS_V2_FIELDS)}
+# v3 = v2 + the wind estimate (env/wind_estimate.py) in the track frame
+OBS_V3_FIELDS: tuple[str, ...] = OBS_V2_FIELDS + ("wind_tail", "wind_cross")
+OBS_DIMS: dict[int, int] = {1: len(OBS_V1_FIELDS), 2: len(OBS_V2_FIELDS),
+                            3: len(OBS_V3_FIELDS)}
 V1 = {name: i for i, name in enumerate(OBS_V1_FIELDS)}
 V2 = {name: i for i, name in enumerate(OBS_V2_FIELDS)}
+V3 = {name: i for i, name in enumerate(OBS_V3_FIELDS)}
+WIND_SCALE_MS: float = 10.0
 
 # v2 scales (divide by): positions /100 m, ground speed /10 m/s, altitude /30 m
 ALONG_CROSS_SCALE_M: float = 100.0
@@ -142,6 +147,24 @@ def obs_v2_from_v1(obs_v1, prev_action) -> np.ndarray:
     ], dtype=np.float32)
 
 
+def obs_v3_from_v1(obs_v1, prev_action, wind_est_ne) -> np.ndarray:
+    """v2 plus the wind estimate as (tailwind, crosswind toward the right)
+    relative to the same track vector the v2 features use, each /10 m/s."""
+    v2 = obs_v2_from_v1(obs_v1, prev_action)
+    vn, ve = velocity_from_v1(obs_v1)
+    vg = math.hypot(vn, ve)
+    if vg >= VG_MIN_MS:
+        tn, te = vn / vg, ve / vg
+    else:
+        yaw = float(obs_v1[V1["yaw"]])
+        tn, te = math.cos(yaw), math.sin(yaw)
+    wn, we = float(wind_est_ne[0]), float(wind_est_ne[1])
+    tail = wn * tn + we * te
+    cross = tn * we - te * wn
+    return np.concatenate([v2, np.array([tail / WIND_SCALE_MS, cross / WIND_SCALE_MS],
+                                        dtype=np.float32)])
+
+
 def obs_version_of(obs) -> int:
     """Observation version from a single frame's length."""
     n = int(np.shape(obs)[-1])
@@ -157,7 +180,7 @@ def guidance(obs) -> dict:
     Returns dist_home (m), heading_err (rad, bearing to home minus course,
     in (-pi, pi]), baro_alt (m), lidar_agl (m), lidar_valid (bool).
     """
-    if obs_version_of(obs) == 1:
+    if obs_version_of(obs) == 1:          # v2 and v3 share the first 17 values
         f = features_from_v1(obs, vg_min=0.0)    # v1 controllers always used GPS course
         baro, agl, valid = obs[V1["baro_alt"]], obs[V1["lidar_agl"]], obs[V1["lidar_valid"]]
         dist = math.hypot(float(obs[V1["dx_home"]]), float(obs[V1["dy_home"]]))

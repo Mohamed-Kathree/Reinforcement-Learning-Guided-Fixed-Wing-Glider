@@ -77,7 +77,7 @@ _SB3_KEYS = (
 # training/train.py.
 _REWARD_COMPONENT_NAMES = (
     'r_path', 'penalty_unreach', 'penalty_stall', 'penalty_bank',
-    'penalty_smooth', 'r_terminal', 'penalty_truncate',
+    'penalty_smooth', 'r_terminal', 'r_shaping', 'penalty_truncate',
 )
 
 

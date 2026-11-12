@@ -58,7 +58,7 @@ def test_env_spaces_by_version():
         assert obs.shape == (OBS_DIMS[version],) and obs.dtype == np.float32
     with pytest.raises(ValueError):
         from env.glider_env import GliderEnv
-        GliderEnv(cfg={"obs_version": 3})
+        GliderEnv(cfg={"obs_version": 4})
 
 
 def test_v2_is_v1_seen_differently():

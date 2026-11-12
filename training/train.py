@@ -118,14 +118,21 @@ def apply_overrides(cfg: dict, overrides: list[str]) -> dict:
         for part in parts[:-1]:
             node = node[part]
         leaf = parts[-1]
-        # Attempt numeric coercion; fall back to string
+        # Attempt numeric coercion, then booleans/null (YAML spellings: a bare
+        # "false" kept as a string would be truthy); fall back to string
         try:
             value: Any = int(raw_value)
         except ValueError:
             try:
                 value = float(raw_value)
             except ValueError:
-                value = raw_value
+                lowered = raw_value.strip().lower()
+                if lowered in ('true', 'false'):
+                    value = lowered == 'true'
+                elif lowered in ('null', 'none', '~'):
+                    value = None
+                else:
+                    value = raw_value
         node[leaf] = value
     return cfg
 
@@ -797,7 +804,8 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
     venv.env_method('set_stage', scheduler.current_cfg)
     # ...and put every worker under the curriculum, so episodes replay
     # earlier stages at replay_frac and report info['episode_stage'].
-    venv.env_method('set_curriculum', scheduler.current_stage, replay_frac)
+    venv.env_method('set_curriculum', scheduler.current_stage, replay_frac,
+                    float(cur_cfg.get('stage0_wind_ms', 0.0)))
 
     # --- Policy ----------------------------------------------------------
     if resume:

@@ -697,3 +697,37 @@ inference on the saved models. This section records how Phase O was built.
 
 `analysis/v23_baseline_parity.py` runs the parity check on all 100 seeds
 of all four stages.
+
+## V23 revision: run 1 levers
+
+The tests behind these are in `docs/V23_horizon_tests_summary.md`. Every
+lever sits behind a key whose default is the V22 behaviour.
+
+- **`reward.path_reward_frame: ground | air`.** With `air`, the reward pays
+  airspeed × dt: the same in every direction and every wind.
+- **`reward.cone_shaping`.** Potential-based shaping,
+  `F = γΦ(s') − Φ(s)` with `Φ = −w_cone · deficit` and Φ = 0 at the end of
+  the episode.
+  - The deficit is the time to reach home through the moving air, at
+    10 m/s, minus the time the altitude buys at `cone_glide_ratio`,
+    converted to metres.
+  - It uses the true mean wind, which is allowed in the reward. The policy
+    never sees it.
+  - In calm air it reduces to max(0, d − G·h).
+  - The discounted sum of F over an episode equals −Φ(s₀); the
+    telescoping test checks this.
+  - This is a deliberate, bounded exception to the Phase 4 "no progress
+    reward" rule: the shaping is zero while home is comfortably in glide,
+    so it never says "hurry home".
+  - `cone_gamma` must equal `ppo.gamma`; a test checks this.
+- **`observation.obs_version: 3`.** v2 plus the wind estimate from
+  `env/wind_estimate.py`, as tailwind and crosswind relative to the track,
+  each ÷10 m/s.
+  - The estimator has three states: wind north, wind east, and the speed
+    loop's airspeed error.
+  - It skips updates while the heading turns faster than 15°/s.
+- **`curriculum.stage0_wind_ms`.** A training-only wind maximum at stage 0,
+  applied in `reset()` under `set_curriculum`. Evaluation pins stages with
+  `set_stage()`, so the benchmark's stage 0 stays calm.
+- **`ppo.gae_lambda` for run 1: 0.995,** from horizon test 1.
+- **`apply_overrides` now parses true, false and null.**

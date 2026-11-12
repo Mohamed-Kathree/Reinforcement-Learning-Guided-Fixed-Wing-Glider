@@ -1,0 +1,50 @@
+{
+ "model": "checkpoints_v22/best_model.zip",
+ "overrides": [],
+ "1_stage0_graduation": {
+  "graduated_at": 3700000,
+  "limit": 5438400.0,
+  "latest_checkpoint": 20000000,
+  "pass": true,
+  "fail": false
+ },
+ "2_downwind_bias_vs_baseline_m": {
+  "mean": 21.45580406120345,
+  "ci95": [
+   5.390894829183857,
+   37.52071329322305
+  ],
+  "n": 98,
+  "threshold": 10.0,
+  "v22": 21.5,
+  "pass": false
+ },
+ "3_mid_flight_value_return_corr": {
+  "corr": 0.41298942347663603,
+  "threshold": 0.5,
+  "v22": 0.12,
+  "pass": false
+ },
+ "4_pattern_shifts_upwind": {
+  "slope_m_per_ms": 13.74016975988861,
+  "ci95": [
+   0.4343460965988122,
+   27.04599342317841
+  ],
+  "n": 98,
+  "pass": false
+ },
+ "4_baseline_reference": {
+  "slope_m_per_ms": 14.102129077774025,
+  "ci95": [
+   6.103654108194687,
+   22.100604047353364
+  ],
+  "n": 98
+ },
+ "success_steady_wind": {
+  "policy": 0.29,
+  "baseline": 0.39
+ },
+ "stop": true
+}

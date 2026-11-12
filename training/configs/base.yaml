@@ -124,6 +124,8 @@ reward:
 
   # Dense (every step, terminal or not)
   w_path:        0.10     # reward per metre of ACTUAL ground track flown
+  path_reward_frame: ground # ground: metres of ground track (V20-V22). air: metres of
+                          # air path, wind-neutral (SPEC V23 Phase R)
   w_unreach:     2.0      # one-sided reachability-barrier penalty
   glide_ratio_usable: 8.0 # conservative vs. measured best L/D ~16.7 (12.9 trimmed)
   barrier_min_agl_m: 10.0 # AGL below which the reachability barrier is inert. Above
@@ -145,6 +147,13 @@ reward:
   # Truncation backstop (read by GliderEnv.step(), not env/reward.py -- only
   # the env knows about MAX_STEPS)
   w_truncate:   300.0
+  # Wind-aware glide-cone shaping, potential-based (env/reward.py cone_deficit_m).
+  cone_shaping:     false
+  w_cone:           1.0     # per metre of glide deficit
+  cone_glide_ratio: 8.0     # = glide_ratio_usable; trimmed L/D is ~12.9
+  cone_airspeed_ms: 10.0
+  cone_cap_m:       200.0
+  cone_gamma:       0.999   # = ppo.gamma (tests/test_run1_levers.py checks)
 
   # Thresholds
   R_home_m:             20.0    # precision-scoring radius (m); NOT terminal; overridden by curriculum
@@ -265,6 +274,9 @@ curriculum:
                                      # by a policy that never trained there -- no longer applies:
                                      # selection is now over all stages (eval above). A run that
                                      # stalls at a stage is a result to report, not to force past.
+  stage0_wind_ms:    0.0            # training-only wind maximum at Stage 0 (SPEC V23 revision:
+                                    # 1.5 gives the wind estimate something to read). The
+                                    # benchmark's Stage 0 stays calm.
   replay_frac:       0.25           # share of episodes replayed at an earlier stage (uniform over
                                      # stages 0 .. current-1) once past Stage 0, so skills from
                                      # easier stages stay in the training distribution.

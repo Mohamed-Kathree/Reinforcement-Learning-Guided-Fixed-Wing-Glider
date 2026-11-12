@@ -1,0 +1,96 @@
+{
+ "provenance": {
+  "utc_timestamp": "2026-11-12T19:03:12+00:00",
+  "git_sha": "93180163da2d831e0dc4a2180029772066b6caf7",
+  "git_dirty": false,
+  "config": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\training\\configs\\base.yaml",
+   "mtime_utc": "2026-11-12T18:05:09.420793+00:00",
+   "sha256": "8134402cbc0035814cc7839db3e9a21527981884941dc1254e1fe9c87246e214",
+   "sha256_16": "8134402cbc003581"
+  },
+  "policy": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v22\\best_model.zip",
+   "mtime_utc": "2026-11-12T15:02:58.667437+00:00",
+   "sha256": "e1e77811ce07a5eed9d0a48556fef235101af0b8e098b8154cbe22449ad7e7d4",
+   "sha256_16": "e1e77811ce07a5ee"
+  },
+  "vecnorm": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v22\\vecnormalize_best.pkl",
+   "mtime_utc": "2026-11-12T15:02:58.668437+00:00",
+   "sha256": "3d8fa01b9e4a3023e45d29a7024550d8e2970c670843f406caaf37ade5264fee",
+   "sha256_16": "3d8fa01b9e4a3023"
+  }
+ },
+ "description": "t5: wind-aware glide margin when the glider first reaches 8 m: glide_ratio*h/V minus the time to reach home through the moving air at V = 10.0 m/s, in seconds. Negative = home already out of reach",
+ "by_controller": {
+  "v22": {
+   "glide_8": {
+    "success": {
+     "n": 29,
+     "median_s": -2.713636694295758,
+     "negative_frac": 0.896551724137931
+    },
+    "failed": {
+     "n": 71,
+     "median_s": -2.192660364706941,
+     "negative_frac": 0.704225352112676
+    }
+   },
+   "glide_12": {
+    "success": {
+     "n": 29,
+     "median_s": 0.4792154748317312,
+     "negative_frac": 0.3103448275862069
+    },
+    "failed": {
+     "n": 71,
+     "median_s": 0.9757188472445701,
+     "negative_frac": 0.4225352112676056
+    }
+   },
+   "frac_of_flight_at_8m": {
+    "mean": 0.6439598262437524,
+    "ci95": [
+     0.6267130345349303,
+     0.6612066179525744
+    ],
+    "n": 100
+   }
+  },
+  "baseline": {
+   "glide_8": {
+    "success": {
+     "n": 39,
+     "median_s": -0.7078518245490812,
+     "negative_frac": 0.6153846153846154
+    },
+    "failed": {
+     "n": 61,
+     "median_s": 1.1059762157574635,
+     "negative_frac": 0.39344262295081966
+    }
+   },
+   "glide_12": {
+    "success": {
+     "n": 39,
+     "median_s": 2.478451833557778,
+     "negative_frac": 0.20512820512820512
+    },
+    "failed": {
+     "n": 61,
+     "median_s": 4.300492760641153,
+     "negative_frac": 0.22950819672131148
+    }
+   },
+   "frac_of_flight_at_8m": {
+    "mean": 0.6996686990602136,
+    "ci95": [
+     0.6896532198258373,
+     0.7096841782945899
+    ],
+    "n": 100
+   }
+  }
+ }
+}

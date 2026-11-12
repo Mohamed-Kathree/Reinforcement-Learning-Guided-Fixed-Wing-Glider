@@ -1,0 +1,50 @@
+{
+ "model": "checkpoints_v22/ppo_glider_4000000_steps.zip",
+ "overrides": [],
+ "1_stage0_graduation": {
+  "graduated_at": 3700000,
+  "limit": 5438400.0,
+  "latest_checkpoint": 20000000,
+  "pass": true,
+  "fail": false
+ },
+ "2_downwind_bias_vs_baseline_m": {
+  "mean": 31.699375349514664,
+  "ci95": [
+   13.472242160782734,
+   49.926508538246594
+  ],
+  "n": 98,
+  "threshold": 10.0,
+  "v22": 21.5,
+  "pass": false
+ },
+ "3_mid_flight_value_return_corr": {
+  "corr": 0.07854285500715726,
+  "threshold": 0.5,
+  "v22": 0.12,
+  "pass": false
+ },
+ "4_pattern_shifts_upwind": {
+  "slope_m_per_ms": 13.991337166163472,
+  "ci95": [
+   0.22729816125286462,
+   27.75537617107408
+  ],
+  "n": 98,
+  "pass": false
+ },
+ "4_baseline_reference": {
+  "slope_m_per_ms": 14.102129077774025,
+  "ci95": [
+   6.103654108194687,
+   22.100604047353364
+  ],
+  "n": 98
+ },
+ "success_steady_wind": {
+  "policy": 0.09,
+  "baseline": 0.39
+ },
+ "stop": true
+}

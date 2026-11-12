@@ -1,0 +1,80 @@
+"""
+wind_estimate.py
+================
+Part of: RL-Guided Return-to-Launch Fixed-Wing Glider
+
+A wind estimate the Raspberry Pi can compute without a pitot tube (SPEC V23
+revision, Phase P.1). The GPS ground velocity is modelled as the air
+velocity along the IMU heading plus the wind:
+
+    v_gps = (V_cmd + b) * [cos psi, sin psi] + w
+
+V_cmd is the airspeed command being flown; b is the speed loop's tracking
+error, which is NOT small (the airframe flies 1.2-1.5 m/s above a 9.5 m/s
+command, its speed floor) and is the main error source of the plain filter
+in the spec, w <- w + k (v_gps - V_cmd h - w). Turning makes b separable
+from w, so both are filtered on the residual r:
+
+    w <- w + (dt / tau)   * r
+    b <- b + (dt / tau_b) * (r . h)
+
+Updates are skipped while the heading turns faster than gate_deg_s: the GPS
+velocity lags the IMU heading (5 Hz fixes plus transport delay), and in a
+turn that lag reads as wind.
+
+Measured in the simulator (baseline flights, 0-3.6 m/s steady wind, seven
+cases): worst error 0.49 m/s after 20 s, 0.61 m/s with a 7 deg yaw bias on
+top; after 10 s it is still converging (up to 1.8 m/s), so the spec's
+"under 1 m/s after 10 s" is not met. Flights last 40-60 s. Before
+convergence the estimate leans toward its zero start.
+
+NED, metres per second; the vector is the velocity of the air mass (the
+direction the wind blows toward), the same convention as sim/wind.py.
+"""
+
+from __future__ import annotations
+
+import math
+
+import numpy as np
+
+TAU_S: float = 4.0
+TAU_BIAS_S: float = 4.0
+GATE_DEG_S: float = 15.0
+
+
+class WindEstimator:
+    def __init__(self, dt: float, tau_s: float = TAU_S, tau_bias_s: float | None = TAU_BIAS_S,
+                 gate_deg_s: float | None = GATE_DEG_S) -> None:
+        if not (dt > 0 and tau_s > 0):
+            raise ValueError("dt and tau_s must be positive")
+        self.dt = float(dt)
+        self.k = min(1.0, self.dt / float(tau_s))
+        self.kb = min(1.0, self.dt / float(tau_bias_s)) if tau_bias_s else 0.0
+        self.gate = math.radians(gate_deg_s) if gate_deg_s else None
+        self.reset()
+
+    def reset(self) -> None:
+        self.w = np.zeros(2)
+        self.b = 0.0
+        self._yaw_prev: float | None = None
+
+    def update(self, vn: float, ve: float, yaw: float, v_cmd: float) -> np.ndarray:
+        if self.gate is not None and self._yaw_prev is not None:
+            rate = abs((yaw - self._yaw_prev + math.pi) % (2 * math.pi) - math.pi) / self.dt
+            if rate > self.gate:
+                self._yaw_prev = yaw
+                return self.w.copy()
+        self._yaw_prev = yaw
+        hn, he = math.cos(yaw), math.sin(yaw)
+        v_air = v_cmd + self.b
+        r = np.array([vn - v_air * hn, ve - v_air * he]) - self.w
+        self.w = self.w + self.k * r
+        self.b = self.b + self.kb * float(r[0] * hn + r[1] * he)
+        return self.w.copy()
+
+
+def wind_in_track_frame(w_ne, tn: float, te: float) -> tuple[float, float]:
+    """(tailwind, crosswind toward the right) relative to a unit track vector."""
+    wn, we = float(w_ne[0]), float(w_ne[1])
+    return wn * tn + we * te, tn * we - te * wn

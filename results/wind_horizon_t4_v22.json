@@ -1,0 +1,89 @@
+{
+ "provenance": {
+  "utc_timestamp": "2026-11-12T19:10:47+00:00",
+  "git_sha": "93180163da2d831e0dc4a2180029772066b6caf7",
+  "git_dirty": true,
+  "config": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\training\\configs\\base.yaml",
+   "mtime_utc": "2026-11-12T19:04:07.975350+00:00",
+   "sha256": "c68556bcb2c9d4698add8fe9f1b94933764a513701e6d4e8a0c4ae9b83e5e50d",
+   "sha256_16": "c68556bcb2c9d469"
+  },
+  "policy": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v22\\best_model.zip",
+   "mtime_utc": "2026-11-12T15:02:58.667437+00:00",
+   "sha256": "e1e77811ce07a5eed9d0a48556fef235101af0b8e098b8154cbe22449ad7e7d4",
+   "sha256_16": "e1e77811ce07a5ee"
+  },
+  "vecnorm": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v22\\vecnormalize_best.pkl",
+   "mtime_utc": "2026-11-12T15:02:58.668437+00:00",
+   "sha256": "3d8fa01b9e4a3023e45d29a7024550d8e2970c670843f406caaf37ade5264fee",
+   "sha256_16": "3d8fa01b9e4a3023"
+  }
+ },
+ "description": "t4: fresh [128,128] value networks fitted to the realised discounted return (learner units) on frozen V22 rollouts, stages 0-3 mixed, stochastic policy; held-out episodes. corr_mid = correlation at 40-60% of the flight, within each stage",
+ "n_episodes": 300,
+ "n_train": 21227,
+ "n_test": 5975,
+ "wind_estimate_error_ms_at_touchdown": {
+  "mean": 0.9104597551953207,
+  "ci95": [
+   0.8026776381581593,
+   1.0182418722324822
+  ],
+  "n": 300
+ },
+ "fits": {
+  "v22_critic": {
+   "r2": 0.13069528341293335,
+   "corr": 0.4174372964488546,
+   "corr_mid_by_stage": {
+    "stage0": 0.1125920727466344,
+    "stage1": 0.11623107277317968,
+    "stage2": -0.02457531354811932,
+    "stage3": 0.20176625021736458
+   }
+  },
+  "current_inputs": {
+   "r2": 0.11643046140670776,
+   "corr": 0.45248785727831253,
+   "corr_mid_by_stage": {
+    "stage0": 0.2964605355193342,
+    "stage1": 0.29642693952445187,
+    "stage2": -0.14862020465662323,
+    "stage3": 0.48252231500168713
+   }
+  },
+  "plus_wind_estimate": {
+   "r2": 0.003169417381286621,
+   "corr": 0.4366271696773997,
+   "corr_mid_by_stage": {
+    "stage0": 0.3176318055298391,
+    "stage1": 0.18092141507319726,
+    "stage2": -0.03052960860888422,
+    "stage3": 0.16313090855956805
+   }
+  },
+  "plus_true_wind_and_stage": {
+   "r2": 0.1371864676475525,
+   "corr": 0.5505672716300207,
+   "corr_mid_by_stage": {
+    "stage0": 0.385423322290107,
+    "stage1": 0.45342523842793664,
+    "stage2": 0.14481706062078592,
+    "stage3": 0.1810206084105671
+   }
+  },
+  "plus_wind_estimate_and_stage": {
+   "r2": 0.12857043743133545,
+   "corr": 0.5535142941939916,
+   "corr_mid_by_stage": {
+    "stage0": 0.2640345962911831,
+    "stage1": 0.4052507968914604,
+    "stage2": 0.2706739456344639,
+    "stage3": 0.2337726790624087
+   }
+  }
+ }
+}

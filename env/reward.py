@@ -107,6 +107,9 @@ DEFAULT_REWARD_CFG: dict = {
 
     # Dense (every step, terminal or not)
     'w_path':            0.10,  # reward per metre of ACTUAL ground track flown
+    'path_reward_frame': 'ground',  # 'ground': metres of ground track (V20-V22);
+                                #   'air': metres of air path (airspeed x dt), the
+                                #   same in every direction and wind (SPEC V23 R)
     'w_unreach':         2.0,   # one-sided reachability-barrier penalty
     'glide_ratio_usable': 8.0,  # conservative vs. measured best L/D ~16.7 (12.9 trimmed)
     'barrier_min_agl_m': 10.0,  # AGL below which the reachability barrier is inert.
@@ -134,6 +137,17 @@ DEFAULT_REWARD_CFG: dict = {
     # env knows about MAX_STEPS) -- listed here so training/configs/base.yaml
     # has one place to tune it, and GliderEnv reads cfg['w_truncate'].
     'w_truncate':      300.0,
+
+    # Wind-aware glide-cone shaping (SPEC V23 revision; a bounded,
+    # potential-based exception to the Phase 4 "no progress reward" rule,
+    # see docs/SPEC_V20_decisions.md). Off unless cone_shaping is true.
+    'cone_shaping':      False,
+    'w_cone':            1.0,   # potential per metre of glide deficit
+    'cone_glide_ratio':  8.0,   # glide ratio the cone assumes (8 = glide_ratio_usable;
+                                #   the airframe's trimmed L/D is ~12.9)
+    'cone_airspeed_ms':  10.0,  # nominal airspeed for the time-to-home (m/s)
+    'cone_cap_m':        200.0, # deficit ceiling (also used when the wind beats the airspeed)
+    'cone_gamma':        0.999, # must equal ppo.gamma for the policy-invariance guarantee
 
     # Thresholds
     'R_home_m':               20.0,             # precision-scoring radius (m); no longer terminal
@@ -175,6 +189,41 @@ def terminal_reward(dist_home: float, quality: float, cfg: dict) -> float:
     r_precision  = float(cfg['w_land']) * sigma_centre / (sigma_centre + dist_home)
     r_bullseye   = float(cfg['w_bullseye']) * float(np.exp(-(dist_home / 2.0) ** 2))
     return quality * (r_precision + r_bullseye) - (1.0 - quality) * float(cfg['w_crash'])
+
+
+def cone_deficit_m(pos_ne, h_m: float, wind_ne, cfg: dict) -> float:
+    """Glide deficit to home through the moving air, in metres of air path.
+
+    The time to reach home at the nominal airspeed V, flying through air
+    that moves at wind_ne (the glider must cancel the drift), against the
+    time the altitude buys at the usable glide ratio G:
+
+        t_need solves |pos + wind*t| = V*t;   t_have = G*h / V
+        deficit = V * (t_need - t_have), floored at 0, capped at cone_cap_m
+
+    In calm air this is max(0, d - G*h): the reachability cone. Downwind of
+    home it is larger than upwind at the same distance. pos_ne is the
+    glider's position relative to home (North, East); h_m its height above
+    the ground.
+    """
+    v = float(cfg['cone_airspeed_ms'])
+    g = float(cfg['cone_glide_ratio'])
+    cap = float(cfg['cone_cap_m'])
+    p = np.asarray(pos_ne, dtype=float)[:2]
+    w = np.asarray(wind_ne, dtype=float)[:2]
+    a = v * v - float(w @ w)
+    if a <= 1e-9:
+        return cap
+    pw = float(p @ w)
+    t_need = (pw + np.sqrt(pw * pw + a * float(p @ p))) / a
+    deficit = v * t_need - g * max(float(h_m), 0.0)
+    return float(min(max(deficit, 0.0), cap))
+
+
+def cone_potential(pos_ne, h_m: float, wind_ne, cfg: dict) -> float:
+    """Phi(s) = -w_cone * deficit: zero while home is comfortably within
+    glide, so it never says "hurry home"; negative once the cone closes."""
+    return -float(cfg['w_cone']) * cone_deficit_m(pos_ne, h_m, wind_ne, cfg)
 
 
 def compute_reward(
@@ -268,7 +317,14 @@ def compute_reward(
     # 1. Route-length reward: metres of ACTUAL ground track flown this step.
     #    Replaces the old airtime bonus (which rewarded loitering in place,
     #    not distance) -- see module docstring.
-    r_path = float(cfg['w_path']) * ground_speed_true * float(cfg['dt_rl'])
+    frame = cfg.get('path_reward_frame', 'ground')
+    if frame == 'ground':
+        path_speed = ground_speed_true
+    elif frame == 'air':
+        path_speed = float(airspeed_true)
+    else:
+        raise ValueError(f"path_reward_frame must be 'ground' or 'air', got {frame!r}")
+    r_path = float(cfg['w_path']) * path_speed * float(cfg['dt_rl'])
     r += r_path
 
     # 2. Reachability barrier: a CRUISE-PHASE constraint, not a landing-accuracy
