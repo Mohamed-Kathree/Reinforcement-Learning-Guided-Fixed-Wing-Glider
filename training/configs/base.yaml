@@ -172,6 +172,17 @@ ppo:
   max_grad_norm:    0.5             # gradient clipping norm
   learning_rate:    3.0e-4          # Adam learning rate
   clip_range:       0.2             # PPO clipping epsilon
+  target_kl:        0.03            # stop a rollout's update epochs once the policy has moved this
+                                     # far (SB3 stops at 1.5x = 0.045). Both V20-series runs ran with
+                                     # no limit: the update's KL rose from 0.016 to 0.19 (V21) and
+                                     # 0.30 (V20) with 55-60% of samples clipped, and both policies
+                                     # degraded from their 2-3.5M peak, when KL was still 0.04-0.06.
+                                     # Below the limit (the first ~2M steps) nothing changes.
+  min_action_std:   0.2             # floor on the policy's exploration noise during training. It
+                                     # fell from 1.0 to 0.25 by 3.5M steps and 0.08 by the end of
+                                     # both runs, which is what drove the KL up (KL ~ (step/std)^2)
+                                     # and left nothing to explore with after a stage change.
+                                     # Deterministic evaluation uses the mean and is unaffected.
   net_arch:         [128, 128]      # shared MLP hidden layer sizes
   n_stack:          8               # observation frames stacked (VecFrameStack) on BOTH the
                                      # training and eval venvs: 8 x 50 ms = 0.4 s of history, so
@@ -184,7 +195,17 @@ ppo:
                                      # Spec.md §6 recommends 40_000_000 for a real full run --
                                      # deliberately not set here, raise explicitly when ready.
   normalize_obs:    true            # use VecNormalize on observations
-  normalize_reward: true            # use VecNormalize on rewards
+  normalize_reward: false           # VecNormalize reward normalisation is OFF. It divides by a
+                                     # running return std and then clips at +/-10; in the V20/V21
+                                     # runs that std was 13-26, so raw rewards beyond +/-128..256
+                                     # were clipped against a landing reward of up to +650. Every
+                                     # clean landing inside 14 m (start) to 38 m (end) paid the
+                                     # same -- wider than the success radius from 1.6M steps on.
+  reward_scale:     0.02            # the fixed constant PPO's rewards are multiplied by instead
+                                     # (training/train.py VecScaleReward): landing reward <= +13,
+                                     # crash -4, nothing clipped, and the scale no longer drifts
+                                     # with the curriculum. PPO normalises advantages per batch, so
+                                     # this only sets the value-loss scale.
   clip_obs:         10.0            # VecNormalize observation clip bound
 
 # ---------------------------------------------------------------------------

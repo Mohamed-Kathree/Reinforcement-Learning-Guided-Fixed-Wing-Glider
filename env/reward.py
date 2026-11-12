@@ -158,6 +158,25 @@ def _grade(x: float, ok: float, bad: float) -> float:
 # Public reward function
 # ---------------------------------------------------------------------------
 
+def terminal_reward(dist_home: float, quality: float, cfg: dict) -> float:
+    """The touchdown reward for landing dist_home metres out at this quality.
+
+        quality * (r_precision + r_bullseye) - (1 - quality) * w_crash
+
+    r_precision is hyperbolic in distance (non-vanishing derivative at every
+    distance); r_bullseye is a narrow Gaussian for fine precision once
+    close. Both are scaled by quality, so a stalled-but-centred landing
+    cannot beat a clean off-centre one. Ranges from -w_crash (quality 0) to
+    w_land + w_bullseye (clean, dead centre). compute_reward() calls this;
+    it is separate so tests can check what the learner sees of it
+    (training/train.py learner_reward()).
+    """
+    sigma_centre = float(cfg['sigma_centre_m'])
+    r_precision  = float(cfg['w_land']) * sigma_centre / (sigma_centre + dist_home)
+    r_bullseye   = float(cfg['w_bullseye']) * float(np.exp(-(dist_home / 2.0) ** 2))
+    return quality * (r_precision + r_bullseye) - (1.0 - quality) * float(cfg['w_crash'])
+
+
 def compute_reward(
     state:      NDArray,
     prev_state: NDArray,
@@ -342,7 +361,6 @@ def compute_reward(
         q_alpha = _grade(alpha_td_deg,    float(cfg['alpha_ok_deg']), float(cfg['alpha_bad_deg']))
         quality = q_sink * q_roll * q_speed * q_alpha
 
-        sigma_centre = float(cfg['sigma_centre_m'])
         # Phase 5: hyperbolic, not Gaussian. The Gaussian's tail vanished long
         # before the distances this airframe actually achieves (measured mean
         # touchdown 32.7 m at Stage 0, 155.8 m at Stage 3; the Gaussian paid
@@ -351,15 +369,7 @@ def compute_reward(
         # derivative at every distance: dR/dd = -w_land*sigma/(sigma+d)^2.
         # dist_home is non-negative by construction (a norm), so no guard
         # against a negative denominator is needed.
-        r_precision  = float(cfg['w_land']) * sigma_centre / (sigma_centre + dist_home)
-        # r_bullseye stays a NARROW Gaussian -- fine-precision incentive once
-        # already close -- and stays quality-gated (not just r_precision) --
-        # the spec's formula only shows r_precision scaled, but leaving a
-        # narrow bonus unscaled would let a stalled-but-centred landing beat
-        # a clean off-centre one, breaking the lexicographic guarantee the
-        # whole multiplicative design exists to provide.
-        r_bullseye   = float(cfg['w_bullseye']) * float(np.exp(-(dist_home / 2.0) ** 2))
-        r_terminal   = quality * (r_precision + r_bullseye) - (1.0 - quality) * float(cfg['w_crash'])
+        r_terminal = terminal_reward(dist_home, quality, cfg)
         r += r_terminal
 
         terminated = True

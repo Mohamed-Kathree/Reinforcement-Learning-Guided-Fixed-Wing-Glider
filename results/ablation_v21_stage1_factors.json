@@ -1,0 +1,114 @@
+{
+ "description": "V21 best model (3.5M steps): Stage 0 with one group of Stage 1 settings switched on at a time; 100 episodes per condition, policy and baseline on the same seeds within a condition (analysis/stage1_ablation.py). Conditions that switch on gusts or wind fly different episodes from the others, so compare policy vs baseline within a row.",
+ "model": "checkpoints_v21/best_model.zip (3,500,000 steps)",
+ "conditions": {
+  "stage0": {
+   "group": "stage0",
+   "n": 100,
+   "policy_success": 0.58,
+   "policy_crash": 0.0,
+   "baseline_success": 0.27,
+   "baseline_crash": 0.0,
+   "policy_median_miss": 21.22912814339983,
+   "baseline_median_miss": 38.124426809766746,
+   "policy_quality": 0.8800747850359291,
+   "p": 3.3053764732060564e-05
+  },
+  "grading": {
+   "group": "grading",
+   "n": 100,
+   "policy_success": 0.58,
+   "policy_crash": 0.0,
+   "baseline_success": 0.27,
+   "baseline_crash": 0.0,
+   "policy_median_miss": 21.22912814339983,
+   "baseline_median_miss": 38.124426809766746,
+   "policy_quality": 0.8737575793813953,
+   "p": 3.3053764732060564e-05
+  },
+  "sensors": {
+   "group": "sensors",
+   "n": 100,
+   "policy_success": 0.54,
+   "policy_crash": 0.0,
+   "baseline_success": 0.28,
+   "baseline_crash": 0.0,
+   "policy_median_miss": 23.196600550271263,
+   "baseline_median_miss": 38.124426809766746,
+   "policy_quality": 0.8771198248017078,
+   "p": 0.0005354355028570622
+  },
+  "airframe": {
+   "group": "airframe",
+   "n": 100,
+   "policy_success": 0.44,
+   "policy_crash": 0.0,
+   "baseline_success": 0.26,
+   "baseline_crash": 0.0,
+   "policy_median_miss": 27.05330300199862,
+   "baseline_median_miss": 37.27535548826326,
+   "policy_quality": 0.8721817414296055,
+   "p": 0.015346677832630107
+  },
+  "geometry": {
+   "group": "geometry",
+   "n": 100,
+   "policy_success": 0.4,
+   "policy_crash": 0.0,
+   "baseline_success": 0.19,
+   "baseline_crash": 0.0,
+   "policy_median_miss": 26.007075841389383,
+   "baseline_median_miss": 40.82872872890229,
+   "policy_quality": 0.8760485617932378,
+   "p": 0.003801654409748778
+  },
+  "gusts": {
+   "group": "gusts",
+   "n": 100,
+   "policy_success": 0.37,
+   "policy_crash": 0.0,
+   "baseline_success": 0.4,
+   "baseline_crash": 0.0,
+   "policy_median_miss": 34.088362545470886,
+   "baseline_median_miss": 30.229916773916486,
+   "policy_quality": 0.7952286372671945,
+   "p": 0.7754496546815659
+  },
+  "meanwind": {
+   "group": "meanwind",
+   "n": 100,
+   "policy_success": 0.24,
+   "policy_crash": 0.01,
+   "baseline_success": 0.39,
+   "baseline_crash": 0.0,
+   "policy_median_miss": 51.1786502220057,
+   "baseline_median_miss": 33.224130878406875,
+   "policy_quality": 0.7891033009721141,
+   "p": 0.04438416098714981
+  },
+  "wind": {
+   "group": "wind",
+   "n": 100,
+   "policy_success": 0.18,
+   "policy_crash": 0.0,
+   "baseline_success": 0.25,
+   "baseline_crash": 0.0,
+   "policy_median_miss": 61.49185266894047,
+   "baseline_median_miss": 35.72258913626518,
+   "policy_quality": 0.7166163098446395,
+   "p": 0.31050465907901537
+  },
+  "stage1": {
+   "group": "stage1",
+   "n": 100,
+   "policy_success": 0.12,
+   "policy_crash": 0.06,
+   "baseline_success": 0.25,
+   "baseline_crash": 0.0,
+   "policy_median_miss": 59.59261464493434,
+   "baseline_median_miss": 38.47253371828904,
+   "policy_quality": 0.662566042940168,
+   "p": 0.029449373483657837
+  }
+ }
+}

@@ -479,3 +479,137 @@ stayed flat (-110 to -200) for the whole run.
 earned Stage 1 (its best Stage 0 window was 38%) and then held at Stage 1
 (best window 28% < 0.30). Whether replay and the longer stay lift Stage 1
 past 0.30 is what the next run measures.
+
+## Training defects D and E (found from the V20 and V21 runs)
+
+The V21 run (curriculum changes above) earned Stage 1 at 1.5M steps, held
+there for 14M steps at 5-14% rolling success, and degraded from its 3.5M
+peak. It was stopped at 15.7M. `best_model.zip` (3.5M) benchmarks at 58%
+Stage 0 success against the baseline's 27% (p < 0.001) and 12% against 25%
+at Stage 1 (`results/benchmark_v21_best_3.5M.json`). The curriculum
+changes did their job (no forced advance, peak kept) but did not remove the
+cause. Two defects in the training setup did the damage. Neither is in
+`env/reward.py`, and no reward unit test could have seen either.
+
+### D. Reward clipping flattened the precision reward
+
+`VecNormalize(norm_reward=True)` divides each reward by a running standard
+deviation of the discounted return, then clips at ±10. That running return
+resets every episode and receives the landing reward only on its last
+step, so its standard deviation tracks the small dense terms, not the
+landing reward. Measured from the saved `vecnormalize_<step>.pkl` files and
+the training stream (V21):
+
+| Steps | Return std | Raw rewards clipped beyond | Clean landings all paid the same inside | Success radius |
+|---|---|---|---|---|
+| 0.2-0.6M | 25.6 | ±256 | 14 m | 25 m |
+| 0.8-1.4M | 19.1 | ±191 | 24 m | 25 m |
+| 1.6-2.4M | 16.4 | ±164 | 27 m | 22 m |
+| 3.0-4.0M | 14.6 | ±146 | 31 m | 22 m |
+| 14.0-15.7M | 12.8 | ±128 | 38 m | 22 m |
+
+The landing reward runs to +650 and a crash is -200. From 1.6M steps on,
+the flat disc was wider than the success radius: landing on target paid
+exactly what landing 30 m out paid. Crash penalties were clipped in 6-14%
+of episodes. This is Defect B's symptom (no usable gradient where the
+policy lands) arriving through the wrapper instead of the reward formula.
+
+The Term 3 run had the same setting but a return std of 48.6 (clip at
+±486), so it was effectively unclipped. The V20 changes lowered the return
+spread enough for the same limit to bind.
+
+**Fix.** `ppo.normalize_reward: false` and `ppo.reward_scale: 0.02`
+(`training/train.py` `VecScaleReward`): one fixed constant, nothing
+clipped, and a scale that does not drift with the curriculum. PPO
+normalises advantages per batch, so the constant only sets the value-loss
+scale. `learner_reward()` computes what PPO receives for any raw reward;
+`tests/test_training_defects.py` reproduces the old flat disc with it and
+requires the configured pipeline to pay strictly more for every half-metre
+closer at every stage, and to pass the crash penalty in proportion. A
+resume takes the normalisation flag from the config, not the checkpoint.
+
+### E. Unbounded PPO updates as the action noise collapsed
+
+From the training streams (`data/runs/*.jsonl`) and the saved policies:
+
+| Steps | Action std | Update KL | Samples clipped |
+|---|---|---|---|
+| 0-1.5M | 1.0 -> 0.6 | 0.016 | 15% |
+| 1.5-3M | 0.5 -> 0.3 | 0.034 | 27% |
+| 3-4.5M | 0.25 -> 0.18 | 0.060 | 36% |
+| 9-10.5M | 0.11 | 0.135 (V21), 0.280 (V20) | 50-57% |
+| end | 0.08 | 0.19 (V21), 0.30 (V20) | 55-60% |
+
+A fixed-size step in the action mean costs KL in proportion to
+(step / std)², so at a constant learning rate the update grew as the noise
+shrank, to 10-20 times the usual 0.01-0.03. Both policies peaked at 2-3.5M
+steps, while KL was still 0.04-0.06, and degraded after. V21 shows it is
+not the curriculum: it degraded while held at one stage.
+
+**Fix.** `ppo.target_kl: 0.03` (SB3 stops a rollout's epochs at 1.5 times
+that) and `ppo.min_action_std: 0.2` (`ActionStdFloorCallback` clamps the
+policy's log-std before each rollout and logs `train/action_std_<k>`).
+Below the limits, which is roughly the first 2M steps, training is
+unchanged. `build_model()` is now the one place PPO is constructed.
+
+### What was ruled out
+
+- **Discounting.** gamma is 0.999, a horizon of about 50 s; the landing
+  reward reaches the early decisions.
+- **Raw angles in the observation.** Success does not depend on the
+  direction home (40-58% in every sector, the same pattern as the
+  baseline), so the ±180° wrap in course and heading is not the cause.
+- **The path reward in wind.** The policy collects less path reward than
+  the baseline in wind (about 29 vs 35 per episode) and flies the same
+  share of its track downwind (51-59% vs 53-60%).
+- **Missing wind information.** Course and heading are both observed
+  (their difference is the crab angle), and ground speed and vertical
+  speed give the achieved glide ratio over the ground directly.
+
+### What Stage 1 does to the policy
+
+`analysis/stage1_ablation.py`, V21 best model, Stage 0 plus one group of
+Stage 1 settings (`results/ablation_v21_stage1_factors.json`):
+
+| Switched on | RL success | Baseline | RL median miss |
+|---|---|---|---|
+| nothing (Stage 0) | 58% | 27% | 21 m |
+| landing grading | 58% | 27% | 21 m |
+| sensor noise + dropout | 54% | 28% | 23 m |
+| airframe randomisation | 44% | 26% | 27 m |
+| target geometry | 40% | 19% | 26 m |
+| gusts only | 37% | 40% | 34 m |
+| steady wind only | 24% | 39% | 51 m |
+| wind + gusts | 18% | 25% | 61 m |
+| all of Stage 1 | 12% | 25% | 60 m |
+
+Steady wind is what the policy cannot handle; everything else leaves it
+ahead of the baseline. The baseline steers its GPS ground track at home,
+which cancels drift by construction. Whether the policy learns the same
+once D and E are fixed is what the next run tests: at Stage 1 the reward
+was flat inside 27-38 m for the whole of its stay, so it was never paid to
+close the last 30 m in wind. No observation or action change has been
+made.
+
+### Also changed
+
+- Checkpoint, VecNormalize, curriculum-state and final-model writes go
+  through `retry_io()` (four attempts, then a warning and a skipped file),
+  the same exposure to a locked file that ended the first run.
+- `tests/test_training_defects.py::test_training_loop_end_to_end_smoke`
+  runs `train()` itself for about 1,000 steps into a temp folder with
+  every callback attached.
+- Not changed: the smoothness penalty is still per step, not scaled by
+  `dt_rl` like the other dense terms. It taxes exploration noise (about 7%
+  of the early reward budget), but it is also the only thing discouraging
+  bang-bang commands, so it stays until a run shows it needs to move.
+
+### What to watch in the next run
+
+| Signal | Healthy | Where |
+|---|---|---|
+| `train/approx_kl` | stays under about 0.045 | TensorBoard, dashboard |
+| `train/clip_fraction` | under about 0.3 | TensorBoard, dashboard |
+| `train/action_std_0`, `_1` | at or above 0.2 | TensorBoard |
+| Stage 0 eval success | passes the old 50-60% peak and holds | `eval_logs/multistage.jsonl` |
+| Stage 1 rolling success | climbs past the old 12% | `[Curriculum]` lines, dashboard |

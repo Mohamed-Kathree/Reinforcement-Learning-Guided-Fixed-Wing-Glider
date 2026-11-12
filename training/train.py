@@ -68,7 +68,9 @@ from stable_baselines3.common.callbacks import (
     CallbackList,
     CheckpointCallback,
 )
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize, DummyVecEnv, VecFrameStack
+from stable_baselines3.common.vec_env import (
+    DummyVecEnv, SubprocVecEnv, VecEnvWrapper, VecFrameStack, VecNormalize,
+)
 from stable_baselines3.common.monitor import Monitor
 
 from env.glider_env import GliderEnv
@@ -215,6 +217,63 @@ def make_env(cfg: dict, rank: int, seed: int = 0):
     return _init
 
 
+class VecScaleReward(VecEnvWrapper):
+    """Multiplies every reward by a fixed constant, and does nothing else.
+
+    This is the whole of the reward transform between env/reward.py and PPO
+    (ppo.reward_scale, with ppo.normalize_reward false). It replaced
+    VecNormalize's reward normalisation, which divides by a running return
+    standard deviation and then CLIPS at +/-10. In the V20/V21 runs that
+    standard deviation was 13-26, so every raw reward beyond +/-128..256 was
+    clipped, against a landing reward of up to +650 and a crash at -200:
+    every clean landing closer than 14 m (start of training) to 38 m (end)
+    paid the same. From 1.6M steps on that flat disc was wider than the
+    success radius, so landing on target earned nothing over landing 30 m
+    out (docs/SPEC_V20_decisions.md, "Training defects").
+
+    It sits inside VecFrameStack, so Monitor (inside each worker) still
+    reports raw episode returns and VecNormalize stays outermost.
+    """
+
+    def __init__(self, venv, scale: float) -> None:
+        if not scale > 0.0:
+            raise ValueError(f"reward scale must be positive; got {scale}")
+        super().__init__(venv)
+        self.scale = float(scale)
+
+    def reset(self):
+        return self.venv.reset()
+
+    def step_wait(self):
+        obs, rewards, dones, infos = self.venv.step_wait()
+        return obs, rewards * self.scale, dones, infos
+
+
+def learner_reward(venv, raw, return_std: float | None = None) -> np.ndarray:
+    """What PPO receives for raw env rewards `raw`, through venv's wrappers.
+
+    Applies, innermost first, every reward transform in the wrapper chain:
+    VecScaleReward's constant, and VecNormalize's divide-and-clip when its
+    norm_reward is on (using `return_std` in place of its running estimate
+    when given). Pure: no statistics are updated. Used by the tests that pin
+    the landing reward's gradient as seen by the learner.
+    """
+    chain = []
+    v = venv
+    while v is not None:
+        chain.append(v)
+        v = getattr(v, 'venv', None)
+    out = np.asarray(raw, dtype=np.float64)
+    for w in reversed(chain):
+        if isinstance(w, VecScaleReward):
+            out = out * w.scale
+        elif isinstance(w, VecNormalize) and w.norm_reward:
+            std = (float(return_std) if return_std is not None
+                   else float(np.sqrt(w.ret_rms.var + w.epsilon)))
+            out = np.clip(out / std, -w.clip_reward, w.clip_reward)
+    return out
+
+
 def build_venv(cfg: dict, seed: int = 0, force_dummy: bool = False) -> VecNormalize:
     """Create a frame-stacked, VecNormalize-wrapped vectorised environment.
 
@@ -249,6 +308,9 @@ def build_venv(cfg: dict, seed: int = 0, force_dummy: bool = False) -> VecNormal
     else:
         venv = SubprocVecEnv(fns, start_method='spawn')
 
+    reward_scale = float(cfg['ppo'].get('reward_scale', 1.0))
+    if reward_scale != 1.0:
+        venv = VecScaleReward(venv, reward_scale)
     venv = VecFrameStack(venv, n_stack=int(cfg['ppo']['n_stack']))
     venv = VecNormalize(
         venv,
@@ -397,6 +459,37 @@ class CurriculumCallback(BaseCallback):
 # Checkpoint + VecNormalize save callback
 # ---------------------------------------------------------------------------
 
+def retry_io(action, what: str, attempts: int = 4, wait_s: float = 2.0) -> bool:
+    """Run a file write, retrying on OSError; never raise.
+
+    The repository sits under OneDrive, whose sync client can hold a file
+    open for a moment. A bare write then raises PermissionError, which
+    ended the first V20 run at 18.6M of 20M steps (in the dashboard stream;
+    the checkpoint writes had the same exposure). A write that still fails
+    after `attempts` is reported and skipped: one missing checkpoint, with
+    the next due checkpoint_freq steps later, costs less than the run.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            action()
+            return True
+        except OSError as exc:
+            if attempt == attempts:
+                print(f"[IO] WARNING: {what} failed {attempts} times ({exc!r}); skipped",
+                      flush=True)
+                return False
+            time.sleep(wait_s)
+    return False
+
+
+class RetryingCheckpointCallback(CheckpointCallback):
+    """SB3's CheckpointCallback with its save retried (see retry_io)."""
+
+    def _on_step(self) -> bool:
+        retry_io(super()._on_step, f"model checkpoint at {self.num_timesteps} steps")
+        return True
+
+
 class VecNormCheckpointCallback(BaseCallback):
     """Saves a VecNormalize stats file alongside each model checkpoint.
 
@@ -434,14 +527,76 @@ class VecNormCheckpointCallback(BaseCallback):
     def _on_step(self) -> bool:
         if self.n_calls % self.save_freq == 0:
             path = self.checkpoint_dir / f"{self.name_prefix}_{self.num_timesteps}.pkl"
-            self.venv.save(str(path))
+            retry_io(lambda: self.venv.save(str(path)), f"VecNormalize save {path.name}")
             curriculum_path = self.checkpoint_dir / f"curriculum_{self.num_timesteps}.json"
-            with open(curriculum_path, 'w') as f:
-                json.dump(self.scheduler.state_dict(), f)
+
+            def _write_curriculum() -> None:
+                with open(curriculum_path, 'w') as f:
+                    json.dump(self.scheduler.state_dict(), f)
+
+            retry_io(_write_curriculum, f"curriculum save {curriculum_path.name}")
             if self.verbose >= 1:
                 print(f"[VecNorm] Saved {path}")
                 print(f"[Curriculum] Saved {curriculum_path}")
         return True
+
+
+class ActionStdFloorCallback(BaseCallback):
+    """Keeps the policy's exploration noise from collapsing.
+
+    Before each rollout the policy's log-std is clamped to at least
+    log(min_std). In the V20/V21 runs the action std fell from 1.0 to 0.25
+    by 3.5M steps and 0.08 by the end. Two things followed: nothing was
+    left to explore with when the curriculum changed the task, and, because
+    a fixed-size step in the action mean costs KL ~ (step / std)^2, the
+    PPO update's KL rose from 0.016 to 0.19-0.30 with 55-60% of samples
+    clipped. Deterministic evaluation is unaffected (it uses the mean).
+
+    Also logs train/action_std_<k> every rollout.
+    """
+
+    def __init__(self, min_std: float, verbose: int = 0) -> None:
+        super().__init__(verbose=verbose)
+        if not min_std > 0.0:
+            raise ValueError(f"min_std must be positive; got {min_std}")
+        self.min_log_std = float(np.log(min_std))
+
+    def _on_rollout_start(self) -> None:
+        import torch
+        log_std = self.model.policy.log_std
+        with torch.no_grad():
+            log_std.clamp_(min=self.min_log_std)
+        for k, v in enumerate(log_std.detach().exp().cpu().numpy().ravel()):
+            self.logger.record(f'train/action_std_{k}', float(v))
+
+    def _on_step(self) -> bool:
+        return True
+
+
+def build_model(cfg: dict, venv: VecNormalize, tb_log_dir: str | None = None,
+                seed: int = 0) -> PPO:
+    """A fresh PPO from cfg['ppo'] (the only place training constructs one)."""
+    ppo_cfg = cfg['ppo']
+    target_kl = ppo_cfg.get('target_kl')
+    return PPO(
+        policy          = ppo_cfg['policy'],
+        env             = venv,
+        n_steps         = int(ppo_cfg['n_steps']),
+        batch_size      = int(ppo_cfg['batch_size']),
+        n_epochs        = int(ppo_cfg['n_epochs']),
+        gae_lambda      = float(ppo_cfg['gae_lambda']),
+        gamma           = float(ppo_cfg['gamma']),
+        ent_coef        = float(ppo_cfg['ent_coef']),
+        vf_coef         = float(ppo_cfg['vf_coef']),
+        max_grad_norm   = float(ppo_cfg['max_grad_norm']),
+        learning_rate   = float(ppo_cfg['learning_rate']),
+        clip_range      = float(ppo_cfg['clip_range']),
+        target_kl       = float(target_kl) if target_kl is not None else None,
+        policy_kwargs   = dict(net_arch=list(ppo_cfg['net_arch'])),
+        tensorboard_log = tb_log_dir,
+        verbose         = int(cfg['logging']['verbose']),
+        seed            = seed,
+    )
 
 
 class MultiStageEvalCallback(BaseCallback):
@@ -630,8 +785,6 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
     venv.env_method('set_curriculum', scheduler.current_stage, replay_frac)
 
     # --- Policy ----------------------------------------------------------
-    policy_kwargs = dict(net_arch=list(ppo_cfg['net_arch']))
-
     if resume:
         print(f"Resuming from checkpoint: {resume}")
         model = PPO.load(
@@ -644,35 +797,21 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
         vecnorm_resume = _vecnorm_path_for_checkpoint(resume)
         if vecnorm_resume.exists():
             venv = VecNormalize.load(str(vecnorm_resume), venv.venv)
+            # The saved wrapper carries the reward-normalisation flag it was
+            # trained with; the config decides, not the checkpoint.
+            venv.norm_reward = bool(ppo_cfg['normalize_reward'])
             model.set_env(venv)
             print(f"Loaded VecNormalize stats from {vecnorm_resume}")
         else:
             print(f"Warning: no matching VecNormalize stats found at "
                   f"{vecnorm_resume}; continuing with fresh running stats.")
     else:
-        model = PPO(
-            policy          = ppo_cfg['policy'],
-            env             = venv,
-            n_steps         = int(ppo_cfg['n_steps']),
-            batch_size      = int(ppo_cfg['batch_size']),
-            n_epochs        = int(ppo_cfg['n_epochs']),
-            gae_lambda      = float(ppo_cfg['gae_lambda']),
-            gamma           = float(ppo_cfg['gamma']),
-            ent_coef        = float(ppo_cfg['ent_coef']),
-            vf_coef         = float(ppo_cfg['vf_coef']),
-            max_grad_norm   = float(ppo_cfg['max_grad_norm']),
-            learning_rate   = float(ppo_cfg['learning_rate']),
-            clip_range      = float(ppo_cfg['clip_range']),
-            policy_kwargs   = policy_kwargs,
-            tensorboard_log = tb_log_dir,
-            verbose         = int(log_cfg['verbose']),
-            seed            = seed,
-        )
+        model = build_model(cfg, venv, tb_log_dir, seed)
 
     # --- Callbacks -------------------------------------------------------
     checkpoint_freq = int(log_cfg['checkpoint_freq'])
 
-    checkpoint_cb = CheckpointCallback(
+    checkpoint_cb = RetryingCheckpointCallback(
         save_freq   = max(checkpoint_freq // int(ppo_cfg['n_envs']), 1),
         save_path   = str(checkpoint_dir),
         name_prefix = 'ppo_glider',
@@ -706,6 +845,8 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
     )
 
     callback_list = [curriculum_cb, checkpoint_cb, vecnorm_cb, eval_cb]
+    if ppo_cfg.get('min_action_std') is not None:
+        callback_list.append(ActionStdFloorCallback(float(ppo_cfg['min_action_std'])))
     if WebStreamCallback is not None:
         callback_list.append(WebStreamCallback(
             scheduler       = scheduler,
@@ -733,8 +874,8 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
     # --- Save final model + VecNormalize stats ---------------------------
     final_model_path  = str(checkpoint_dir / 'ppo_glider_final')
     final_vecnorm_path = str(checkpoint_dir / 'vecnormalize_final.pkl')
-    model.save(final_model_path)
-    venv.save(final_vecnorm_path)
+    retry_io(lambda: model.save(final_model_path), "final model save")
+    retry_io(lambda: venv.save(final_vecnorm_path), "final VecNormalize save")
     print(f"Saved final model  : {final_model_path}.zip")
     print(f"Saved VecNormalize : {final_vecnorm_path}")
 
