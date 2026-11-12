@@ -63,13 +63,10 @@ Statefulness:
     site already calls it at the top of each episode (evaluation loops,
     benchmarks, tests), so this requires no caller changes.
 
-Observation index contract (must match env/glider_env.py):
-    obs[0]  : dx_home       (m)   -- GPS North relative to home
-    obs[1]  : dy_home       (m)   -- GPS East  relative to home
-    obs[3]  : course_angle  (rad) -- GPS ground-track heading (updates at 5 Hz)
-    obs[7]  : baro_alt      (m)
-    obs[9]  : lidar_agl     (m)   -- ultrasonic; 0 unless <4.5 m
-    obs[10] : lidar_valid   (0/1) -- ultrasonic
+Observation contract: either observation version (12-value v1 or 17-value
+v2, env/nav_features.py), read by name through nav_features.guidance(): the
+distance and bearing error to home relative to the GPS ground track, baro
+altitude, and the ultrasonic reading and its validity flag.
 
 Action convention (must match env/glider_env.py denormalisation):
     action[0] = bank_cmd_rad  / radians(45)   -- normalised bank ∈ [-1, 1]
@@ -93,7 +90,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from env.glider_env import SPEED_CMD_CENTRE_MS, SPEED_CMD_MIN_MS, SPEED_CMD_SCALE_MS
-from sim.math_utils import wrap_pi
+from env.nav_features import guidance
 
 
 # ---------------------------------------------------------------------------
@@ -299,20 +296,16 @@ class DeterministicRTL:
         Returns:
             action : shape (2,) float32 normalised action
         """
-        dx_home      = float(obs[0])   # North offset to home (m), GPS (5 Hz)
-        dy_home      = float(obs[1])   # East  offset to home (m), GPS (5 Hz)
-        course_angle = float(obs[3])   # ground-track heading (rad), GPS (5 Hz)
-        baro_alt     = float(obs[7])
-        lidar_agl    = float(obs[9])
-        lidar_valid  = bool(obs[10])
-
-        dist_home = float(np.hypot(dx_home, dy_home))
-
-        # Bearing from current position to home.
-        # Home is at the origin; glider is at (dx_home, dy_home) relative to
-        # home, so the bearing back is atan2(-dy_home, -dx_home).
-        bearing_home = float(np.arctan2(-dy_home, -dx_home))
-        heading_err  = wrap_pi(bearing_home - course_angle)
+        # Read through env/nav_features.py's shared geometry (SPEC V23 Phase
+        # O), which accepts observation v1 or v2. heading_err is the bearing
+        # to home minus the GPS ground-track course, wrapped to (-pi, pi]:
+        # identical to wrap_pi(atan2(-dy_home, -dx_home) - course_angle).
+        g = guidance(obs)
+        dist_home   = g["dist_home"]
+        heading_err = g["heading_err"]
+        baro_alt    = g["baro_alt"]
+        lidar_agl   = g["lidar_agl"]
+        lidar_valid = g["lidar_valid"]
 
         # Orbit direction is chosen once (sign of the FIRST heading error
         # seen this episode) and held -- flipping it mid-pattern wastes

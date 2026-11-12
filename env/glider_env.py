@@ -50,6 +50,7 @@ from sim.sensor_models import SensorSuite
 from sim.math_utils import build_state, wrap_pi
 from env.reward import compute_reward, DEFAULT_REWARD_CFG
 from env.curriculum import DR_SCALE, STAGES, episode_stage, stage_ranges
+from env.nav_features import OBS_DIMS, obs_v2_from_v1
 
 
 # ---------------------------------------------------------------------------
@@ -330,11 +331,20 @@ class GliderEnv(gym.Env):
         # Ensure timing keys are present
         self.cfg.setdefault('dt_rl', DT_RL)
 
+        # Observation version (SPEC V23 Phase O): 1 = the 12-value sensor
+        # vector, 2 = the 17-value track-frame vector from
+        # env/nav_features.py. Fixed for the env's lifetime: the observation
+        # space, and so any model trained on it, depends on it.
+        self.obs_version: int = int(self.cfg.get('obs_version', 1))
+        if self.obs_version not in OBS_DIMS:
+            raise ValueError(f"obs_version must be one of {sorted(OBS_DIMS)}, "
+                             f"got {self.obs_version!r}")
+
         # Gymnasium spaces
         self.observation_space = spaces.Box(
             low   = -np.inf,
             high  =  np.inf,
-            shape = (12,),
+            shape = (OBS_DIMS[self.obs_version],),
             dtype = np.float32,
         )
         self.action_space = spaces.Box(
@@ -509,7 +519,7 @@ class GliderEnv(gym.Env):
             [(0.0, SPEED_CMD_CENTRE_MS)] * self._action_delay_substeps
         )
 
-        return obs, {}
+        return self._policy_obs(obs), {}
 
     def step(
         self,
@@ -648,7 +658,7 @@ class GliderEnv(gym.Env):
         self._prev_state  = self._fdm.state.copy()
         self._prev_action = action.copy()
 
-        return obs, float(reward), terminated, truncated, info
+        return self._policy_obs(obs), float(reward), terminated, truncated, info
 
     def render(self) -> None:
         pass  # rendering not implemented; use analysis/plot_trajectories.py
@@ -758,6 +768,29 @@ class GliderEnv(gym.Env):
             yaw    = psi,
             omega  = np.zeros(3),
         )
+
+    def _policy_obs(self, sensor_obs: npt.NDArray) -> npt.NDArray:
+        """The observation the policy receives, from the (delayed) v1 sensor
+        vector: unchanged for obs_version 1, the v2 track-frame vector
+        (env/nav_features.py) for obs_version 2.
+
+        The reward always reads the v1 vector (compute_reward's obs), so the
+        version changes only what the policy sees, never what it is paid.
+        _prev_action is, at this point, the action this step applied (zeros
+        at reset): "previous" from the next decision's point of view.
+        """
+        if self.obs_version == 1:
+            return sensor_obs
+        return obs_v2_from_v1(sensor_obs, self._prev_action)
+
+    def check_obs_version(self, model_obs_version: int) -> None:
+        """Raise if a policy trained on one observation version is run here."""
+        if int(model_obs_version) != self.obs_version:
+            raise ValueError(
+                f"observation version mismatch: the policy was trained on "
+                f"obs_version {model_obs_version} ({OBS_DIMS[int(model_obs_version)]} values "
+                f"per frame) but this env produces obs_version {self.obs_version} "
+                f"({OBS_DIMS[self.obs_version]}); set obs_version to match")
 
     def _build_obs(self) -> npt.NDArray:
         """Build the 12-element float32 observation from sensor readings.

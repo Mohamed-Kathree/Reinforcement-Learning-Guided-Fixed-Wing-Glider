@@ -152,6 +152,8 @@ def flat_env_cfg(cfg: dict) -> dict:
     progresses).
     """
     flat = dict(cfg['reward'])
+    # Observation version (SPEC V23 Phase O); absent in pre-V23 configs: v1.
+    flat['obs_version'] = int(cfg.get('observation', {}).get('obs_version', 1))
     launch = cfg.get('launch', {})
     for yaml_key, cfg_key in _LAUNCH_KEY_MAP.items():
         if yaml_key in launch:
@@ -578,7 +580,7 @@ def build_model(cfg: dict, venv: VecNormalize, tb_log_dir: str | None = None,
     """A fresh PPO from cfg['ppo'] (the only place training constructs one)."""
     ppo_cfg = cfg['ppo']
     target_kl = ppo_cfg.get('target_kl')
-    return PPO(
+    model = PPO(
         policy          = ppo_cfg['policy'],
         env             = venv,
         n_steps         = int(ppo_cfg['n_steps']),
@@ -597,6 +599,19 @@ def build_model(cfg: dict, venv: VecNormalize, tb_log_dir: str | None = None,
         verbose         = int(cfg['logging']['verbose']),
         seed            = seed,
     )
+    # Observation version travels with the model (SB3 saves public
+    # attributes): PolicyActor and --resume read it back. A model without it
+    # predates observation v2 and is v1.
+    model.obs_version = flat_env_cfg(cfg)['obs_version']
+    return model
+
+
+def checkpoint_obs_version(path: str) -> int:
+    """obs_version saved in a model .zip (1 when absent: pre-V23 models)."""
+    from stable_baselines3.common.save_util import load_from_zip_file
+    p = str(path) if str(path).endswith('.zip') else f"{path}.zip"
+    data, _, _ = load_from_zip_file(p, load_data=True, device='cpu')
+    return int((data or {}).get('obs_version', 1))
 
 
 class MultiStageEvalCallback(BaseCallback):
@@ -787,6 +802,12 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
     # --- Policy ----------------------------------------------------------
     if resume:
         print(f"Resuming from checkpoint: {resume}")
+        want = flat_env_cfg(cfg)['obs_version']
+        have = checkpoint_obs_version(resume)
+        if have != want:
+            raise ValueError(
+                f"observation version mismatch: {resume} was trained on obs_version {have}, "
+                f"the config says {want}; resume with --set observation.obs_version={have}")
         model = PPO.load(
             resume,
             env         = venv,
@@ -805,6 +826,7 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
         else:
             print(f"Warning: no matching VecNormalize stats found at "
                   f"{vecnorm_resume}; continuing with fresh running stats.")
+        model.obs_version = have
     else:
         model = build_model(cfg, venv, tb_log_dir, seed)
 

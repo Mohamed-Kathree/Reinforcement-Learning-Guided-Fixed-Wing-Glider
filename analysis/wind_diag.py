@@ -25,10 +25,13 @@ stage_cfg = dict(STAGES[0])
 stage_cfg["wind_speed"] = 3.0
 stage_cfg["gust_intensity"] = STAGES[1]["gust_intensity"]
 actor = PolicyActor(model, vecnorm) if which == "policy" else BaselineActor()
+if getattr(actor, "obs_version", 1) != 1:
+    sys.exit("wind_diag.py reads observation v1 indices (course, yaw); use "
+             "analysis/wind_diagnostics.py for v2 models")
 
 rows = []
 for seed in episode_seeds(n, 0):
-    env = GliderEnv(cfg=flat_env_cfg(cfg))
+    env = GliderEnv(cfg={**flat_env_cfg(cfg), "obs_version": 1})
     env.set_stage(stage_cfg)
     actor.reset(seed)
     obs, _ = env.reset(seed=seed)

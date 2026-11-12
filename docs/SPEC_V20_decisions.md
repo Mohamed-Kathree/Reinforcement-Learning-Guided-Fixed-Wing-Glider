@@ -613,3 +613,87 @@ made.
 | `train/action_std_0`, `_1` | at or above 0.2 | TensorBoard |
 | Stage 0 eval success | passes the old 50-60% peak and holds | `eval_logs/multistage.jsonl` |
 | Stage 1 rolling success | climbs past the old 12% | `[Curriculum]` lines, dashboard |
+
+## V23 Phase O: observation v2
+
+V22 finished at 20M steps. Its best model (15M) benchmarked the same as V21's:
+stage 0 59% against the baseline's 27%, stage 1 16% against 25%, and worse
+than the baseline at stages 2 and 3. SPEC V23 infers that observation v1
+lets the policy steer its heading instead of its ground track, which is
+right in calm air and blind to cross-wind drift. Phase D tests that
+inference on the saved models. This section records how Phase O was built.
+
+### Design
+
+- `env/nav_features.py::nav_features` is the one geometry function. The
+  environment's v2 frame, the baseline (`guidance()`) and the evaluator all
+  go through it.
+- v2 is computed from the delayed v1 sensor vector plus the previous action
+  (`obs_v2_from_v1`). Both versions see the same readings, noise, dropouts
+  and delays. The reward keeps reading the v1 vector, so changing the
+  version never changes what the policy is paid.
+- The 17 values are:
+  - `along` and `cross` to home (÷100 m);
+  - sin and cos of (bearing to home − course);
+  - ground speed (÷10 m/s);
+  - sin and cos of (course − yaw);
+  - `course_valid`;
+  - roll and pitch;
+  - baro altitude (÷30 m) and vertical speed;
+  - ultrasonic height and its valid flag;
+  - required glide ratio;
+  - previous bank and speed action.
+- Raw `dx`, `dy`, course and yaw are gone.
+- `observation.obs_version` in `base.yaml` defaults to 1. `GliderEnv`
+  reads it once, at construction.
+- `_build_obs` still builds the v1 sensor vector. A new `_policy_obs`
+  dispatches on the version.
+- Each model carries its version in its saved attributes (`obs_version`).
+  Models without that attribute are v1.
+  - `PolicyActor` reads the version and raises a clear error if it is
+    handed the other one.
+  - `--resume` checks the checkpoint's version against the config before
+    loading.
+  - The backend recorder builds the environment in the model's version.
+
+### Departures from the spec
+
+- **The baseline always reads v1 in the evaluator,** whatever the policy's
+  version. v2 frames are float32 and scaled, and that rounding moved one
+  stage-3 touchdown by one step. The physical episode is the same under
+  both versions, so pairing holds, and every benchmark's baseline column
+  stays identical to the V20–V22 ones. The baseline also flies v2 frames
+  correctly (`test_baseline_flies_v2_too`).
+- **The closed-loop drift test steers on `atan2(sin_err, cos_err)`, not
+  `sin_err` alone.** sin_err is zero when home is directly behind, so a
+  proportional law on it never turns round: seed 8 flew away and got no
+  closer than 53 m.
+- **"The heading-based controller misses by clearly more" did not hold.**
+  Pure pursuit reaches home whenever airspeed exceeds the wind: closest
+  approach was at most 7.4 m over 12 seeds, against 1.6 m for course
+  steering. What separates the two laws is the inbound track error. In a
+  3 m/s crosswind its median is 2.7° when steering the ground track and
+  25.6° when steering the nose. The test asserts that instead.
+
+### Tests
+
+`tests/test_nav_features.py` covers:
+- bearing-error parity over 10,000 states;
+- the home-right and crab signs;
+- rotation invariance, and no seam at ±π;
+- the low-speed fallback;
+- the v2 layout;
+- the turn sign in JSBSim;
+- the crosswind drift test.
+
+`tests/test_obs_v2.py` covers:
+- the spaces for each version;
+- v2 as a re-encoding of v1, with identical flight and reward;
+- previous-action consistency;
+- stack, VecNormalize and save/load shapes;
+- loading V22 as v1;
+- the version-mismatch errors in the actor, the environment and `--resume`;
+- baseline parity against the pre-refactor V22 benchmark log.
+
+`analysis/v23_baseline_parity.py` runs the parity check on all 100 seeds
+of all four stages.

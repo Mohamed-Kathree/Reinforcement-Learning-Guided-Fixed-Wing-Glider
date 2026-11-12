@@ -1,0 +1,175 @@
+"""
+nav_features.py
+===============
+Part of: RL-Guided Return-to-Launch Fixed-Wing Glider
+
+The one geometry function for navigation (SPEC V23 Phase O). The
+environment's observation v2, the baseline controller and any deployment
+observation builder all call it, so they cannot disagree about a sign.
+
+Why it exists: observation v1 gives the policy dx_home, dy_home, course and
+yaw as raw values. Steering the ground track at home (what the baseline does,
+and what cancels wind drift) needs atan2(-dy, -dx) - course, wrapped across
+the +/-pi seam. In calm air yaw equals course, so a policy can steer its
+heading instead and never learn the difference; in wind that leaves it blind
+to cross-track drift. These features hand the policy the bearing error
+relative to the ground track directly, wrap-free and rotation-invariant, and
+drop absolute yaw so steering by heading is no longer expressible.
+
+Conventions: NED, angles from North, positive toward East (clockwise seen
+from above). "Right" means clockwise from the direction of travel.
+
+Observation layouts (per frame, before frame stacking):
+
+    v1 (12): dx_home, dy_home, ground_speed, course, roll, pitch, yaw,
+             baro_alt, vertical_speed, lidar_agl, lidar_valid, req_glide_ratio
+    v2 (17): see OBS_V2_FIELDS and obs_v2_from_v1().
+
+v2 is computed from the (delayed) v1 sensor vector plus the previous action,
+so both versions see identical sensor readings, noise, dropouts and delays,
+and the reward (which reads the v1 vector) does not depend on the version.
+"""
+
+from __future__ import annotations
+
+import math
+
+import numpy as np
+
+# ---------------------------------------------------------------------------
+# Layouts
+# ---------------------------------------------------------------------------
+
+OBS_V1_FIELDS: tuple[str, ...] = (
+    "dx_home", "dy_home", "ground_speed", "course", "roll", "pitch", "yaw",
+    "baro_alt", "vertical_speed", "lidar_agl", "lidar_valid", "req_glide_ratio",
+)
+OBS_V2_FIELDS: tuple[str, ...] = (
+    "along", "cross", "sin_err", "cos_err", "ground_speed", "sin_crab", "cos_crab",
+    "course_valid", "roll", "pitch", "baro_alt", "vertical_speed", "lidar_agl",
+    "lidar_valid", "req_glide_ratio", "prev_bank", "prev_speed",
+)
+OBS_DIMS: dict[int, int] = {1: len(OBS_V1_FIELDS), 2: len(OBS_V2_FIELDS)}
+V1 = {name: i for i, name in enumerate(OBS_V1_FIELDS)}
+V2 = {name: i for i, name in enumerate(OBS_V2_FIELDS)}
+
+# v2 scales (divide by): positions /100 m, ground speed /10 m/s, altitude /30 m
+ALONG_CROSS_SCALE_M: float = 100.0
+GROUND_SPEED_SCALE_MS: float = 10.0
+BARO_SCALE_M: float = 30.0
+
+VG_MIN_MS: float = 2.0      # below this GPS course is undefined: use heading
+D_FLOOR_M: float = 1.0
+
+
+def nav_features(dx_home: float, dy_home: float, vn: float, ve: float, yaw: float, *,
+                 vg_min: float = VG_MIN_MS, d_floor: float = D_FLOOR_M) -> dict:
+    """Navigation features relative to the ground track. No atan2, no wrap.
+
+    dx_home, dy_home : glider position minus home (North, East), metres
+    vn, ve           : GPS ground velocity (North, East), m/s
+    yaw              : IMU heading, radians
+
+    sin_err/cos_err are sin and cos of (bearing to home - course):
+    atan2(sin_err, cos_err) == wrap_pi(atan2(-dy, -dx) - course).
+    sin_crab/cos_crab are sin and cos of (course - yaw): positive when the
+    ground track is clockwise of the nose (drifting right).
+    """
+    vg = math.hypot(vn, ve)
+    hn, he = math.cos(yaw), math.sin(yaw)        # heading unit vector
+    if vg >= vg_min and vg > 0.0:
+        tn, te = vn / vg, ve / vg                # track unit vector
+        course_valid = 1.0
+    else:
+        tn, te = hn, he                          # course undefined: use heading
+        course_valid = 0.0
+
+    bn, be = -dx_home, -dy_home                  # vector from glider to home
+    along = bn * tn + be * te                    # > 0: home is ahead
+    cross = be * tn - bn * te                    # > 0: home is to the right
+    d = max(math.hypot(bn, be), d_floor)
+
+    return {
+        "along": along,
+        "cross": cross,
+        "sin_err": cross / d,                    # sin(bearing_home - course)
+        "cos_err": along / d,                    # cos(bearing_home - course)
+        "sin_crab": te * hn - tn * he,           # sin(course - yaw)
+        "cos_crab": tn * hn + te * he,           # cos(course - yaw)
+        "ground_speed": vg,
+        "course_valid": course_valid,
+    }
+
+
+def velocity_from_v1(obs_v1) -> tuple[float, float]:
+    """GPS (vn, ve) from v1's ground speed and course."""
+    gs, course = float(obs_v1[V1["ground_speed"]]), float(obs_v1[V1["course"]])
+    return gs * math.cos(course), gs * math.sin(course)
+
+
+def features_from_v1(obs_v1, **kw) -> dict:
+    vn, ve = velocity_from_v1(obs_v1)
+    return nav_features(float(obs_v1[V1["dx_home"]]), float(obs_v1[V1["dy_home"]]),
+                        vn, ve, float(obs_v1[V1["yaw"]]), **kw)
+
+
+def obs_v2_from_v1(obs_v1, prev_action) -> np.ndarray:
+    """The 17-value v2 frame from a v1 sensor frame and the previous action.
+
+    prev_action is the action applied on the previous policy step (zeros at
+    reset), in the normalised [-1, 1] units the policy outputs.
+    """
+    f = features_from_v1(obs_v1)
+    o = obs_v1
+    return np.array([
+        f["along"] / ALONG_CROSS_SCALE_M,
+        f["cross"] / ALONG_CROSS_SCALE_M,
+        f["sin_err"],
+        f["cos_err"],
+        f["ground_speed"] / GROUND_SPEED_SCALE_MS,
+        f["sin_crab"],
+        f["cos_crab"],
+        f["course_valid"],
+        float(o[V1["roll"]]),
+        float(o[V1["pitch"]]),
+        float(o[V1["baro_alt"]]) / BARO_SCALE_M,
+        float(o[V1["vertical_speed"]]),
+        float(o[V1["lidar_agl"]]),
+        float(o[V1["lidar_valid"]]),
+        float(o[V1["req_glide_ratio"]]),
+        float(prev_action[0]),
+        float(prev_action[1]),
+    ], dtype=np.float32)
+
+
+def obs_version_of(obs) -> int:
+    """Observation version from a single frame's length."""
+    n = int(np.shape(obs)[-1])
+    for version, dim in OBS_DIMS.items():
+        if n == dim:
+            return version
+    raise ValueError(f"observation of length {n} matches no version {OBS_DIMS}")
+
+
+def guidance(obs) -> dict:
+    """What a course-steering controller needs, from either observation version.
+
+    Returns dist_home (m), heading_err (rad, bearing to home minus course,
+    in (-pi, pi]), baro_alt (m), lidar_agl (m), lidar_valid (bool).
+    """
+    if obs_version_of(obs) == 1:
+        f = features_from_v1(obs, vg_min=0.0)    # v1 controllers always used GPS course
+        baro, agl, valid = obs[V1["baro_alt"]], obs[V1["lidar_agl"]], obs[V1["lidar_valid"]]
+        dist = math.hypot(float(obs[V1["dx_home"]]), float(obs[V1["dy_home"]]))
+    else:
+        f = {"sin_err": float(obs[V2["sin_err"]]), "cos_err": float(obs[V2["cos_err"]])}
+        baro = float(obs[V2["baro_alt"]]) * BARO_SCALE_M
+        agl, valid = obs[V2["lidar_agl"]], obs[V2["lidar_valid"]]
+        dist = math.hypot(float(obs[V2["along"]]), float(obs[V2["cross"]])) * ALONG_CROSS_SCALE_M
+    return {
+        "dist_home": dist,
+        "heading_err": math.atan2(f["sin_err"], f["cos_err"]),
+        "baro_alt": float(baro),
+        "lidar_agl": float(agl),
+        "lidar_valid": bool(valid),
+    }

@@ -74,9 +74,10 @@ sys.path.insert(0, str(PROJ_ROOT))
 from baseline.deterministic_rtl import DeterministicRTL  # noqa: E402
 from env.curriculum import OUTCOME_BUCKETS, STAGES, outcome_bucket  # noqa: E402
 from env.glider_env import GliderEnv  # noqa: E402
+from env.nav_features import OBS_DIMS  # noqa: E402
 
-OBS_DIM = 12
-# Home-direction channels of the observation, per GliderEnv._build_obs()'s
+OBS_DIM = OBS_DIMS[1]     # observation v1 frame size; v2 sizes come from OBS_DIMS
+# Home-direction channels of observation v1, per GliderEnv._build_obs()'s
 # index contract: [0] dx_home, [1] dy_home, [3] course_angle.
 # tests/test_benchmark.py re-derives these indices from that docstring.
 HOME_CHANNELS: tuple[int, ...] = (0, 1, 3)
@@ -132,11 +133,20 @@ def load_config(path: str | os.PathLike = DEFAULT_CONFIG) -> dict:
         return yaml.safe_load(f)
 
 
-def make_env(cfg: dict, stage: int) -> GliderEnv:
+def make_env(cfg: dict, stage: int, obs_version: int | None = None) -> GliderEnv:
     """The env exactly as training builds it (training/train.py make_env:
-    flat_env_cfg) at curriculum stage `stage` (set_stage)."""
+    flat_env_cfg) at curriculum stage `stage` (set_stage).
+
+    obs_version, when given, overrides the config's: a policy is always
+    evaluated in the observation version it was trained on (V20-V22 are v1),
+    whatever the config's current default. The version changes only what the
+    controller sees, never the episode itself (env/nav_features.py), so
+    paired episodes stay identical across versions."""
     from training.train import flat_env_cfg
-    env = GliderEnv(cfg=flat_env_cfg(cfg))
+    env_cfg = flat_env_cfg(cfg)
+    if obs_version is not None:
+        env_cfg['obs_version'] = int(obs_version)
+    env = GliderEnv(cfg=env_cfg)
     env.set_stage(dict(STAGES[stage]))
     return env
 
@@ -217,10 +227,8 @@ class PolicyActor:
         import pickle
         from stable_baselines3 import PPO
         self.model = PPO.load(str(model_path), device=device)
-        n_obs = int(self.model.observation_space.shape[0])
-        if n_obs % OBS_DIM:
-            raise ValueError(f"model observation size {n_obs} is not a multiple of {OBS_DIM}")
-        self.n_stack = n_obs // OBS_DIM
+        self._set_layout(self.model)
+        n_obs = self.n_stack * self.obs_dim
         with open(vecnorm_path, "rb") as f:
             self.vecnorm = pickle.load(f)          # VecNormalize, no venv attached
         if self.vecnorm.obs_rms.mean.shape != (n_obs,):
@@ -239,10 +247,8 @@ class PolicyActor:
         """
         self = cls.__new__(cls)
         self.model = model
-        n_obs = int(model.observation_space.shape[0])
-        if n_obs % OBS_DIM:
-            raise ValueError(f"model observation size {n_obs} is not a multiple of {OBS_DIM}")
-        self.n_stack = n_obs // OBS_DIM
+        self._set_layout(model)
+        n_obs = self.n_stack * self.obs_dim
         self.vecnorm = _FrozenObsNorm(vecnorm)
         if self.vecnorm.obs_rms.mean.shape != (n_obs,):
             raise ValueError(f"vecnorm stats {self.vecnorm.obs_rms.mean.shape} do not match "
@@ -251,15 +257,33 @@ class PolicyActor:
         self._frames = deque(maxlen=self.n_stack)
         return self
 
+    def _set_layout(self, model) -> None:
+        """Observation version and stack depth from the model. Models saved
+        before observation v2 carry no obs_version attribute: they are v1."""
+        self.obs_version = int(getattr(model, "obs_version", 1))
+        if self.obs_version not in OBS_DIMS:
+            raise ValueError(f"model has unknown obs_version {self.obs_version!r}")
+        self.obs_dim = OBS_DIMS[self.obs_version]
+        n_obs = int(model.observation_space.shape[0])
+        if n_obs % self.obs_dim:
+            raise ValueError(f"model observation size {n_obs} is not a multiple of the "
+                             f"obs_version {self.obs_version} frame size {self.obs_dim}")
+        self.n_stack = n_obs // self.obs_dim
+
     def stacked(self) -> np.ndarray:
         return np.concatenate(list(self._frames)).astype(np.float32)
 
     def observe(self, obs: np.ndarray, first: bool) -> np.ndarray:
         """Push one raw observation; return the normalised model input."""
+        if np.shape(obs) != (self.obs_dim,):
+            raise ValueError(
+                f"observation version mismatch: the policy was trained on obs_version "
+                f"{self.obs_version} ({self.obs_dim} values per frame), the env gave "
+                f"{np.shape(obs)}; build the env with obs_version={self.obs_version}")
         if first:
             self._frames.clear()
             for _ in range(self.n_stack - 1):
-                self._frames.append(np.zeros(OBS_DIM, dtype=np.float32))
+                self._frames.append(np.zeros(self.obs_dim, dtype=np.float32))
         self._frames.append(np.asarray(obs, dtype=np.float32))
         return self.vecnorm.normalize_obs(self.stacked())
 
@@ -382,9 +406,16 @@ def make_actor(policy: str, model: str | None = None, vecnorm: str | None = None
     return {"random": RandomActor, "zero": ZeroActor, "baseline": BaselineActor}[policy]()
 
 
-def evaluate_seed(cfg: dict, stage: int, actor, seed: int) -> dict:
+def actor_obs_version(actor) -> int | None:
+    """The observation version a controller needs (None: the config's)."""
+    return getattr(getattr(actor, "actor", actor), "obs_version", None)
+
+
+def evaluate_seed(cfg: dict, stage: int, actor, seed: int,
+                  obs_version: int | None = None) -> dict:
     """One episode on a freshly built env: depends on (stage, actor, seed) only."""
-    env = make_env(cfg, stage)
+    env = make_env(cfg, stage, obs_version if obs_version is not None
+                   else actor_obs_version(actor))
     try:
         return run_episode(env, actor, seed)
     finally:
@@ -394,13 +425,19 @@ def evaluate_seed(cfg: dict, stage: int, actor, seed: int) -> dict:
 def benchmark(actor, cfg: dict, stages: list[int], n: int, seed: int = 0,
               paired_baseline: bool = True) -> dict:
     out = {}
+    version = actor_obs_version(actor)
     for stage in stages:
         seeds = episode_seeds(n, seed)
-        pol = [evaluate_seed(cfg, stage, actor, s) for s in seeds]
+        pol = [evaluate_seed(cfg, stage, actor, s, version) for s in seeds]
         rec: dict[str, Any] = {"stage": stage, "policy": summarise(pol), "episodes": {"policy": pol}}
         if paired_baseline and not isinstance(actor, BaselineActor):
             base_actor = BaselineActor()
-            base = [evaluate_seed(cfg, stage, base_actor, s) for s in seeds]
+            # The baseline always reads observation v1, the exact sensor
+            # vector: v2 frames are float32 and scaled, and that rounding is
+            # enough to move a JSBSim touchdown by a step. The episode itself
+            # is the same under either version, so pairing is unaffected and
+            # the baseline's numbers are identical for every policy.
+            base = [evaluate_seed(cfg, stage, base_actor, s, 1) for s in seeds]
             table = paired_table(pol, base)
             rec["baseline"] = summarise(base)
             rec["episodes"]["baseline"] = base
@@ -444,6 +481,7 @@ def main(argv: list[str] | None = None) -> dict:
         "args": {k: v for k, v in vars(args).items()},
         "policy_name": actor.name,
         "n_stack": getattr(getattr(actor, "actor", actor), "n_stack", None),
+        "obs_version": actor_obs_version(actor),
         "stages": stages,
     }
     for s, rec in stages.items():

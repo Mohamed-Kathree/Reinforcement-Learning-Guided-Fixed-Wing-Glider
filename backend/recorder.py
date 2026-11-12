@@ -183,6 +183,10 @@ def record_episode(
         rl_actor = _load_rl_policy()
         rl_actor.reset(seed)
         act = rl_actor.act
+        # The policy's own observation version (V20-V22 deployment models are
+        # v1); it changes what the policy sees, not the episode.
+        if env.obs_version != rl_actor.obs_version:
+            env = GliderEnv(cfg={**stage_cfg, "obs_version": rl_actor.obs_version}, seed=seed)
 
     obs, _info = env.reset(seed=seed)
 

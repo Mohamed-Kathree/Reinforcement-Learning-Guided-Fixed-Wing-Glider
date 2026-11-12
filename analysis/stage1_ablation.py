@@ -39,7 +39,7 @@ res = {}
 for label, actor in (("policy", PolicyActor(model, vecnorm)), ("baseline", BaselineActor())):
     eps = []
     for s in episode_seeds(n, 0):
-        env = GliderEnv(cfg=flat_env_cfg(cfg))
+        env = GliderEnv(cfg={**flat_env_cfg(cfg), "obs_version": getattr(actor, "obs_version", 1)})
         env.set_stage(stage_cfg)
         try:
             eps.append(run_episode(env, actor, s))
