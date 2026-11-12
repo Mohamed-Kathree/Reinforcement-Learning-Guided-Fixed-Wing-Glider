@@ -1,0 +1,255 @@
+{
+ "provenance": {
+  "utc_timestamp": "2026-11-12T18:30:46+00:00",
+  "git_sha": "ed659890f497f76dcbd263ea79e19cc608fafaeb",
+  "git_dirty": true,
+  "config": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\training\\configs\\base.yaml",
+   "mtime_utc": "2026-11-12T18:05:09.420793+00:00",
+   "sha256": "8134402cbc0035814cc7839db3e9a21527981884941dc1254e1fe9c87246e214",
+   "sha256_16": "8134402cbc003581"
+  },
+  "policy": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v21\\best_model.zip",
+   "mtime_utc": "2026-11-11T20:31:47.837939+00:00",
+   "sha256": "651cec003d7e8fa0acb8d8ffbfe77246334d22563d2c43f51d720674cce19cfa",
+   "sha256_16": "651cec003d7e8fa0"
+  },
+  "vecnorm": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v21\\vecnormalize_best.pkl",
+   "mtime_utc": "2026-11-11T20:31:47.837939+00:00",
+   "sha256": "b623f03decce4ba776a85b23024e501055aacda241b82fc2ee2c40322cebc2ff",
+   "sha256_16": "b623f03decce4ba7"
+  }
+ },
+ "description": "D3 calm-air (stage 0) success and miss by launch bearing-to-home, eight 45 deg sectors; sectors 1 and 8 border the +/-180 deg seam",
+ "source": "results/benchmark_v21_best_3.5M.json",
+ "policy": {
+  "sectors": [
+   {
+    "sector_deg": [
+     -180,
+     -135
+    ],
+    "n": 17,
+    "success": 0.5294117647058824,
+    "success_wilson95": [
+     0.30963235060004424,
+     0.7383489355759056
+    ],
+    "median_miss_m": 22.20416419203621
+   },
+   {
+    "sector_deg": [
+     -135,
+     -90
+    ],
+    "n": 13,
+    "success": 0.6153846153846154,
+    "success_wilson95": [
+     0.3552289151266569,
+     0.8229029220223744
+    ],
+    "median_miss_m": 20.36726544017401
+   },
+   {
+    "sector_deg": [
+     -90,
+     -45
+    ],
+    "n": 15,
+    "success": 0.4,
+    "success_wilson95": [
+     0.19824496141341577,
+     0.642531698793754
+    ],
+    "median_miss_m": 33.25918383715327
+   },
+   {
+    "sector_deg": [
+     -45,
+     0
+    ],
+    "n": 7,
+    "success": 0.7142857142857143,
+    "success_wilson95": [
+     0.3589344518326191,
+     0.9177810759959432
+    ],
+    "median_miss_m": 15.299832673153372
+   },
+   {
+    "sector_deg": [
+     0,
+     45
+    ],
+    "n": 13,
+    "success": 0.6153846153846154,
+    "success_wilson95": [
+     0.3552289151266569,
+     0.8229029220223744
+    ],
+    "median_miss_m": 21.432500789967285
+   },
+   {
+    "sector_deg": [
+     45,
+     90
+    ],
+    "n": 11,
+    "success": 0.5454545454545454,
+    "success_wilson95": [
+     0.280091537409322,
+     0.7872872837754024
+    ],
+    "median_miss_m": 24.21821407202345
+   },
+   {
+    "sector_deg": [
+     90,
+     135
+    ],
+    "n": 14,
+    "success": 0.6428571428571429,
+    "success_wilson95": [
+     0.38764423103907397,
+     0.8365526824644587
+    ],
+    "median_miss_m": 19.58052121852495
+   },
+   {
+    "sector_deg": [
+     135,
+     180
+    ],
+    "n": 10,
+    "success": 0.7,
+    "success_wilson95": [
+     0.39677814746114537,
+     0.8922087325936989
+    ],
+    "median_miss_m": 17.721327713918754
+   }
+  ],
+  "chi2_homogeneity_p": 0.8138768352026235,
+  "seam_sectors_success": 0.5925925925925926,
+  "seam_n": 27,
+  "other_sectors_success": 0.5753424657534246,
+  "seam_median_miss_m": 18.958737456898515,
+  "other_median_miss_m": 21.22912814339983
+ },
+ "baseline": {
+  "sectors": [
+   {
+    "sector_deg": [
+     -180,
+     -135
+    ],
+    "n": 17,
+    "success": 0.4117647058823529,
+    "success_wilson95": [
+     0.2161105679021481,
+     0.6399455735700021
+    ],
+    "median_miss_m": 33.28791725834049
+   },
+   {
+    "sector_deg": [
+     -135,
+     -90
+    ],
+    "n": 13,
+    "success": 0.15384615384615385,
+    "success_wilson95": [
+     0.04325817835808121,
+     0.42234631019482544
+    ],
+    "median_miss_m": 40.6943914880387
+   },
+   {
+    "sector_deg": [
+     -90,
+     -45
+    ],
+    "n": 15,
+    "success": 0.4666666666666667,
+    "success_wilson95": [
+     0.24809535365737387,
+     0.698830199745016
+    ],
+    "median_miss_m": 28.572516942409973
+   },
+   {
+    "sector_deg": [
+     -45,
+     0
+    ],
+    "n": 7,
+    "success": 0.2857142857142857,
+    "success_wilson95": [
+     0.08221892400405661,
+     0.6410655481673807
+    ],
+    "median_miss_m": 35.029165602232844
+   },
+   {
+    "sector_deg": [
+     0,
+     45
+    ],
+    "n": 13,
+    "success": 0.07692307692307693,
+    "success_wilson95": [
+     0.013710421242556586,
+     0.333139509210996
+    ],
+    "median_miss_m": 42.55779909440484
+   },
+   {
+    "sector_deg": [
+     45,
+     90
+    ],
+    "n": 11,
+    "success": 0.2727272727272727,
+    "success_wilson95": [
+     0.09746059290024889,
+     0.5656453011761292
+    ],
+    "median_miss_m": 37.80903859699489
+   },
+   {
+    "sector_deg": [
+     90,
+     135
+    ],
+    "n": 14,
+    "success": 0.35714285714285715,
+    "success_wilson95": [
+     0.16344731753554134,
+     0.612355768960926
+    ],
+    "median_miss_m": 36.44648350398903
+   },
+   {
+    "sector_deg": [
+     135,
+     180
+    ],
+    "n": 10,
+    "success": 0.0,
+    "success_wilson95": [
+     0.0,
+     0.27753279986288926
+    ],
+    "median_miss_m": 46.1451519084772
+   }
+  ],
+  "chi2_homogeneity_p": 0.09193853289933801,
+  "seam_sectors_success": 0.25925925925925924,
+  "seam_n": 27,
+  "other_sectors_success": 0.273972602739726,
+  "seam_median_miss_m": 38.23994966620442,
+  "other_median_miss_m": 37.909556988626626
+ }
+}

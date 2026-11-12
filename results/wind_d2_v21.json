@@ -1,0 +1,151 @@
+{
+ "provenance": {
+  "utc_timestamp": "2026-11-12T18:34:24+00:00",
+  "git_sha": "ed659890f497f76dcbd263ea79e19cc608fafaeb",
+  "git_dirty": true,
+  "config": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\training\\configs\\base.yaml",
+   "mtime_utc": "2026-11-12T18:05:09.420793+00:00",
+   "sha256": "8134402cbc0035814cc7839db3e9a21527981884941dc1254e1fe9c87246e214",
+   "sha256_16": "8134402cbc003581"
+  },
+  "policy": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v21\\best_model.zip",
+   "mtime_utc": "2026-11-11T20:31:47.837939+00:00",
+   "sha256": "651cec003d7e8fa0acb8d8ffbfe77246334d22563d2c43f51d720674cce19cfa",
+   "sha256_16": "651cec003d7e8fa0"
+  },
+  "vecnorm": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v21\\vecnormalize_best.pkl",
+   "mtime_utc": "2026-11-11T20:31:47.837939+00:00",
+   "sha256": "b623f03decce4ba776a85b23024e501055aacda241b82fc2ee2c40322cebc2ff",
+   "sha256_16": "b623f03decce4ba7"
+  }
+ },
+ "description": "D2 input sensitivity: mean |d bank_mean / d raw input| x input std, summed over the 8 stacked frames, as a share of all channels",
+ "target_obs": 5000,
+ "by_config": {
+  "calm": {
+   "n_obs": 5000,
+   "share": {
+    "dx_home": 0.06767361611127853,
+    "dy_home": 0.06488549709320068,
+    "ground_speed": 0.074753537774086,
+    "course": 0.09580133110284805,
+    "roll": 0.0996803417801857,
+    "pitch": 0.131500706076622,
+    "yaw": 0.09014134854078293,
+    "baro_alt": 0.07112544029951096,
+    "vertical_speed": 0.1267791986465454,
+    "lidar_agl": 0.07906389981508255,
+    "lidar_valid": 0.06416255980730057,
+    "req_glide_ratio": 0.0344325453042984
+   },
+   "share_by_frame_newest_last": {
+    "yaw": [
+     0.011569671332836151,
+     0.00914387684315443,
+     0.009772805497050285,
+     0.014591091312468052,
+     0.014113204553723335,
+     0.008668209426105022,
+     0.01008037943392992,
+     0.012202102690935135
+    ],
+    "course": [
+     0.017407424747943878,
+     0.008642153814435005,
+     0.008333872072398663,
+     0.010356830433011055,
+     0.013122952543199062,
+     0.010205740109086037,
+     0.009019830264151096,
+     0.01871253177523613
+    ],
+    "dx_home": [
+     0.00883390661329031,
+     0.00868318323045969,
+     0.008554732427001,
+     0.008989522233605385,
+     0.0067673842422664165,
+     0.007683163974434137,
+     0.00917364563792944,
+     0.008988076820969582
+    ],
+    "dy_home": [
+     0.007054388057440519,
+     0.007946603000164032,
+     0.008609284646809101,
+     0.00806950218975544,
+     0.0072381929494440556,
+     0.0075599271804094315,
+     0.010514113120734692,
+     0.00789348129183054
+    ]
+   },
+   "yaw_over_course": 0.9409195780754089,
+   "clipped_input_fraction": 0.0
+  },
+  "steady_wind": {
+   "n_obs": 5000,
+   "share": {
+    "dx_home": 0.0636153370141983,
+    "dy_home": 0.06890180706977844,
+    "ground_speed": 0.0840054601430893,
+    "course": 0.08307456225156784,
+    "roll": 0.09004262089729309,
+    "pitch": 0.13029298186302185,
+    "yaw": 0.08256534487009048,
+    "baro_alt": 0.06433538347482681,
+    "vertical_speed": 0.12672297656536102,
+    "lidar_agl": 0.07303304225206375,
+    "lidar_valid": 0.05840738117694855,
+    "req_glide_ratio": 0.07500313967466354
+   },
+   "share_by_frame_newest_last": {
+    "yaw": [
+     0.011324705556035042,
+     0.008428767323493958,
+     0.00878040213137865,
+     0.012283665128052235,
+     0.011841888539493084,
+     0.007858950644731522,
+     0.010292473249137402,
+     0.011754496023058891
+    ],
+    "course": [
+     0.014216571114957333,
+     0.008195248432457447,
+     0.007281227502971888,
+     0.010317657142877579,
+     0.010927533730864525,
+     0.008848344907164574,
+     0.00816118810325861,
+     0.015126791782677174
+    ],
+    "dx_home": [
+     0.007857760414481163,
+     0.008247789926826954,
+     0.00799794215708971,
+     0.008136876858770847,
+     0.007014512084424496,
+     0.007068417966365814,
+     0.00887361541390419,
+     0.008418424054980278
+    ],
+    "dy_home": [
+     0.007603892590850592,
+     0.008624089881777763,
+     0.009001684375107288,
+     0.008554392494261265,
+     0.007812372874468565,
+     0.007921503856778145,
+     0.010747773572802544,
+     0.008636090904474258
+    ]
+   },
+   "yaw_over_course": 0.9938703179359436,
+   "clipped_input_fraction": 0.0
+  }
+ }
+}

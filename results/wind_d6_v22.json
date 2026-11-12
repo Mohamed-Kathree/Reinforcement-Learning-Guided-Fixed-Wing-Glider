@@ -1,0 +1,130 @@
+{
+ "provenance": {
+  "utc_timestamp": "2026-11-12T18:30:46+00:00",
+  "git_sha": "ed659890f497f76dcbd263ea79e19cc608fafaeb",
+  "git_dirty": true,
+  "config": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\training\\configs\\base.yaml",
+   "mtime_utc": "2026-11-12T18:05:09.420793+00:00",
+   "sha256": "8134402cbc0035814cc7839db3e9a21527981884941dc1254e1fe9c87246e214",
+   "sha256_16": "8134402cbc003581"
+  },
+  "policy": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v22\\best_model.zip",
+   "mtime_utc": "2026-11-12T15:02:58.667437+00:00",
+   "sha256": "e1e77811ce07a5eed9d0a48556fef235101af0b8e098b8154cbe22449ad7e7d4",
+   "sha256_16": "e1e77811ce07a5ee"
+  },
+  "vecnorm": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v22\\vecnormalize_best.pkl",
+   "mtime_utc": "2026-11-12T15:02:58.668437+00:00",
+   "sha256": "3d8fa01b9e4a3023e45d29a7024550d8e2970c670843f406caaf37ade5264fee",
+   "sha256_16": "3d8fa01b9e4a3023"
+  }
+ },
+ "description": "D6 critic calibration: V(s_t) against the realised discounted return (learner reward units, the model's gamma), stochastic policy as trained, at 0/25/50/75% of each episode",
+ "by_config": {
+  "calm": {
+   "n": 100,
+   "truncated": 0,
+   "success": 0.52,
+   "0.0": {
+    "r2": -2.531239636075995,
+    "corr": 0.18294275902500087,
+    "mean_value": -0.18287724375724793,
+    "mean_return": 1.4084278366808585,
+    "return_std": 0.9958799016334895
+   },
+   "0.25": {
+    "r2": -1.5534872620800297,
+    "corr": 0.15554612851235697,
+    "mean_value": 0.08053402781486511,
+    "mean_return": 1.489597672149864,
+    "return_std": 1.1351195323160357
+   },
+   "0.5": {
+    "r2": -0.889129464911121,
+    "corr": 0.31230633369881716,
+    "mean_value": 0.3751245945692062,
+    "mean_return": 1.672721934511435,
+    "return_std": 1.3067022587324517
+   },
+   "0.75": {
+    "r2": -0.7059274130738984,
+    "corr": 0.503038994995474,
+    "mean_value": 0.4411825352907181,
+    "mean_return": 1.9313067793479919,
+    "return_std": 1.5216656755991749
+   },
+   "pooled_r2": -1.160709755958715
+  },
+  "steady_wind": {
+   "n": 100,
+   "truncated": 0,
+   "success": 0.2,
+   "0.0": {
+    "r2": -0.702032046560555,
+    "corr": 0.12306409097560171,
+    "mean_value": -0.18287724375724793,
+    "mean_return": 0.7134124690155604,
+    "return_std": 1.074393434034551
+   },
+   "0.25": {
+    "r2": -0.462453172432548,
+    "corr": 0.1392950090951928,
+    "mean_value": -0.09270639836788178,
+    "mean_return": 0.7125292297405457,
+    "return_std": 1.2279166567652264
+   },
+   "0.5": {
+    "r2": -0.15268094769690377,
+    "corr": 0.41298942347663603,
+    "mean_value": 0.006002412736415863,
+    "mean_return": 0.7894362105936193,
+    "return_std": 1.380640337448806
+   },
+   "0.75": {
+    "r2": -0.31227689535523373,
+    "corr": 0.5153209547616336,
+    "mean_value": -0.22237254172563553,
+    "mean_return": 0.936355622481381,
+    "return_std": 1.5277870905518072
+   },
+   "pooled_r2": -0.35963473958982695
+  },
+  "stage1": {
+   "n": 100,
+   "truncated": 0,
+   "success": 0.14,
+   "0.0": {
+    "r2": -0.3017714307218242,
+    "corr": -0.0409949007611415,
+    "mean_value": -0.18831851005554198,
+    "mean_return": 0.4152923783308337,
+    "return_std": 1.2489718006358628
+   },
+   "0.25": {
+    "r2": -0.13280543086514007,
+    "corr": 0.17254936234249343,
+    "mean_value": -0.08878103733062744,
+    "mean_return": 0.3953980491901853,
+    "return_std": 1.3890347763562887
+   },
+   "0.5": {
+    "r2": 0.014818830297782526,
+    "corr": 0.32681332688029235,
+    "mean_value": -0.025945003032684325,
+    "mean_return": 0.4366700975255054,
+    "return_std": 1.5681438620112602
+   },
+   "0.75": {
+    "r2": -0.10244597473843031,
+    "corr": 0.37636936891575157,
+    "mean_value": -0.31732892751693725,
+    "mean_return": 0.4893133291986188,
+    "return_std": 1.7448062529810517
+   },
+   "pooled_r2": -0.11086343834602475
+  }
+ }
+}

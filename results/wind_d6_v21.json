@@ -1,0 +1,130 @@
+{
+ "provenance": {
+  "utc_timestamp": "2026-11-12T18:38:48+00:00",
+  "git_sha": "ed659890f497f76dcbd263ea79e19cc608fafaeb",
+  "git_dirty": true,
+  "config": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\training\\configs\\base.yaml",
+   "mtime_utc": "2026-11-12T18:05:09.420793+00:00",
+   "sha256": "8134402cbc0035814cc7839db3e9a21527981884941dc1254e1fe9c87246e214",
+   "sha256_16": "8134402cbc003581"
+  },
+  "policy": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v21\\best_model.zip",
+   "mtime_utc": "2026-11-11T20:31:47.837939+00:00",
+   "sha256": "651cec003d7e8fa0acb8d8ffbfe77246334d22563d2c43f51d720674cce19cfa",
+   "sha256_16": "651cec003d7e8fa0"
+  },
+  "vecnorm": {
+   "path": "C:\\Users\\moham\\OneDrive\\Documents\\RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider\\RL-Glider-Prototype\\Reinforcement-Learning-Guided-Fixed-Wing-Glider\\checkpoints_v21\\vecnormalize_best.pkl",
+   "mtime_utc": "2026-11-11T20:31:47.837939+00:00",
+   "sha256": "b623f03decce4ba776a85b23024e501055aacda241b82fc2ee2c40322cebc2ff",
+   "sha256_16": "b623f03decce4ba7"
+  }
+ },
+ "description": "D6 critic calibration: V(s_t) against the realised discounted return (learner reward units, the model's gamma), stochastic policy as trained, at 0/25/50/75% of each episode",
+ "by_config": {
+  "calm": {
+   "n": 100,
+   "truncated": 0,
+   "success": 0.46,
+   "0.0": {
+    "r2": -1.8089347060264123,
+    "corr": 0.08193292091096831,
+    "mean_value": 2.022830018401146,
+    "mean_return": 5.493215571562311,
+    "return_std": 2.593208402494349
+   },
+   "0.25": {
+    "r2": -1.591346585101686,
+    "corr": 0.22573251872674593,
+    "mean_value": 2.1847919845581054,
+    "mean_return": 5.813365085481056,
+    "return_std": 2.9024125622980956
+   },
+   "0.5": {
+    "r2": -0.8255978681555889,
+    "corr": 0.4210045980022016,
+    "mean_value": 3.391894545853138,
+    "mean_return": 6.408994016809447,
+    "return_std": 3.0936796121752543
+   },
+   "0.75": {
+    "r2": -0.32686645128664327,
+    "corr": 0.4876645471587159,
+    "mean_value": 4.532062796354293,
+    "mean_return": 6.934104125795933,
+    "return_std": 3.4752875238524696
+   },
+   "pooled_r2": -0.9518820127713781
+  },
+  "steady_wind": {
+   "n": 100,
+   "truncated": 0,
+   "success": 0.23,
+   "0.0": {
+    "r2": -0.11831428400075406,
+    "corr": 0.04329643696709632,
+    "mean_value": 2.022830018401146,
+    "mean_return": 3.2546391446276317,
+    "return_std": 3.788834609770675
+   },
+   "0.25": {
+    "r2": -0.20991912177202354,
+    "corr": 0.0873052061305764,
+    "mean_value": 1.7375431048870087,
+    "mean_return": 3.3624299769178903,
+    "return_std": 4.221959262904401
+   },
+   "0.5": {
+    "r2": -0.03974823417043272,
+    "corr": 0.3023039989803059,
+    "mean_value": 2.1980091768503187,
+    "mean_return": 3.6970549335950715,
+    "return_std": 4.696729876725664
+   },
+   "0.75": {
+    "r2": 0.13537715591200483,
+    "corr": 0.49189236644960277,
+    "mean_value": 2.524572382569313,
+    "mean_return": 3.9830432794579393,
+    "return_std": 5.224798833441854
+   },
+   "pooled_r2": -0.027999461073899612
+  },
+  "stage1": {
+   "n": 100,
+   "truncated": 0,
+   "success": 0.12,
+   "0.0": {
+    "r2": -0.0680588207384123,
+    "corr": 0.05848768790450903,
+    "mean_value": 2.076706745028496,
+    "mean_return": 0.9924031939437971,
+    "return_std": 4.244981854866163
+   },
+   "0.25": {
+    "r2": -0.031247259933177673,
+    "corr": 0.20473012202152957,
+    "mean_value": 1.9438053041696548,
+    "mean_return": 0.8414219727773766,
+    "return_std": 4.681841936600194
+   },
+   "0.5": {
+    "r2": 0.0485791241436585,
+    "corr": 0.3117546812922136,
+    "mean_value": 1.8495189017057418,
+    "mean_return": 0.8820856828683036,
+    "return_std": 5.1320173977176555
+   },
+   "0.75": {
+    "r2": 0.08832750018477953,
+    "corr": 0.3872821113624028,
+    "mean_value": 1.66455259680748,
+    "mean_return": 0.8408380314537193,
+    "return_std": 5.61038915911834
+   },
+   "pooled_r2": 0.022130537055897626
+  }
+ }
+}
