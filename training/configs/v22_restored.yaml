@@ -1,0 +1,304 @@
+# v22_restored.yaml -- SPEC V24 Phase 1.
+# A verbatim copy of training/configs/base.yaml at ed65989, the commit V22 trained at
+# (data/runs/20261112T013358Z_seed0.meta.json; sha256 9c82caea... recorded by
+# results/benchmark_v22_best_15M.json). V22 was launched with no --set overrides.
+# The only additions are the keys introduced after V22, pinned below to their
+# pre-V22 behaviour (marked 'post-V22 key'). tests/test_v22_restore.py checks this.
+#
+# training/configs/base.yaml
+# ===========================
+# Reference documentation for simulation, glider, reward, PPO, and curriculum
+# parameters. NOT every section here is actually read by code -- see the
+# per-section notes below. Where a section IS live-wired, treat it as the
+# source of truth and do not hard-code those values elsewhere; where a
+# section is marked reference-only, the real values live in the Python file
+# named in that section's comment, and this file exists purely so a human
+# can see the full parameter picture in one place.
+#
+# Live-wired sections (actually read by code):
+#   reward:      -- training/train.py flat_env_cfg() / training/benchmark.py make_env()
+#                   _build_eval_env() -> env/glider_env.py GliderEnv(cfg=...)
+#                   (env/reward.py DEFAULT_REWARD_CFG is the fallback used
+#                   when GliderEnv is constructed without an explicit cfg,
+#                   e.g. in tests/scratch scripts)
+#   launch.speed_min_ms / speed_max_ms / pitch_min_deg / pitch_max_deg
+#                -- same flat_env_cfg()/_build_eval_env() path; per-episode
+#                   randomisation range for the (unknown) real apex-hand-off
+#                   energy state -- a fixed hardware uncertainty, not
+#                   curriculum-stage-dependent (same range at every stage)
+#   ppo:         -- training/train.py train()
+#   eval:        -- training/train.py train() (EvalCallback)
+#   curriculum:  -- training/train.py train() -> CurriculumScheduler
+#
+# Reference-only sections (code does NOT read these; kept for documentation --
+# changing a value here has no effect until the referenced Python file is
+# also updated):
+#   sim:         -- module constants in env/glider_env.py (DT_PHYS, DT_RL,
+#                   N_SUBSTEPS, MAX_STEPS). Not runtime-configurable: JSBSim
+#                   caches dt at load_model() time (see sim/jsbsim_fdm.py),
+#                   so changing dt_phys requires re-deriving several other
+#                   constants together, not a safe single cfg override.
+#   glider:      -- aircraft/rlglider/rlglider.xml (JSBSim owns mass, inertia,
+#                   aerodynamics, actuator dynamics)
+#   launch.alt0_m
+#                -- this IS curriculum-stage-dependent; the real per-stage
+#                   values live in env/curriculum.py STAGES, applied via
+#                   env.set_stage(). The value here is just a Stage-0-ish
+#                   nominal default for eyeballing.
+#   domain_rand: -- the live table is env/curriculum.py DR_RANGES /
+#                   DR_ONESIDED / DR_SCALE; this section only records the
+#                   steady-glide envelope derived from it.
+
+# ---------------------------------------------------------------------------
+# Simulation timing (REFERENCE ONLY -- see note above; real values are the
+# DT_PHYS/DT_RL/N_SUBSTEPS/MAX_STEPS constants in env/glider_env.py)
+# ---------------------------------------------------------------------------
+sim:
+  dt_phys:    0.005       # physics integration step (s)  -- 200 Hz
+  dt_rl:      0.050       # RL policy step (s)            -- 20 Hz
+  substeps:   10          # dt_rl / dt_phys; kept explicit for readability
+  max_steps:  1520        # maximum policy steps per episode (76 s; sized from the longest flight, see domain_rand)
+  rho:        1.225       # air density (kg/m^3), sea-level ISA
+
+# ---------------------------------------------------------------------------
+# Glider physical parameters
+# Not configured here. Mass, balance, inertia and reference geometry live in
+# aircraft/mass_properties.yaml (with ranges and provenance tags) and are
+# baked into aircraft/rlglider/rlglider.xml by aircraft/generate_fdm.py.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Launch conditions
+# alt0_m reflects the as-built hardware: hand/ground-launched, not a tow
+# release. Realistic peak altitude after the launch zoom-climb is ~15-25 m
+# (see as-built electronics notes).
+#
+# speed_*_ms / pitch_*_deg are randomised PER EPISODE across this full range
+# (not jittered around one nominal value) to cover the plausible energy
+# states the not-yet-built ESP32 apex-detection firmware might hand control
+# over at -- anywhere from a true apex (near-level, ~trim speed) to the
+# original release-state assumption (nose-up, near launch speed). Same value
+# at every curriculum stage on purpose: this is a fixed hardware uncertainty
+# to be robust to, not something that should get easier/harder with
+# curriculum progress the way wind/noise/R_home do.
+# ---------------------------------------------------------------------------
+launch:
+  speed_min_ms:  8.0       # m/s -- LIVE (flat_env_cfg)
+  speed_max_ms:  15.0      # m/s -- LIVE (flat_env_cfg)
+  pitch_min_deg: 0.0       # deg, nose-up -- LIVE (flat_env_cfg)
+  pitch_max_deg: 15.0      # deg, nose-up -- LIVE (flat_env_cfg)
+  alt0_m:        22.0      # REFERENCE ONLY -- real per-stage values are env/curriculum.py STAGES
+
+# ---------------------------------------------------------------------------
+# Reward weights  (mirrors DEFAULT_REWARD_CFG in env/reward.py)
+#
+# Phase 4 precision-landing task (RLGlider_Phase4_Landing_Task_Spec.md):
+# dist_home < R_home_m no longer terminates the episode -- only ground
+# contact (touched_down) or a JSBSim fault does. R_home_m is now purely a
+# precision-scoring parameter, overridden per curriculum stage alongside
+# sigma_centre_m/sink_bad/roll_bad_deg (env/curriculum.py STAGES).
+# w_progress/w_airtime/w_agl/agl_min are REMOVED (not zeroed): w_progress
+# directly opposed the new "longest route" objective (replaced by the
+# one-sided w_unreach reachability barrier), w_airtime rewarded loitering
+# rather than route length (replaced by w_path), and w_agl/agl_min penalised
+# being below the flare altitude, which is now a MANDATORY part of every
+# successful landing (the open-loop flare shield that used to enforce it was
+# also deleted -- see env/glider_env.py::_safety_shield).
+# ---------------------------------------------------------------------------
+reward:
+  # Terminal landing grade (see env/reward.py's module docstring for the
+  # full quality*(precision+bullseye) - (1-quality)*crash formula)
+  w_land:       500.0     # centre-precision bonus, scaled by landing quality
+  w_bullseye:   150.0     # narrow secondary precision bonus (also quality-scaled)
+  w_crash:      200.0     # penalty on a bad landing / fault, scaled by (1 - quality)
+  sigma_centre_m: 10.0    # half-value distance for the hyperbolic precision term
+                          # (r_precision = w_land*sigma/(sigma+d)); overridden per curriculum stage
+
+  # Landing-quality grading bands: OK = full credit, BAD = zero credit,
+  # linear ramp between. Only sink_bad/roll_bad_deg widen per curriculum
+  # stage (env/curriculum.py STAGES) -- the rest stay fixed so "clean
+  # landing" never changes definition, only how strictly it's enforced.
+  sink_ok:       0.8      # m/s; measured clean landings are 0.43-0.78 m/s
+  sink_bad:      2.5      # m/s; overridden per curriculum stage
+  roll_ok_deg:   10.0     # deg; wingtip geometry allows ~6 deg before contact
+  roll_bad_deg:  35.0     # deg; overridden per curriculum stage
+  vtd_ok:        10.85    # m/s; 1.4x V_stall (7.75 m/s, as-built nominal 1.64 kg; was 9.0
+                          # for the 1.1 kg design's 6.35 m/s, SPEC V20 Phase 4)
+  vtd_bad:       15.5     # m/s; 2.0x V_stall (was 13.0)
+  alpha_ok_deg:  10.0     # deg; brackets the 12 deg stall angle
+  alpha_bad_deg: 14.0     # deg
+
+  # Dense (every step, terminal or not)
+  w_path:        0.10     # reward per metre of ACTUAL ground track flown
+  path_reward_frame: ground # post-V22 key: ground track, as V22 (air = V23 runs 1-2)
+  cone_shaping:  false    # post-V22 key: no glide-cone shaping, as V22 (on in V23 run 1)
+  w_unreach:     2.0     # one-sided reachability-barrier penalty
+  glide_ratio_usable: 8.0 # conservative vs. measured best L/D ~16.7 (12.9 trimmed)
+  barrier_min_agl_m: 10.0 # AGL below which the reachability barrier is inert. Above
+                          # the ultrasonic's 4.5 m validity gate and the baseline's
+                          # 3 m flare, below normal cruise.
+  w_unreach_cap: 20.0     # ceiling on the barrier penalty PER SECOND (applied before
+                          # the dt_rl scaling, Phase 6), keeping it subordinate to the
+                          # terminal landing reward
+  dt_rl:         0.050    # policy step size (s); multiplied by w_path each step, and
+                          # (Phase 6) the capped barrier penalty each step
+
+  # Safety penalties (unchanged from the pre-Phase-4 reward)
+  w_stall:      30.0      # stall margin violation: linear penalty
+  w_bank:       5.0       # excess bank: linear penalty above soft limit
+
+  # Smoothness regularisation
+  w_smooth:     0.01      # L2 penalty on action change (prevents chattering)
+
+  # Truncation backstop (read by GliderEnv.step(), not env/reward.py -- only
+  # the env knows about MAX_STEPS)
+  w_truncate:   300.0
+
+  # Thresholds
+  R_home_m:             20.0    # precision-scoring radius (m); NOT terminal; overridden by curriculum
+  stall_buffer_rad:      0.0349 # ~2 deg before stall alpha (rad)
+  bank_soft_limit_rad:   0.5236 # 30 deg bank soft limit (rad)
+
+# post-V22 section: V22's 12-value sensor observation (V23 runs 1-2 used 3)
+observation:
+  obs_version: 1
+
+# ---------------------------------------------------------------------------
+# PPO hyperparameters (Stable-Baselines3)
+# ---------------------------------------------------------------------------
+ppo:
+  policy:           MlpPolicy
+  n_envs:           8               # parallel environments (SubprocVecEnv)
+  n_steps:          2048            # rollout steps per env before each update
+  batch_size:       256             # minibatch size for gradient updates
+  n_epochs:         10              # gradient update passes per rollout
+  gae_lambda:       0.95            # GAE lambda for advantage estimation
+  gamma:            0.999           # discount factor -- KEEP at 0.999 under Phase 4: episodes
+                                     # are now ~900-1200 steps (touchdown-based termination, not
+                                     # radius-crossing), ~7x longer than the old ~125-150-step
+                                     # episodes. 0.999 matches this longer horizon; an earlier
+                                     # review recommendation to drop to 0.99 was calibrated
+                                     # against the old short episodes and is now superseded --
+                                     # do not apply it.
+  ent_coef:         0.005           # entropy bonus (keeps policy exploratory early)
+  vf_coef:          0.5             # value function loss coefficient
+  max_grad_norm:    0.5             # gradient clipping norm
+  learning_rate:    3.0e-4          # Adam learning rate
+  clip_range:       0.2             # PPO clipping epsilon
+  target_kl:        0.03            # stop a rollout's update epochs once the policy has moved this
+                                     # far (SB3 stops at 1.5x = 0.045). Both V20-series runs ran with
+                                     # no limit: the update's KL rose from 0.016 to 0.19 (V21) and
+                                     # 0.30 (V20) with 55-60% of samples clipped, and both policies
+                                     # degraded from their 2-3.5M peak, when KL was still 0.04-0.06.
+                                     # Below the limit (the first ~2M steps) nothing changes.
+  min_action_std:   0.2             # floor on the policy's exploration noise during training. It
+                                     # fell from 1.0 to 0.25 by 3.5M steps and 0.08 by the end of
+                                     # both runs, which is what drove the KL up (KL ~ (step/std)^2)
+                                     # and left nothing to explore with after a stage change.
+                                     # Deterministic evaluation uses the mean and is unaffected.
+  net_arch:         [128, 128]      # shared MLP hidden layer sizes
+  n_stack:          8               # observation frames stacked (VecFrameStack) on BOTH the
+                                     # training and eval venvs: 8 x 50 ms = 0.4 s of history, so
+                                     # the policy can infer which randomised airframe it is flying
+                                     # (SPEC V20 Phase 4). A model trained with this needs it at
+                                     # load time too: obs shape is 12 * n_stack.
+  total_timesteps:  20_000_000      # smoke-check / initial-run budget. At ~7x longer episodes
+                                     # this buys ~7x fewer episodes than pre-Phase-4 for the same
+                                     # step count (~150k -> ~20k); RLGlider_Phase4_Landing_Task_
+                                     # Spec.md §6 recommends 40_000_000 for a real full run --
+                                     # deliberately not set here, raise explicitly when ready.
+  normalize_obs:    true            # use VecNormalize on observations
+  normalize_reward: false           # VecNormalize reward normalisation is OFF. It divides by a
+                                     # running return std and then clips at +/-10; in the V20/V21
+                                     # runs that std was 13-26, so raw rewards beyond +/-128..256
+                                     # were clipped against a landing reward of up to +650. Every
+                                     # clean landing inside 14 m (start) to 38 m (end) paid the
+                                     # same -- wider than the success radius from 1.6M steps on.
+  reward_scale:     0.02            # the fixed constant PPO's rewards are multiplied by instead
+                                     # (training/train.py VecScaleReward): landing reward <= +13,
+                                     # crash -4, nothing clipped, and the scale no longer drifts
+                                     # with the curriculum. PPO normalises advantages per batch, so
+                                     # this only sets the value-loss scale.
+  clip_obs:         10.0            # VecNormalize observation clip bound
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+eval:
+  # All-stage model selection (training/train.py MultiStageEvalCallback). The
+  # V20 run's EvalCallback was pinned at Stage 3 and scored on reward, which
+  # stayed flat (-110 to -200) all run; it kept the 9.0M checkpoint while the
+  # 2.0M checkpoint was the run's strongest policy (Stage 0 success 51% vs the
+  # baseline's 27%, McNemar p = 0.0009; results/benchmark_v20_2.0M.json).
+  # best_model.zip is now the checkpoint with the highest mean deterministic
+  # success over every stage, ties to the lower crash rate.
+  n_episodes_per_stage: 10          # 40 episodes per evaluation, ~2x the V20 run's 20.
+  stages:           [0, 1, 2, 3]
+  seed:             1000            # selection seeds; must differ from the benchmark's (0) so
+                                     # model selection never sees the test episodes
+  eval_freq:        250_000         # timesteps between evaluations (80 over a 20M-step run)
+  deterministic:    true            # use deterministic policy during evaluation
+
+# ---------------------------------------------------------------------------
+# Curriculum scheduler
+# ---------------------------------------------------------------------------
+curriculum:
+  # Revised after the V20 run (stage-0 checkpoint sweep, results/benchmark_v20_*_stage0.json):
+  # the policy reached 51% Stage 0 success at 2.0M steps, then fell to 31% at
+  # Stage 1, 8% right after a FORCED advance into Stage 2 at 3.8M, and 4% by
+  # 18.6M, while training only at later stages.
+  advance_threshold: [0.35, 0.30, 0.15]
+                                     # rolling success needed to LEAVE stage 0, 1, 2. One flat
+                                     # 0.60 bar was out of reach above Stage 0 (the V20 run's best
+                                     # Stage 1 window was 28%). Each value sits a few points above
+                                     # the deterministic baseline at that stage (27% / 25% / 11%,
+                                     # analysis/benchmark_baseline_v20.json), so an advance means
+                                     # the policy is already ahead of the baseline where it is.
+                                     # The rolling rate comes from the stochastic training policy,
+                                     # which scores below its deterministic benchmark.
+  rolling_window:    100            # raised back from 50: a 50-episode window is +-13 points at
+                                     # these rates, ~+-9 at 100. Only current-stage episodes count
+                                     # (replayed ones are excluded), so it fills (1 - replay_frac)
+                                     # as fast.
+  stage0_wind_ms:    0.0            # post-V22 key: calm Stage 0 training, as V22 (1.5 in V23 runs 1-2)
+  max_episodes_at_stage: null       # forced advances DISABLED. Both of the V20 run's forced
+                                     # advances (3.8M, 5.4M) preceded the collapse. The original
+                                     # reason for forcing -- best_model being selected at Stage 3
+                                     # by a policy that never trained there -- no longer applies:
+                                     # selection is now over all stages (eval above). A run that
+                                     # stalls at a stage is a result to report, not to force past.
+  replay_frac:       0.25           # share of episodes replayed at an earlier stage (uniform over
+                                     # stages 0 .. current-1) once past Stage 0, so skills from
+                                     # easier stages stay in the training distribution.
+
+# ---------------------------------------------------------------------------
+# Logging and checkpointing
+# ---------------------------------------------------------------------------
+logging:
+  tensorboard_log:  runs/           # TensorBoard log directory
+  checkpoint_dir:   checkpoints/    # model checkpoint directory
+  checkpoint_freq:  100_000         # timesteps between checkpoints
+  verbose:          1               # SB3 verbosity (0=silent, 1=info, 2=debug)
+
+# ---------------------------------------------------------------------------
+# Domain randomisation -- REFERENCE ONLY. The live table is DR_RANGES /
+# DR_ONESIDED / DR_SCALE in env/curriculum.py (mass, CG, Ixx, Iyy and wing
+# area there are read from aircraft/mass_properties.yaml). Each stage
+# samples every range at DR_SCALE[stage] of its width (0.25/0.50/0.75/1.00).
+# Nothing in this section is read by code; it records the derived envelope.
+# ---------------------------------------------------------------------------
+domain_rand:
+  # Steady-glide envelope of the DR table, from the aircraft model itself
+  # (python -m analysis.flight_envelope -> analysis/flight_envelope.json,
+  # SPEC V20 Phase 4). Live copies: env/glider_env.py FLIGHT_TIME_* and
+  # MAX_STEPS; tests/test_domain_rand.py recomputes and checks them.
+  worst_stall_ms:          9.17   # heaviest, lowest lift peak, smallest wing; command floor 9.5
+  flight_time_longest_s:   63.1   # lightest/cleanest at min sink in range, 31.8 m start energy
+                                  # (59.5 s from 30 m). Truncation is sized from THIS, not the
+                                  # typical flight: 1520 steps = 76 s = 1.2x.
+  flight_time_shortest_s:  37.5   # heaviest/draggiest at its best L/D, from 30 m (cd0_add <= 0.010)
+  flight_time_expected_s:  52.5   # nominal airframe at best L/D in range, from 30 m. Episodes
+                                  # start at 20-25 m (STAGES alt0_m), so real flights are shorter.
+  # Launch height: alt0_m (20-25 m, env/curriculum.py STAGES) still reflects
+  # the hand-launch zoom-climb assumption. The hi-start release height has
+  # NOT been measured; left unchanged pending that measurement.

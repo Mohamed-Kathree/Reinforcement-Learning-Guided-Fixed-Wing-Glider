@@ -137,6 +137,31 @@ def apply_overrides(cfg: dict, overrides: list[str]) -> dict:
     return cfg
 
 
+def archive_resolved_config(cfg: dict, checkpoint_dir: str | pathlib.Path,
+                            resume: str | None = None, seed: int = 0) -> pathlib.Path:
+    """Write the fully resolved config (file + --set overrides) next to the
+    checkpoints, with the command line and git commit (SPEC V24 Phase 0: no
+    run before V24 archived one, so their configs had to be rebuilt from git).
+    One file per launch, so a --resume does not overwrite the original."""
+    import datetime
+    import subprocess
+    import sys as _sys
+    try:
+        sha = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True,
+                             text=True, check=True).stdout.strip()
+        dirty = bool(subprocess.run(['git', 'status', '--porcelain'], capture_output=True,
+                                    text=True, check=True).stdout.strip())
+    except (OSError, subprocess.CalledProcessError):
+        sha, dirty = 'unknown', None
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    path = pathlib.Path(checkpoint_dir) / f'resolved_config_{stamp}.yaml'
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(f"# argv: {' '.join(_sys.argv)}\n# git: {sha} dirty={dirty}\n"
+                f"# seed: {seed}  resume: {resume}\n")
+        yaml.safe_dump(cfg, f, sort_keys=False)
+    return path
+
+
 _LAUNCH_KEY_MAP = {
     'speed_min_ms':  'launch_speed_min_ms',
     'speed_max_ms':  'launch_speed_max_ms',
@@ -751,6 +776,7 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
 
     checkpoint_dir = pathlib.Path(log_cfg['checkpoint_dir'])
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    archive_resolved_config(cfg, checkpoint_dir, resume=resume, seed=seed)
 
     tb_log_dir = log_cfg['tensorboard_log']
     pathlib.Path(tb_log_dir).mkdir(parents=True, exist_ok=True)

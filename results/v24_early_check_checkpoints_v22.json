@@ -1,0 +1,110 @@
+{
+ "run": "checkpoints_v22",
+ "graduation": {
+  "graduated_at": 3700000,
+  "limit": 5438400.0,
+  "latest_checkpoint": 20000000,
+  "pass": true,
+  "fail": false
+ },
+ "checkpoint": {
+  "step": 3700000,
+  "model": "checkpoints_v22\\ppo_glider_3700000_steps.zip",
+  "stage0": {
+   "n": 100,
+   "buckets": {
+    "success": {
+     "n": 24,
+     "rate": 0.24,
+     "wilson95": [
+      0.16691325556948777,
+      0.3323233634981448
+     ]
+    },
+    "soft_landing": {
+     "n": 75,
+     "rate": 0.75,
+     "wilson95": [
+      0.656955364519384,
+      0.8245478863771232
+     ]
+    },
+    "crash": {
+     "n": 1,
+     "rate": 0.01,
+     "wilson95": [
+      0.001767432064140647,
+      0.05448619617870533
+     ]
+    },
+    "timeout": {
+     "n": 0,
+     "rate": 0.0,
+     "wilson95": [
+      0.0,
+      0.03699349820698569
+     ]
+    }
+   },
+   "mean_quality": 0.8972516056643701,
+   "mean_miss_distance_m": 64.75353217888818,
+   "median_miss_distance_m": 56.662637458772934,
+   "mean_steps": 546.9
+  },
+  "baseline": {
+   "n": 100,
+   "buckets": {
+    "success": {
+     "n": 27,
+     "rate": 0.27,
+     "wilson95": [
+      0.19269584149576344,
+      0.36432116767945
+     ]
+    },
+    "soft_landing": {
+     "n": 73,
+     "rate": 0.73,
+     "wilson95": [
+      0.6356788323205499,
+      0.8073041585042365
+     ]
+    },
+    "crash": {
+     "n": 0,
+     "rate": 0.0,
+     "wilson95": [
+      0.0,
+      0.03699349820698569
+     ]
+    },
+    "timeout": {
+     "n": 0,
+     "rate": 0.0,
+     "wilson95": [
+      0.0,
+      0.03699349820698569
+     ]
+    }
+   },
+   "mean_quality": 0.9963274427953733,
+   "mean_miss_distance_m": 35.773319048711485,
+   "median_miss_distance_m": 38.01699189919668,
+   "mean_steps": 658.94
+  },
+  "paired": [
+   [
+    7,
+    17
+   ],
+   [
+    20,
+    56
+   ]
+  ],
+  "mcnemar_exact_p": 0.7428293587290682,
+  "threshold": 0.45,
+  "pass": false
+ },
+ "verdict": "STOP"
+}
