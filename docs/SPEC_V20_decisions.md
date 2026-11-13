@@ -816,3 +816,28 @@ V22's own stage-0 success on the 100 benchmark seeds, checkpoint by checkpoint (
   - The single check reproduces the committed V23 figures exactly, which confirms the refactor.
   - The window variant removes the significant stage 3 deficit. It is significantly better than the baseline in calm air and not significantly different at stages 1–3.
   - In wind, the baseline flies 40–47% of the flight time, so the stage 1–3 results are largely the baseline's.
+
+### Run 3 result: λ 0.995 alone fails (negative result)
+- **Configuration:** `v22_restored.yaml` plus `ppo.gae_lambda=0.995`, seed 0.
+  - Started 2026-11-13 18:21 UTC; stopped at 8.6M steps under the early-stop rule.
+  - Resolved config: `checkpoints_v24_run3/resolved_config_20261113T182113Z.yaml`.
+- **Graduation:** stage 0 never graduated, against a limit of 5.44M steps; V22 graduated at 3.7M.
+  - Training success in calm air rose to 11% by 1.6M steps, then fell back to 2–12% and stayed there.
+- **Benchmark** (100 paired seeds; success, with crash rate in brackets; every stage significantly worse than the baseline's 27 / 25 / 11 / 8%, McNemar p ≤ 0.008):
+
+  | Checkpoint | Stage 0 | Stage 1 | Stage 2 | Stage 3 |
+  |---|---|---|---|---|
+  | Best by in-training checks (1.75M) | 7% (0%) | 0% (6%) | 1% (19%) | 0% (48%) |
+  | Last (8.6M) | 9% (0%) | 3% (6%) | 0% (24%) | 0% (52%) |
+
+- **Against the prediction recorded before the run:** calm-air success fell, below even runs 1 and 2. The prediction's second branch held: λ 0.995 is damaging in this setup.
+- **Mechanism (probable):** the value network could not fit the near-Monte-Carlo targets that λ 0.995 produces.
+  - Explained variance was 0.07–0.59 (0.24 at 8.6M), against V22's steady 0.84–0.93 over the same steps.
+  - Run 2 (λ 0.995, no shaping) shows the same pattern: 0.37–0.45, then 0.18.
+  - Run 1 (λ 0.995 with cone shaping, a smoother return) stayed at 0.74–0.85 until about 6M.
+  - The update KL, clipping and entropy matched V22's, so the policy optimiser was not the problem.
+  - Caveat: explained variance under different λ measures the fit to different targets, so this is supporting evidence, not proof.
+- **Where the horizon test went wrong:**
+  - Test 1 computed λ 0.995 advantages after the fact, with V22's trained critic. It showed the landing result reaching early decisions.
+  - It did not test whether a critic can learn those targets during training. The horizon limit is real, but raising λ swaps it for advantage variance this setup cannot absorb.
+- **Consequence:** run 4 is V22 unchanged on a second seed (`--seed 1`), testing whether V22's 59% is reproducible.
