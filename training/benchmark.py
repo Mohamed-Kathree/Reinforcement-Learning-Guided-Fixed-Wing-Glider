@@ -333,7 +333,9 @@ def run_episode(env: GliderEnv, actor, seed: int) -> dict:
         steps += 1
         if terminated or truncated:
             break
+    extra = {"gate": actor.episode_record()} if hasattr(actor, "episode_record") else {}
     return {
+        **extra,
         "seed": int(seed),
         "outcome": outcome_bucket(info),
         "miss_distance_m": float(info.get("dist_home", float("nan"))),

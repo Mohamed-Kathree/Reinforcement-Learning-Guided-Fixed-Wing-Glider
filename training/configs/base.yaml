@@ -312,3 +312,19 @@ domain_rand:
   # Launch height: alt0_m (20-25 m, env/curriculum.py STAGES) still reflects
   # the hand-launch zoom-climb assumption. The hi-start release height has
   # NOT been measured; left unchanged pending that measurement.
+
+# ---------------------------------------------------------------------------
+# Wind-gated controller (SPEC V24 Phase 3) -- evaluation only; training never
+# reads it. baseline/wind_gated.py WindGatedActor.from_config(..., variant).
+# Values tuned on the development seeds (analysis/seeds/dev_seeds.json) by
+# analysis/gate_tune_v24.py tune, then frozen here before the single
+# evaluation on the benchmark seeds (analysis/gate_tune_v24.py evaluate).
+# ---------------------------------------------------------------------------
+gate:
+  single:                 # one check at t_decide_s (the V23 controller)
+    threshold_ms: 1.0     # |on-board wind estimate| above which the baseline takes over
+    t_decide_s:   15.0
+  window:                 # earlier handover: first crossing inside [t_earliest_s, t_latest_s]
+    threshold_ms: 1.25    # frozen 2026-11-13 from results/gate_tune_v24_dev.json (200 dev
+    t_earliest_s: 10.0    # seeds; mean success 0.284 against the single check's 0.259 and
+    t_latest_s:   20.0    # the baseline's 0.175)

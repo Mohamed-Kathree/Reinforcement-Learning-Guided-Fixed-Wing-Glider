@@ -731,3 +731,88 @@ lever sits behind a key whose default is the V22 behaviour.
   `set_stage()`, so the benchmark's stage 0 stays calm.
 - **`ppo.gae_lambda` for run 1: 0.995,** from horizon test 1.
 - **`apply_overrides` now parses true, false and null.**
+
+## V24: training base reverted to V22, one change per run
+
+### Bundling prevented attribution
+- V23 runs 1 and 2 changed four things at once:
+  - observation v3;
+  - air-frame path reward;
+  - `gae_lambda` 0.995;
+  - light wind at stage 0.
+- Neither run beat the baseline at any stage. Because the changes went in together, the failure can't be pinned on any one of them.
+- From run 3 on, each run is one named configuration that changes one key.
+- Runs 1 and 2 are reported as negative results:
+  - tag `v23-runs-1-2-negative`;
+  - `analysis/negative_results/`;
+  - all their code still runs behind its config keys.
+
+### Glide-cone shaping was not the cause
+- Run 2 was run 1 without the shaping.
+- Its best checkpoint scored 27 / 8 / 5 / 2% against run 1's 35 / 6 / 3 / 0%. Both are worse than the baseline at stages 1–3.
+
+### Training base reverted; infrastructure kept
+- **The restored config:**
+  - `training/configs/v22_restored.yaml` is a verbatim copy of `base.yaml` at `ed65989`, the commit V22 trained at.
+  - V22 archived no resolved config. Its metadata holds the commit hash, and the file's sha256 matches the hash V22's benchmark recorded.
+  - The keys added after V22 are pinned in it to V22's behaviour: `observation.obs_version: 1`, `reward.path_reward_frame: ground`, `reward.cone_shaping: false` and `curriculum.stage0_wind_ms: 0.0`.
+- **Checks** (`tests/test_v22_restore.py`):
+  - The config matches V22's key by key; only the output paths may differ.
+  - The PPO settings stored inside V22's model file agree with it.
+  - Open-loop trajectories replayed in the `ed65989` tree and in this one give identical per-step rewards and observations (1e-12).
+  - V22's best checkpoint reproduces its committed stage-0 benchmark on all 100 seeds: same outcome, steps, return and miss distance.
+- **Resolved-config archive:** `training/train.py` now writes `resolved_config_<UTC>.yaml` into the checkpoint folder at every launch. No earlier run did, so Phase 0 had to rebuild those configs from git.
+
+### Run 3, written before the run
+- **Configuration:** `v22_restored.yaml` plus `ppo.gae_lambda=0.995`, nothing else.
+- **Prediction:**
+  - If the horizon hypothesis is right, run 3 matches V22 in calm air and improves at stage 1.
+  - If λ 0.995 is what damaged runs 1 and 2, calm-air success falls toward their 27–35%.
+
+### Calibration of the early check, and what it says about "V22's 59%"
+V22's own stage-0 success on the 100 benchmark seeds, checkpoint by checkpoint (`results/v22_stage0_curve.json` and the committed benchmarks):
+
+| Step | 3.0M | 3.7M (graduation) | 4.5M | 5.5M | 7.0M | 10M | 14M | 15M (best) | 20M |
+|---|---|---|---|---|---|---|---|---|---|
+| Stage 0 success | 2% | 24% | 13% | 2% | 2% | 26% | 57% | 59% | 0% |
+
+- **V22 would fail the spec's own early check.** Its graduation checkpoint scored 24%, below the 45% bar, so the rule would have stopped V22 itself.
+  - `analysis/v24_early_check.py` implements the rule as written; `--run checkpoints_v22` returns STOP.
+- **One checkpoint's stage-0 score is too unstable to stop a run on.**
+- **The "calm-air drop" from 59% to 35% and 27% compares a selected best checkpoint with others.**
+  - Each run's best checkpoint was picked from about 80 noisy 10-episode evaluations.
+  - Runs 1 and 2 sit inside the range V22's own checkpoints span.
+  - Read that way, the evidence that λ 0.995 hurt calm-air flight is weaker than the V24 spec states.
+- **Researcher's decision:** whether to stop on graduation alone, or compare run 3 against V22 at matched checkpoints.
+
+### Wind-gated controller: on-board inputs, development-seed tuning
+- **On-board inputs only.**
+  - The decision lives in `baseline/wind_gate.py`. It reads the observation-v1 sensor vector (GPS ground speed and course, IMU heading) and the airspeed command it last flew.
+  - It imports no flight model, wind model or environment.
+  - Tests:
+    - an AST check plus a run-time `sys.modules` check;
+    - the same sensor stream gives identical decisions while a different true wind is live in the simulator.
+  - The V23 actor never read the true wind either, but it imported `env.glider_env`.
+- **Development seeds.**
+  - `analysis/seeds/dev_seeds.json` holds `episode_seeds(200, 7)`, hash-checked.
+  - It shares no seed with the benchmark seeds (`episode_seeds(100, 0)`) or the in-training selection seeds (`episode_seeds(10, 1000)`).
+  - The V23 gate (1.0 m/s at 15 s) had already been tuned on the first 100 of these seeds, so its benchmark figures were not tuned on the benchmark seeds.
+  - The repo has no held-out airframe seed set to check against.
+- **Earlier-handover variant (`gate.window`).**
+  - It hands over the first time the estimate exceeds the threshold within a time window.
+  - Grid: thresholds 0.75–2.5 m/s, windows starting at 3–10 s and ending at 10–20 s, on 200 development seeds (`results/gate_tune_v24_dev.json`).
+  - The selection rule was fixed in the script beforehand. It chose 1.25 m/s within 10–20 s: mean success 0.284 on the development seeds, against 0.259 for the single check and 0.175 for the baseline.
+  - On the 200 development seeds, the best single-check setting (0.75 m/s at 10 s, 0.264) is within noise of V23's (0.259), so V23's setting was kept.
+- **One evaluation on the benchmark seeds** (`results/gated_v24_benchmark.json`; success with 95% Wilson interval; McNemar p against the baseline; handover share of episodes and of flight time):
+
+  | Stage | Baseline | V22 alone | Single (1.0 m/s, 15 s) | Window (1.25 m/s, 10–20 s) |
+  |---|---|---|---|---|
+  | 0 | 27% | 59% | 56% [46, 65], p < 0.001; 5% / 3% | 58% [48, 67], p < 0.001; 1% / 1% |
+  | 1 | 25% | 16% | 33% [25, 43], p 0.28; 60% / 30% | 27% [19, 36], p 0.87; 66% / 40% |
+  | 2 | 11% | 2% | 11% [6, 19], p 1.0; 59% / 30% | 13% [8, 21], p 0.83; 80% / 47% |
+  | 3 | 8% | 0% | **1%** [0, 5], p 0.016 (worse); 52% / 27% | 6% [3, 12], p 0.77; 74% / 46% |
+
+- **What the evaluation shows.**
+  - The single check reproduces the committed V23 figures exactly, which confirms the refactor.
+  - The window variant removes the significant stage 3 deficit. It is significantly better than the baseline in calm air and not significantly different at stages 1–3.
+  - In wind, the baseline flies 40–47% of the flight time, so the stage 1–3 results are largely the baseline's.
