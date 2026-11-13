@@ -1,0 +1,103 @@
+# Resolved config of run2, rebuilt by build_archive.py from
+# training/configs/base.yaml at 1b08520b6c8325ed55168451f2a3daf4ab0219f5 plus:
+#   python -m training.train --set observation.obs_version=3 reward.path_reward_frame=air ppo.gae_lambda=0.995 curriculum.stage0_wind_ms=1.5 logging.checkpoint_dir=checkpoints_v23_run2/ logging.tensorboard_log=runs_v23_run2/
+sim:
+  dt_phys: 0.005
+  dt_rl: 0.05
+  substeps: 10
+  max_steps: 1520
+  rho: 1.225
+launch:
+  speed_min_ms: 8.0
+  speed_max_ms: 15.0
+  pitch_min_deg: 0.0
+  pitch_max_deg: 15.0
+  alt0_m: 22.0
+reward:
+  w_land: 500.0
+  w_bullseye: 150.0
+  w_crash: 200.0
+  sigma_centre_m: 10.0
+  sink_ok: 0.8
+  sink_bad: 2.5
+  roll_ok_deg: 10.0
+  roll_bad_deg: 35.0
+  vtd_ok: 10.85
+  vtd_bad: 15.5
+  alpha_ok_deg: 10.0
+  alpha_bad_deg: 14.0
+  w_path: 0.1
+  path_reward_frame: air
+  w_unreach: 2.0
+  glide_ratio_usable: 8.0
+  barrier_min_agl_m: 10.0
+  w_unreach_cap: 20.0
+  dt_rl: 0.05
+  w_stall: 30.0
+  w_bank: 5.0
+  w_smooth: 0.01
+  w_truncate: 300.0
+  cone_shaping: false
+  w_cone: 1.0
+  cone_glide_ratio: 8.0
+  cone_airspeed_ms: 10.0
+  cone_cap_m: 200.0
+  cone_gamma: 0.999
+  R_home_m: 20.0
+  stall_buffer_rad: 0.0349
+  bank_soft_limit_rad: 0.5236
+observation:
+  obs_version: 3
+ppo:
+  policy: MlpPolicy
+  n_envs: 8
+  n_steps: 2048
+  batch_size: 256
+  n_epochs: 10
+  gae_lambda: 0.995
+  gamma: 0.999
+  ent_coef: 0.005
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  learning_rate: 0.0003
+  clip_range: 0.2
+  target_kl: 0.03
+  min_action_std: 0.2
+  net_arch:
+  - 128
+  - 128
+  n_stack: 8
+  total_timesteps: 20000000
+  normalize_obs: true
+  normalize_reward: false
+  reward_scale: 0.02
+  clip_obs: 10.0
+eval:
+  n_episodes_per_stage: 10
+  stages:
+  - 0
+  - 1
+  - 2
+  - 3
+  seed: 1000
+  eval_freq: 250000
+  deterministic: true
+curriculum:
+  advance_threshold:
+  - 0.35
+  - 0.3
+  - 0.15
+  rolling_window: 100
+  max_episodes_at_stage: null
+  stage0_wind_ms: 1.5
+  replay_frac: 0.25
+logging:
+  tensorboard_log: runs_v23_run2/
+  checkpoint_dir: checkpoints_v23_run2/
+  checkpoint_freq: 100000
+  verbose: 1
+domain_rand:
+  worst_stall_ms: 9.17
+  flight_time_longest_s: 63.1
+  flight_time_shortest_s: 37.5
+  flight_time_expected_s: 52.5

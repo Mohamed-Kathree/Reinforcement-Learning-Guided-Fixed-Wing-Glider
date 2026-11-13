@@ -1,0 +1,133 @@
+{
+ "note": "the V22 artefacts that the restored training base is checked against.",
+ "runs": {
+  "v22": {
+   "meta": {
+    "start_time": "2026-11-12T01:33:58.314375+00:00",
+    "seed": 0,
+    "total_timesteps": 20000000,
+    "git_hash": "ed659890f497f76dcbd263ea79e19cc608fafaeb",
+    "n_envs": 8
+   },
+   "command": "python -m training.train",
+   "overrides": [],
+   "base_yaml_sha256_at_commit": "9c82caeafef3cfc17620b8b8243c61242da865fbec59464e7eb83bf1129719a6",
+   "resolved_config": "v22_resolved_config.yaml",
+   "resolved_config_sha256": "34caa19da377ca91944bfe769de1fac887dc41ec0713242ebd63d16c2b3af760",
+   "checkpoints": {
+    "checkpoints_v22/best_model.zip": "e1e77811ce07a5eed9d0a48556fef235101af0b8e098b8154cbe22449ad7e7d4",
+    "checkpoints_v22/vecnormalize_best.pkl": "3d8fa01b9e4a3023e45d29a7024550d8e2970c670843f406caaf37ade5264fee",
+    "checkpoints_v22/ppo_glider_final.zip": "2db57bbd625b0f73e3d9627d2d3adb33716a898454fb1cfb233eeb551e3de7aa",
+    "checkpoints_v22/vecnormalize_final.pkl": "ea69e14fffcf439a2d886a3599609ff4647fa368018f760ecc971938d6469c6d",
+    "checkpoints_v22/best_model.json": "93f0ce03b554f3d22c15c2667e1647cb157c369d043f2712889cd89b84c31a8d",
+    "checkpoints_v22/ppo_glider_14000000_steps.zip": "5eb6cd676cc2d3766bd6071ccef862d111bc11fdba374334e081b24960d01de0",
+    "checkpoints_v22/vecnormalize_14000000.pkl": "be0f0ef5981144aa0314647a9c6de9a675bea0a02d40cd695006e696723eba4c"
+   },
+   "benchmarks": {
+    "benchmark_v22_best_15M.json": {
+     "sha256": "5bad265f424e16d8c59599b386da1e72debde11a361e6a63ddb7a3b9b9e47eb1",
+     "git_sha": "ed659890f497f76dcbd263ea79e19cc608fafaeb",
+     "policy_sha256": "e1e77811ce07a5eed9d0a48556fef235101af0b8e098b8154cbe22449ad7e7d4",
+     "vecnorm_sha256": "3d8fa01b9e4a3023e45d29a7024550d8e2970c670843f406caaf37ade5264fee"
+    },
+    "benchmark_v22_final_20M.json": {
+     "sha256": "2ef1798bd76f87470835b3a70b7bd9115ff53903a73e460123c9b6b553cd7e47",
+     "git_sha": "ed659890f497f76dcbd263ea79e19cc608fafaeb",
+     "policy_sha256": "2db57bbd625b0f73e3d9627d2d3adb33716a898454fb1cfb233eeb551e3de7aa",
+     "vecnorm_sha256": "ea69e14fffcf439a2d886a3599609ff4647fa368018f760ecc971938d6469c6d"
+    },
+    "benchmark_v22_14M.json": {
+     "sha256": "b6e1fe5d3d3a025bb638486fff0481c0dbfd7ae26e7dd880e3cf00f3a9f14c0d",
+     "git_sha": "ed659890f497f76dcbd263ea79e19cc608fafaeb",
+     "policy_sha256": "5eb6cd676cc2d3766bd6071ccef862d111bc11fdba374334e081b24960d01de0",
+     "vecnorm_sha256": "be0f0ef5981144aa0314647a9c6de9a675bea0a02d40cd695006e696723eba4c"
+    }
+   }
+  },
+  "run1": {
+   "meta": {
+    "start_time": "2026-11-12T19:40:08.797474+00:00",
+    "seed": 0,
+    "total_timesteps": 20000000,
+    "git_hash": "1b08520b6c8325ed55168451f2a3daf4ab0219f5",
+    "n_envs": 8
+   },
+   "command": "python -m training.train --set observation.obs_version=3 reward.path_reward_frame=air reward.cone_shaping=true ppo.gae_lambda=0.995 curriculum.stage0_wind_ms=1.5 logging.checkpoint_dir=checkpoints_v23_run1/ logging.tensorboard_log=runs_v23_run1/",
+   "overrides": [
+    "observation.obs_version=3",
+    "reward.path_reward_frame=air",
+    "reward.cone_shaping=true",
+    "ppo.gae_lambda=0.995",
+    "curriculum.stage0_wind_ms=1.5",
+    "logging.checkpoint_dir=checkpoints_v23_run1/",
+    "logging.tensorboard_log=runs_v23_run1/"
+   ],
+   "base_yaml_sha256_at_commit": "ca589f7933ac8d2f5fe93cf554af77727718321bd95fe023ef96dd9206db8384",
+   "resolved_config": "run1_resolved_config.yaml",
+   "resolved_config_sha256": "c34e5875f280b8f2fcdcfbe3de2f4a302554c03a51b735af7307d99d74c31fb9",
+   "checkpoints": {
+    "checkpoints_v23_run1/best_model.zip": "9d24ce098a31e1aa9997881a5860b4278f5d3eace7c2e23ca4753a21bc0ad56a",
+    "checkpoints_v23_run1/vecnormalize_best.pkl": "38fcac83ae0098095ba3b023da35345160a2a58020743d6824843ba8d216d6fa",
+    "checkpoints_v23_run1/ppo_glider_final.zip": "4d2b7aa39f116699ccdf1128965c295975fba6d387a6902d30384d55adba97b8",
+    "checkpoints_v23_run1/vecnormalize_final.pkl": "5f77bfd46ab6269ea3d381372cee7fcd239918741bfec0170cf9b2a5b97b36a3",
+    "checkpoints_v23_run1/best_model.json": "7ee8943a0899e8e16ea6e4d505a78f045bd84446a24cdc9bde6a03615206ef0c"
+   },
+   "benchmarks": {
+    "benchmark_v23run1_best_6.75M.json": {
+     "sha256": "e7fbdb502f39f65d8987aaa197825c1e7e3ee974d505aa48a420ed445047276c",
+     "git_sha": "1b08520b6c8325ed55168451f2a3daf4ab0219f5",
+     "policy_sha256": "9d24ce098a31e1aa9997881a5860b4278f5d3eace7c2e23ca4753a21bc0ad56a",
+     "vecnorm_sha256": "38fcac83ae0098095ba3b023da35345160a2a58020743d6824843ba8d216d6fa"
+    },
+    "benchmark_v23run1_final_20M.json": {
+     "sha256": "d7ca2443b8cc90c0a8efcb7af720a4a438450c2d4e7c46ca62a011727cee2114",
+     "git_sha": "1b08520b6c8325ed55168451f2a3daf4ab0219f5",
+     "policy_sha256": "4d2b7aa39f116699ccdf1128965c295975fba6d387a6902d30384d55adba97b8",
+     "vecnorm_sha256": "5f77bfd46ab6269ea3d381372cee7fcd239918741bfec0170cf9b2a5b97b36a3"
+    }
+   }
+  },
+  "run2": {
+   "meta": {
+    "start_time": "2026-11-13T08:39:32.761090+00:00",
+    "seed": 0,
+    "total_timesteps": 20000000,
+    "git_hash": "1b08520b6c8325ed55168451f2a3daf4ab0219f5",
+    "n_envs": 8
+   },
+   "command": "python -m training.train --set observation.obs_version=3 reward.path_reward_frame=air ppo.gae_lambda=0.995 curriculum.stage0_wind_ms=1.5 logging.checkpoint_dir=checkpoints_v23_run2/ logging.tensorboard_log=runs_v23_run2/",
+   "overrides": [
+    "observation.obs_version=3",
+    "reward.path_reward_frame=air",
+    "ppo.gae_lambda=0.995",
+    "curriculum.stage0_wind_ms=1.5",
+    "logging.checkpoint_dir=checkpoints_v23_run2/",
+    "logging.tensorboard_log=runs_v23_run2/"
+   ],
+   "base_yaml_sha256_at_commit": "ca589f7933ac8d2f5fe93cf554af77727718321bd95fe023ef96dd9206db8384",
+   "resolved_config": "run2_resolved_config.yaml",
+   "resolved_config_sha256": "ffe16013551e8ae8ba07845d6e747abd7f33f1fad58d12e56621233db5f0fc41",
+   "checkpoints": {
+    "checkpoints_v23_run2/best_model.zip": "a4448d542d8b71abcb3e6763e9350a41a19ade8f6ab8d67a64a1995974951272",
+    "checkpoints_v23_run2/vecnormalize_best.pkl": "d6a1d5a9649a5c1a294fdf3fa69a3e30a587a23172054c8c9167f098c8db73ca",
+    "checkpoints_v23_run2/ppo_glider_final.zip": "a65f93f4340a3f038782ad7f13ee8443abe1da0d8f28282a1dabffbf53546ec4",
+    "checkpoints_v23_run2/vecnormalize_final.pkl": "67babb79d47582a34a08e4a19648a669696892459e063a8b66fd6936b9b3a43c",
+    "checkpoints_v23_run2/best_model.json": "75c75ff72b9d358368aa95b9b9c4a5cd509c72f3c7e30660db9bed350327208f"
+   },
+   "benchmarks": {
+    "benchmark_v23run2_best_10M.json": {
+     "sha256": "08d1a4148f266e1d94b2d5eac20d9071ce8dcf8b27c61897f499582378584e51",
+     "git_sha": "6df16bafc63c736f7a6016a1c407771255afb714",
+     "policy_sha256": "a4448d542d8b71abcb3e6763e9350a41a19ade8f6ab8d67a64a1995974951272",
+     "vecnorm_sha256": "d6a1d5a9649a5c1a294fdf3fa69a3e30a587a23172054c8c9167f098c8db73ca"
+    },
+    "benchmark_v23run2_final_20M.json": {
+     "sha256": "371692e3a8b4c9f98a8aa7ba8b0d69c6b73cc3a95698181d19da00cc2ac91c81",
+     "git_sha": "6df16bafc63c736f7a6016a1c407771255afb714",
+     "policy_sha256": "a65f93f4340a3f038782ad7f13ee8443abe1da0d8f28282a1dabffbf53546ec4",
+     "vecnorm_sha256": "67babb79d47582a34a08e4a19648a669696892459e063a8b66fd6936b9b3a43c"
+    }
+   }
+  }
+ }
+}
