@@ -332,3 +332,11 @@ gate:
     threshold_ms: 1.25    # frozen 2026-11-13 from results/gate_tune_v24_dev.json (200 dev
     t_earliest_s: 10.0    # seeds; mean success 0.284 against the single check's 0.259 and
     t_latest_s:   20.0    # the baseline's 0.175)
+  run4:                   # the same gate around run 4's best model (checkpoints_v24_run4/best_model.zip)
+    single:               # frozen 2026-11-14 from results/gate_tune_v24_dev_run4.json (200 dev
+      threshold_ms: 1.25  # seeds, same grid and selection rule as above)
+      t_decide_s:   10.0
+    window:               # mean dev success 0.275 against the single check's 0.256, run 4
+      threshold_ms: 1.5   # alone's 0.215 and the baseline's 0.175
+      t_earliest_s: 8.0
+      t_latest_s:   15.0

@@ -7,6 +7,11 @@ evaluate the frozen configuration ONCE on the benchmark seeds.
     python analysis/gate_tune_v24.py tune       # development seeds only
     python analysis/gate_tune_v24.py evaluate   # benchmark seeds, values from base.yaml gate:
 
+    GATE_POLICY=run4 python analysis/gate_tune_v24.py tune|evaluate
+        the same for run 4's best model (V24 run 4, the second-seed V22
+        replication), flown in v22_restored.yaml; gate values from base.yaml
+        gate.run4; outputs suffixed _run4. The default (v22) is unchanged.
+
 Tuning shortcut (exact, checked in the run): the gated flight is identical to
 V22 flying alone until the handover step, so the handover step of any gate
 setting can be read off the |w_est| trace recorded on the solo flight
@@ -35,8 +40,33 @@ sys.path.insert(0, ROOT)
 THRESHOLDS = [0.75, 1.0, 1.25, 1.5, 2.0, 2.5]
 T_EARLIEST = [3.0, 5.0, 8.0, 10.0]
 T_LATEST = [10.0, 15.0, 20.0]
-V22 = ("checkpoints_v22/best_model.zip", "checkpoints_v22/vecnormalize_best.pkl")
+POLICIES = {
+    "v22": {"model": ("checkpoints_v22/best_model.zip", "checkpoints_v22/vecnormalize_best.pkl"),
+            "config": None, "suffix": ""},
+    "run4": {"model": ("checkpoints_v24_run4/best_model.zip",
+                       "checkpoints_v24_run4/vecnormalize_best.pkl"),
+             "config": os.path.join(ROOT, "training", "configs", "v22_restored.yaml"),
+             "suffix": "_run4"},
+}
+POLICY = os.environ.get("GATE_POLICY", "v22")      # inherited by the spawn workers
+P = POLICIES[POLICY]
+V22 = P["model"]                                   # name kept: the flown policy
 _A: dict = {}
+
+
+def _cfg():
+    from training.benchmark import load_config
+    return load_config(P["config"]) if P["config"] else load_config()
+
+
+def _gate_cfg():
+    g = _cfg_base()["gate"]
+    return g if POLICY == "v22" else g[POLICY]
+
+
+def _cfg_base():
+    from training.benchmark import load_config
+    return load_config()
 
 
 def _policy():
@@ -64,7 +94,7 @@ def _flight(task):
     else:  # "single"
         T, t = arg
         actor = WindGatedActor(_policy(), threshold_ms=T, t_decide_s=t)
-    r = evaluate_seed(load_config(), stage, actor, seed, 1)
+    r = evaluate_seed(_cfg(), stage, actor, seed, 1)
     out = {"kind": kind, "arg": arg, "stage": stage, "seed": seed, "outcome": r["outcome"],
            "steps": r["steps"], "miss": r["miss_distance_m"]}
     if kind == "alone":
@@ -149,12 +179,13 @@ def tune(workers: int) -> None:
             mismatch.append([k, a, st, s, ep["outcome"], r["outcome"]])
     print(f"shortcut check: {len(sample) - len(mismatch)}/{len(sample)} identical", flush=True)
 
-    out = {"seed_set": "analysis/seeds/dev_seeds.json", "n_seeds": len(seeds),
+    out = {"policy": POLICY, "model": V22[0],
+           "seed_set": "analysis/seeds/dev_seeds.json", "n_seeds": len(seeds),
            "selection_rule": "max mean success over stages 0-3; ties: lower stage-3 crash, "
                              "then lower stage-0 handover share",
            "reference": ref, "best_window": best_window, "best_single": best_single,
            "shortcut_check": {"n": len(sample), "mismatches": mismatch}, "grid": grid}
-    path = os.path.join(ROOT, "results", "gate_tune_v24_dev.json")
+    path = os.path.join(ROOT, "results", f"gate_tune_v24_dev{P['suffix']}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=1)
     for name, r in ref.items():
@@ -171,14 +202,14 @@ def evaluate(workers: int) -> None:
     """One evaluation on the benchmark seeds, gate values frozen in base.yaml."""
     from training.benchmark import (episode_seeds, load_config, mcnemar_exact, paired_table,
                                     summarise)
-    gate = load_config()["gate"]
+    gate = _gate_cfg()
     seeds = episode_seeds(100, 0)
     variants = {"single": ("single", (gate["single"]["threshold_ms"], gate["single"]["t_decide_s"])),
                 "window": ("window", (gate["window"]["threshold_ms"], gate["window"]["t_earliest_s"],
                                       gate["window"]["t_latest_s"]))}
     tasks = [(k, a, st, s) for k, a in variants.values() for st in range(4) for s in seeds]
     tasks += [(k, None, st, s) for k in ("alone", "baseline") for st in range(4) for s in seeds]
-    raw = os.path.join(ROOT, "results", "gated_v24_benchmark_raw.json")
+    raw = os.path.join(ROOT, "results", f"gated_v24{P['suffix']}_benchmark_raw.json")
     if os.path.exists(raw) and os.environ.get("REUSE_RAW") == "1":
         with open(raw) as f:
             res = json.load(f)
@@ -189,7 +220,8 @@ def evaluate(workers: int) -> None:
         res = _pool(tasks, workers)
         with open(raw, "w", encoding="utf-8") as f:
             json.dump(res, f)
-    out = {"seed_set": "benchmark: episode_seeds(100, 0)", "gate_config": gate, "stages": {}}
+    out = {"policy": POLICY, "model": V22[0],
+           "seed_set": "benchmark: episode_seeds(100, 0)", "gate_config": gate, "stages": {}}
     for st in range(4):
         def eps(kind, arg=None):
             return [r["record"]
@@ -209,7 +241,7 @@ def evaluate(workers: int) -> None:
                              / sum(g["steps"] for g in gates),
                          "episodes": e}
         out["stages"][str(st)] = rec
-    path = os.path.join(ROOT, "results", "gated_v24_benchmark.json")
+    path = os.path.join(ROOT, "results", f"gated_v24{P['suffix']}_benchmark.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=1)
     for st, rec in out["stages"].items():
