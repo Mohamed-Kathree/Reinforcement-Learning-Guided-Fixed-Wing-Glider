@@ -910,3 +910,22 @@ V22's own stage-0 success on the 100 benchmark seeds, checkpoint by checkpoint (
   - Training on stage 3 taught the policy to avoid crashing, not to get home: crashes became soft landings far from home (stage 3 median miss 90–105 m).
   - Calm-air forgetting continued with stage 0 at 20% of episodes. Across V22, run 4 and run 5, harder-condition training erodes calm-air skill under every curriculum tried.
   - The run 5 final is the safest policy in wind but significantly worse than the baseline at stages 1 and 2. No run 5 checkpoint improves on run 4 best overall; run 4 best stays the reported policy.
+
+### Wind gate around run 4 best: development-seed tuning, one benchmark evaluation
+- **Tuning** (`GATE_POLICY=run4 python analysis/gate_tune_v24.py tune`, `results/gate_tune_v24_dev_run4.json`): same 200 development seeds, grid and selection rule as for V22; trace shortcut 32 of 32 identical.
+  - Chosen: window, 1.5 m/s within 8–15 s (dev mean success 0.275; single check 1.25 m/s at 10 s, 0.256; run 4 alone 0.215; baseline 0.175).
+  - Frozen in `base.yaml` `gate.run4` and committed (ef1b594) before the benchmark seeds were used.
+- **One evaluation on the benchmark seeds** (`results/gated_v24_run4_benchmark.json`). Run 4 alone reproduced its earlier benchmark exactly at every stage. Success with 95% Wilson interval, crash rate, McNemar p of success against the baseline, share of episodes handed over / of flight time flown by the baseline:
+
+  | Stage | Baseline | Run 4 alone | Window gate (1.5 m/s, 8–15 s) | V22 window gate, for comparison |
+  |---|---|---|---|---|
+  | 0 | 27% (0%) | 63% (0%) | **58%** [48, 67] (0%), p < 0.001; 6% / 4% | 58% (0%) |
+  | 1 | 25% (0%) | 25% (6%) | **35%** [26, 45] (3%), p 0.17; 52% / 35% | 27% (1%) |
+  | 2 | 11% (6%) | 8% (27%) | **19%** [13, 28] (13%), p 0.15; 77% / 49% | 13% (9%) |
+  | 3 | 8% (39%) | 1% (54%) | **7%** [3, 14] (47%), p 1.0; 79% / 53% | 6% (36%) |
+
+- **What it shows:**
+  - Significantly better than the baseline in calm air; numerically better at stages 1 and 2 (35% against 25%, 19% against 11%) but not significantly on 100 seeds; level at stage 3.
+  - Crash rates are above the baseline's at stages 2 and 3 (13% against 6%, 47% against 39%), not significantly (paired p 0.14 and 0.20). At stage 3 it crashes more than the V22 gate (47% against 36%, p 0.10).
+  - Against the V22 gate, success is higher at stages 1 and 2 but not significantly (p 0.30 and 0.26).
+  - The single check (not selected) scored 55 / 36 / 12 / 7% with crashes 0 / 3 / 19 / 41%; it is reported for completeness, not substituted after the fact.
