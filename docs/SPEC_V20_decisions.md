@@ -889,3 +889,24 @@ V22's own stage-0 success on the 100 benchmark seeds, checkpoint by checkpoint (
 - **Prediction:** stage 3 crash rate falls from 54% toward the baseline's 39%; stage 3 success 3–8%; calm-air success stays above 45%. Ceiling: 18 of 100 stage 3 seeds have ever been landed by any controller.
 - **Early stop** (`analysis/v24_run5_check.py`, development seeds only): at 2M and 5M steps, stop if calm-air success is below 40% or the stage 3 crash rate is not below run 4 best's on the same seeds.
 - **Tests:** `tests/test_stage_mix.py`.
+
+### Run 5 result: safer at stage 3, at the cost of every stage's success (mixed result)
+- **Configuration** as recorded above; started 2026-11-14 13:54 UTC, finished at 10M steps. The 2M check was not run; the 5M check passed on the development seeds (calm-air success 44%; stage 3 crashes 33% against run 4 best's 45.5%).
+- **Benchmark** (100 paired seeds; success, crash rate in brackets; McNemar p of success against the baseline):
+
+  | Checkpoint | Stage 0 | Stage 1 | Stage 2 | Stage 3 |
+  |---|---|---|---|---|
+  | Baseline | 27% (0%) | 25% (0%) | 11% (6%) | 8% (39%) |
+  | Run 4 best (start point) | 63% (0%) | 25% (6%) | 8% (27%) | 1% (54%) |
+  | Run 5 best by in-training checks (1.75M) | 63% (0%) | 20% (10%) | 8% (19%) | 0% (52%) |
+  | Run 5 at 5M | 43% (0%), p 0.033 | 17% (1%) | 6% (15%) | 0% (46%) |
+  | Run 5 final (10M) | 15% (0%), p 0.058 | 11% (0%), p 0.013 | 2% (11%), p 0.012 | 1% (37%) |
+
+- **Against the prediction:**
+  - Stage 3 crashes fell toward the baseline: 54% to 37% at 10M, significantly below run 4 best (paired McNemar on crashes, p 0.006) and level with the baseline (p 0.87). Held.
+  - Stage 3 success did not rise (0–1%, predicted 3–8%). Failed.
+  - Calm-air success did not hold (63% to 43% to 15%, predicted above 45%). Failed.
+- **What it shows:**
+  - Training on stage 3 taught the policy to avoid crashing, not to get home: crashes became soft landings far from home (stage 3 median miss 90–105 m).
+  - Calm-air forgetting continued with stage 0 at 20% of episodes. Across V22, run 4 and run 5, harder-condition training erodes calm-air skill under every curriculum tried.
+  - The run 5 final is the safest policy in wind but significantly worse than the baseline at stages 1 and 2. No run 5 checkpoint improves on run 4 best overall; run 4 best stays the reported policy.

@@ -1,0 +1,2034 @@
+{
+ "model": "checkpoints_v24_run5/ppo_glider_5000000_steps.zip",
+ "stages": {
+  "0": {
+   "n": 200,
+   "success": 0.435,
+   "crash": 0.01,
+   "episodes": [
+    {
+     "seed": 2029167941,
+     "outcome": "success",
+     "miss_distance_m": 7.231180955348028
+    },
+    {
+     "seed": 1342382292,
+     "outcome": "soft_landing",
+     "miss_distance_m": 48.830983353993446
+    },
+    {
+     "seed": 1469265226,
+     "outcome": "soft_landing",
+     "miss_distance_m": 39.11383455214656
+    },
+    {
+     "seed": 1926751966,
+     "outcome": "success",
+     "miss_distance_m": 15.408313907958174
+    },
+    {
+     "seed": 1241873585,
+     "outcome": "success",
+     "miss_distance_m": 21.989632642026056
+    },
+    {
+     "seed": 1665772335,
+     "outcome": "soft_landing",
+     "miss_distance_m": 43.954206483754774
+    },
+    {
+     "seed": 1790251937,
+     "outcome": "success",
+     "miss_distance_m": 18.644804594470088
+    },
+    {
+     "seed": 483628757,
+     "outcome": "success",
+     "miss_distance_m": 13.83299309788606
+    },
+    {
+     "seed": 119253154,
+     "outcome": "success",
+     "miss_distance_m": 13.664875630733711
+    },
+    {
+     "seed": 644602188,
+     "outcome": "success",
+     "miss_distance_m": 18.55927208884989
+    },
+    {
+     "seed": 612176794,
+     "outcome": "success",
+     "miss_distance_m": 9.764050498450379
+    },
+    {
+     "seed": 1875941739,
+     "outcome": "success",
+     "miss_distance_m": 15.613502381522219
+    },
+    {
+     "seed": 1959843384,
+     "outcome": "success",
+     "miss_distance_m": 19.271156475693207
+    },
+    {
+     "seed": 11307155,
+     "outcome": "success",
+     "miss_distance_m": 8.494558234105053
+    },
+    {
+     "seed": 1073283950,
+     "outcome": "soft_landing",
+     "miss_distance_m": 6.154045216256592
+    },
+    {
+     "seed": 1763574599,
+     "outcome": "soft_landing",
+     "miss_distance_m": 33.09862762526163
+    },
+    {
+     "seed": 282266799,
+     "outcome": "soft_landing",
+     "miss_distance_m": 67.0394751808714
+    },
+    {
+     "seed": 1711693564,
+     "outcome": "soft_landing",
+     "miss_distance_m": 38.079615756325985
+    },
+    {
+     "seed": 255728784,
+     "outcome": "success",
+     "miss_distance_m": 15.24555151181842
+    },
+    {
+     "seed": 1004882659,
+     "outcome": "soft_landing",
+     "miss_distance_m": 37.83815295682197
+    },
+    {
+     "seed": 1753345572,
+     "outcome": "soft_landing",
+     "miss_distance_m": 63.20543126711938
+    },
+    {
+     "seed": 650757181,
+     "outcome": "soft_landing",
+     "miss_distance_m": 29.483697709631553
+    },
+    {
+     "seed": 733587778,
+     "outcome": "soft_landing",
+     "miss_distance_m": 28.053290795643022
+    },
+    {
+     "seed": 597914449,
+     "outcome": "success",
+     "miss_distance_m": 13.347944325615927
+    },
+    {
+     "seed": 1545052024,
+     "outcome": "success",
+     "miss_distance_m": 10.441578254921753
+    },
+    {
+     "seed": 547328271,
+     "outcome": "soft_landing",
+     "miss_distance_m": 105.63362516689774
+    },
+    {
+     "seed": 2126996169,
+     "outcome": "success",
+     "miss_distance_m": 23.972807953454108
+    },
+    {
+     "seed": 955794088,
+     "outcome": "soft_landing",
+     "miss_distance_m": 32.61381840251401
+    },
+    {
+     "seed": 1026816911,
+     "outcome": "success",
+     "miss_distance_m": 19.35229040317232
+    },
+    {
+     "seed": 1083509135,
+     "outcome": "success",
+     "miss_distance_m": 17.638268688662787
+    },
+    {
+     "seed": 1251001414,
+     "outcome": "success",
+     "miss_distance_m": 14.295047136141976
+    },
+    {
+     "seed": 1188626512,
+     "outcome": "soft_landing",
+     "miss_distance_m": 119.1723535703129
+    },
+    {
+     "seed": 1094029749,
+     "outcome": "soft_landing",
+     "miss_distance_m": 80.3984531475729
+    },
+    {
+     "seed": 2137820580,
+     "outcome": "success",
+     "miss_distance_m": 8.133101301550907
+    },
+    {
+     "seed": 1734444721,
+     "outcome": "success",
+     "miss_distance_m": 13.98071894504558
+    },
+    {
+     "seed": 1702228509,
+     "outcome": "soft_landing",
+     "miss_distance_m": 12.99722096372162
+    },
+    {
+     "seed": 1503827931,
+     "outcome": "success",
+     "miss_distance_m": 5.573724572166976
+    },
+    {
+     "seed": 1336119721,
+     "outcome": "success",
+     "miss_distance_m": 24.212720665342548
+    },
+    {
+     "seed": 732347575,
+     "outcome": "success",
+     "miss_distance_m": 6.899649911820063
+    },
+    {
+     "seed": 2123775745,
+     "outcome": "soft_landing",
+     "miss_distance_m": 29.050173088644677
+    },
+    {
+     "seed": 1001222388,
+     "outcome": "soft_landing",
+     "miss_distance_m": 28.6128641229834
+    },
+    {
+     "seed": 462371908,
+     "outcome": "soft_landing",
+     "miss_distance_m": 29.393881820299644
+    },
+    {
+     "seed": 1814811280,
+     "outcome": "soft_landing",
+     "miss_distance_m": 47.46243732662634
+    },
+    {
+     "seed": 344052722,
+     "outcome": "success",
+     "miss_distance_m": 7.082376495429422
+    },
+    {
+     "seed": 1841358262,
+     "outcome": "success",
+     "miss_distance_m": 7.93281827958167
+    },
+    {
+     "seed": 1315418783,
+     "outcome": "success",
+     "miss_distance_m": 18.158385769366998
+    },
+    {
+     "seed": 246345229,
+     "outcome": "success",
+     "miss_distance_m": 9.122285468230356
+    },
+    {
+     "seed": 94364743,
+     "outcome": "success",
+     "miss_distance_m": 8.057048721025618
+    },
+    {
+     "seed": 955111941,
+     "outcome": "soft_landing",
+     "miss_distance_m": 38.75707993253415
+    },
+    {
+     "seed": 76622815,
+     "outcome": "success",
+     "miss_distance_m": 14.362703886127411
+    },
+    {
+     "seed": 303992514,
+     "outcome": "soft_landing",
+     "miss_distance_m": 43.75920767657036
+    },
+    {
+     "seed": 1105715322,
+     "outcome": "crash",
+     "miss_distance_m": 60.958272738870306
+    },
+    {
+     "seed": 2083627519,
+     "outcome": "success",
+     "miss_distance_m": 13.290371971211759
+    },
+    {
+     "seed": 1001169815,
+     "outcome": "soft_landing",
+     "miss_distance_m": 71.81154811482922
+    },
+    {
+     "seed": 1736125124,
+     "outcome": "soft_landing",
+     "miss_distance_m": 40.42614798030778
+    },
+    {
+     "seed": 1969602795,
+     "outcome": "success",
+     "miss_distance_m": 12.348894974166287
+    },
+    {
+     "seed": 1768373432,
+     "outcome": "soft_landing",
+     "miss_distance_m": 62.89006856008839
+    },
+    {
+     "seed": 1351253092,
+     "outcome": "soft_landing",
+     "miss_distance_m": 28.164855023508583
+    },
+    {
+     "seed": 947894554,
+     "outcome": "soft_landing",
+     "miss_distance_m": 76.95616359497761
+    },
+    {
+     "seed": 1104059239,
+     "outcome": "success",
+     "miss_distance_m": 13.029228012939438
+    },
+    {
+     "seed": 571810498,
+     "outcome": "success",
+     "miss_distance_m": 15.468911455511737
+    },
+    {
+     "seed": 1067027577,
+     "outcome": "soft_landing",
+     "miss_distance_m": 39.430954344383906
+    },
+    {
+     "seed": 814704260,
+     "outcome": "success",
+     "miss_distance_m": 5.321361715628868
+    },
+    {
+     "seed": 531534247,
+     "outcome": "soft_landing",
+     "miss_distance_m": 63.0012466294685
+    },
+    {
+     "seed": 2132991553,
+     "outcome": "soft_landing",
+     "miss_distance_m": 56.47074381311236
+    },
+    {
+     "seed": 25327476,
+     "outcome": "soft_landing",
+     "miss_distance_m": 26.516117015296413
+    },
+    {
+     "seed": 208719315,
+     "outcome": "soft_landing",
+     "miss_distance_m": 29.06150792607941
+    },
+    {
+     "seed": 413180458,
+     "outcome": "soft_landing",
+     "miss_distance_m": 31.928880761501247
+    },
+    {
+     "seed": 2080950718,
+     "outcome": "soft_landing",
+     "miss_distance_m": 41.97461235280523
+    },
+    {
+     "seed": 1486127663,
+     "outcome": "soft_landing",
+     "miss_distance_m": 25.46022204177598
+    },
+    {
+     "seed": 1893744463,
+     "outcome": "soft_landing",
+     "miss_distance_m": 61.178905100521085
+    },
+    {
+     "seed": 430799659,
+     "outcome": "soft_landing",
+     "miss_distance_m": 45.357794448379224
+    },
+    {
+     "seed": 1548284817,
+     "outcome": "soft_landing",
+     "miss_distance_m": 76.97474656666311
+    },
+    {
+     "seed": 793573184,
+     "outcome": "success",
+     "miss_distance_m": 21.49344423993693
+    },
+    {
+     "seed": 1050150559,
+     "outcome": "success",
+     "miss_distance_m": 23.080283782641363
+    },
+    {
+     "seed": 8019223,
+     "outcome": "soft_landing",
+     "miss_distance_m": 27.4823195842835
+    },
+    {
+     "seed": 1326161204,
+     "outcome": "soft_landing",
+     "miss_distance_m": 53.474494493272836
+    },
+    {
+     "seed": 1782513926,
+     "outcome": "soft_landing",
+     "miss_distance_m": 27.67238475623307
+    },
+    {
+     "seed": 1425262066,
+     "outcome": "soft_landing",
+     "miss_distance_m": 43.734127869108534
+    },
+    {
+     "seed": 331702645,
+     "outcome": "soft_landing",
+     "miss_distance_m": 25.237259224214434
+    },
+    {
+     "seed": 1146331534,
+     "outcome": "success",
+     "miss_distance_m": 15.728501694176074
+    },
+    {
+     "seed": 574665130,
+     "outcome": "success",
+     "miss_distance_m": 12.395500893263486
+    },
+    {
+     "seed": 2072097653,
+     "outcome": "success",
+     "miss_distance_m": 21.100087688306925
+    },
+    {
+     "seed": 1890498905,
+     "outcome": "success",
+     "miss_distance_m": 11.505668812660696
+    },
+    {
+     "seed": 399930127,
+     "outcome": "soft_landing",
+     "miss_distance_m": 54.690472155737254
+    },
+    {
+     "seed": 1094767428,
+     "outcome": "soft_landing",
+     "miss_distance_m": 33.69986853091365
+    },
+    {
+     "seed": 2018102211,
+     "outcome": "success",
+     "miss_distance_m": 6.232334445021673
+    },
+    {
+     "seed": 1819241301,
+     "outcome": "soft_landing",
+     "miss_distance_m": 59.51132386891501
+    },
+    {
+     "seed": 1520252680,
+     "outcome": "soft_landing",
+     "miss_distance_m": 33.93428464677462
+    },
+    {
+     "seed": 1373782155,
+     "outcome": "soft_landing",
+     "miss_distance_m": 70.02948951445202
+    },
+    {
+     "seed": 90439482,
+     "outcome": "soft_landing",
+     "miss_distance_m": 26.529137515190463
+    },
+    {
+     "seed": 1592940980,
+     "outcome": "success",
+     "miss_distance_m": 17.363748121287323
+    },
+    {
+     "seed": 1016862180,
+     "outcome": "soft_landing",
+     "miss_distance_m": 26.712515601333052
+    },
+    {
+     "seed": 196485315,
+     "outcome": "soft_landing",
+     "miss_distance_m": 62.338518233085615
+    },
+    {
+     "seed": 525027446,
+     "outcome": "soft_landing",
+     "miss_distance_m": 30.967383370401663
+    },
+    {
+     "seed": 1162097507,
+     "outcome": "soft_landing",
+     "miss_distance_m": 31.43952183221616
+    },
+    {
+     "seed": 1560763482,
+     "outcome": "soft_landing",
+     "miss_distance_m": 28.678965006423233
+    },
+    {
+     "seed": 1090432574,
+     "outcome": "success",
+     "miss_distance_m": 11.220688733316797
+    },
+    {
+     "seed": 1316294025,
+     "outcome": "soft_landing",
+     "miss_distance_m": 41.87854067070041
+    },
+    {
+     "seed": 1871187063,
+     "outcome": "soft_landing",
+     "miss_distance_m": 26.084013601139244
+    },
+    {
+     "seed": 1473219434,
+     "outcome": "success",
+     "miss_distance_m": 11.490906738244032
+    },
+    {
+     "seed": 775808659,
+     "outcome": "soft_landing",
+     "miss_distance_m": 34.14068603075496
+    },
+    {
+     "seed": 1381360664,
+     "outcome": "soft_landing",
+     "miss_distance_m": 84.90049818367109
+    },
+    {
+     "seed": 1284590502,
+     "outcome": "success",
+     "miss_distance_m": 23.204212787410814
+    },
+    {
+     "seed": 232416244,
+     "outcome": "success",
+     "miss_distance_m": 9.607962552661572
+    },
+    {
+     "seed": 127241933,
+     "outcome": "soft_landing",
+     "miss_distance_m": 42.56019046256197
+    },
+    {
+     "seed": 1417675532,
+     "outcome": "success",
+     "miss_distance_m": 10.156923161458383
+    },
+    {
+     "seed": 832432954,
+     "outcome": "soft_landing",
+     "miss_distance_m": 91.83238647359528
+    },
+    {
+     "seed": 1284902937,
+     "outcome": "soft_landing",
+     "miss_distance_m": 104.7421509159191
+    },
+    {
+     "seed": 693715271,
+     "outcome": "soft_landing",
+     "miss_distance_m": 34.55966596452677
+    },
+    {
+     "seed": 484582550,
+     "outcome": "success",
+     "miss_distance_m": 19.025687330704386
+    },
+    {
+     "seed": 322551462,
+     "outcome": "soft_landing",
+     "miss_distance_m": 45.89166823788085
+    },
+    {
+     "seed": 819442989,
+     "outcome": "soft_landing",
+     "miss_distance_m": 59.65610927972239
+    },
+    {
+     "seed": 1753072729,
+     "outcome": "success",
+     "miss_distance_m": 22.948624470688127
+    },
+    {
+     "seed": 861136855,
+     "outcome": "crash",
+     "miss_distance_m": 33.54076174419211
+    },
+    {
+     "seed": 814854448,
+     "outcome": "soft_landing",
+     "miss_distance_m": 37.3505963231886
+    },
+    {
+     "seed": 1235630863,
+     "outcome": "soft_landing",
+     "miss_distance_m": 57.87864654031704
+    },
+    {
+     "seed": 2101845077,
+     "outcome": "success",
+     "miss_distance_m": 9.452303269584087
+    },
+    {
+     "seed": 842335582,
+     "outcome": "success",
+     "miss_distance_m": 7.071364008123371
+    },
+    {
+     "seed": 1266997513,
+     "outcome": "soft_landing",
+     "miss_distance_m": 14.46097578023532
+    },
+    {
+     "seed": 943789711,
+     "outcome": "soft_landing",
+     "miss_distance_m": 45.987213620584356
+    },
+    {
+     "seed": 1299348411,
+     "outcome": "soft_landing",
+     "miss_distance_m": 58.09507288267048
+    },
+    {
+     "seed": 957152604,
+     "outcome": "soft_landing",
+     "miss_distance_m": 43.11827159669607
+    },
+    {
+     "seed": 1370087224,
+     "outcome": "soft_landing",
+     "miss_distance_m": 88.76793584652238
+    },
+    {
+     "seed": 1175000482,
+     "outcome": "soft_landing",
+     "miss_distance_m": 53.29655242917896
+    },
+    {
+     "seed": 1452665837,
+     "outcome": "success",
+     "miss_distance_m": 6.421255519989394
+    },
+    {
+     "seed": 2054636807,
+     "outcome": "success",
+     "miss_distance_m": 9.737211524493214
+    },
+    {
+     "seed": 323814805,
+     "outcome": "success",
+     "miss_distance_m": 10.676472814311273
+    },
+    {
+     "seed": 1206101995,
+     "outcome": "success",
+     "miss_distance_m": 12.09649198708845
+    },
+    {
+     "seed": 945565970,
+     "outcome": "success",
+     "miss_distance_m": 22.47136097387207
+    },
+    {
+     "seed": 768789384,
+     "outcome": "success",
+     "miss_distance_m": 19.335233849911294
+    },
+    {
+     "seed": 514459690,
+     "outcome": "success",
+     "miss_distance_m": 24.812117475158068
+    },
+    {
+     "seed": 112227987,
+     "outcome": "success",
+     "miss_distance_m": 20.205491096464346
+    },
+    {
+     "seed": 864358513,
+     "outcome": "soft_landing",
+     "miss_distance_m": 55.20050500682746
+    },
+    {
+     "seed": 1774164004,
+     "outcome": "soft_landing",
+     "miss_distance_m": 43.40987424854147
+    },
+    {
+     "seed": 207670460,
+     "outcome": "success",
+     "miss_distance_m": 18.897437710450152
+    },
+    {
+     "seed": 872107328,
+     "outcome": "success",
+     "miss_distance_m": 12.624262265337663
+    },
+    {
+     "seed": 2078394913,
+     "outcome": "soft_landing",
+     "miss_distance_m": 26.930829902598507
+    },
+    {
+     "seed": 2043260885,
+     "outcome": "success",
+     "miss_distance_m": 17.82963376732491
+    },
+    {
+     "seed": 461717654,
+     "outcome": "success",
+     "miss_distance_m": 22.569044418619466
+    },
+    {
+     "seed": 16301541,
+     "outcome": "success",
+     "miss_distance_m": 22.273443187797977
+    },
+    {
+     "seed": 1442604702,
+     "outcome": "success",
+     "miss_distance_m": 10.690990708658006
+    },
+    {
+     "seed": 30628421,
+     "outcome": "success",
+     "miss_distance_m": 5.388987379635018
+    },
+    {
+     "seed": 645147212,
+     "outcome": "soft_landing",
+     "miss_distance_m": 45.57465071944664
+    },
+    {
+     "seed": 1067425247,
+     "outcome": "soft_landing",
+     "miss_distance_m": 68.28207355597091
+    },
+    {
+     "seed": 1877066120,
+     "outcome": "success",
+     "miss_distance_m": 4.224721745904366
+    },
+    {
+     "seed": 199408321,
+     "outcome": "soft_landing",
+     "miss_distance_m": 93.76638460683014
+    },
+    {
+     "seed": 1422095322,
+     "outcome": "soft_landing",
+     "miss_distance_m": 30.31675016031842
+    },
+    {
+     "seed": 1144680405,
+     "outcome": "soft_landing",
+     "miss_distance_m": 41.17008457420077
+    },
+    {
+     "seed": 282642812,
+     "outcome": "soft_landing",
+     "miss_distance_m": 61.56943933753452
+    },
+    {
+     "seed": 1815944264,
+     "outcome": "success",
+     "miss_distance_m": 12.148137584532735
+    },
+    {
+     "seed": 1814783285,
+     "outcome": "success",
+     "miss_distance_m": 12.930905600266774
+    },
+    {
+     "seed": 1036586537,
+     "outcome": "success",
+     "miss_distance_m": 11.848234978446929
+    },
+    {
+     "seed": 2029260745,
+     "outcome": "success",
+     "miss_distance_m": 3.8650478572806675
+    },
+    {
+     "seed": 1303231671,
+     "outcome": "success",
+     "miss_distance_m": 15.167512202994201
+    },
+    {
+     "seed": 1941146521,
+     "outcome": "success",
+     "miss_distance_m": 10.177001079550333
+    },
+    {
+     "seed": 2062839177,
+     "outcome": "success",
+     "miss_distance_m": 19.726769069899603
+    },
+    {
+     "seed": 1223462553,
+     "outcome": "soft_landing",
+     "miss_distance_m": 48.091271940125836
+    },
+    {
+     "seed": 603127999,
+     "outcome": "success",
+     "miss_distance_m": 24.697174056263798
+    },
+    {
+     "seed": 312372872,
+     "outcome": "soft_landing",
+     "miss_distance_m": 28.181324449208166
+    },
+    {
+     "seed": 1208707450,
+     "outcome": "soft_landing",
+     "miss_distance_m": 293.44343179740383
+    },
+    {
+     "seed": 413312208,
+     "outcome": "soft_landing",
+     "miss_distance_m": 46.61314301491906
+    },
+    {
+     "seed": 1611082394,
+     "outcome": "soft_landing",
+     "miss_distance_m": 32.10669216364947
+    },
+    {
+     "seed": 1992662284,
+     "outcome": "success",
+     "miss_distance_m": 24.81795248055148
+    },
+    {
+     "seed": 527090059,
+     "outcome": "soft_landing",
+     "miss_distance_m": 19.32143758351587
+    },
+    {
+     "seed": 1186112100,
+     "outcome": "success",
+     "miss_distance_m": 14.269561897384753
+    },
+    {
+     "seed": 105583630,
+     "outcome": "success",
+     "miss_distance_m": 13.411142612707838
+    },
+    {
+     "seed": 387733538,
+     "outcome": "soft_landing",
+     "miss_distance_m": 77.58298087008863
+    },
+    {
+     "seed": 809968073,
+     "outcome": "soft_landing",
+     "miss_distance_m": 27.979081747614845
+    },
+    {
+     "seed": 1898497724,
+     "outcome": "soft_landing",
+     "miss_distance_m": 61.55052574823532
+    },
+    {
+     "seed": 2082001084,
+     "outcome": "success",
+     "miss_distance_m": 20.50681148603267
+    },
+    {
+     "seed": 1377764745,
+     "outcome": "soft_landing",
+     "miss_distance_m": 60.810580994084205
+    },
+    {
+     "seed": 1252956126,
+     "outcome": "success",
+     "miss_distance_m": 20.564044788522633
+    },
+    {
+     "seed": 1223409138,
+     "outcome": "soft_landing",
+     "miss_distance_m": 26.140043802342785
+    },
+    {
+     "seed": 130168481,
+     "outcome": "soft_landing",
+     "miss_distance_m": 55.10254611977112
+    },
+    {
+     "seed": 808071975,
+     "outcome": "soft_landing",
+     "miss_distance_m": 45.12537343672856
+    },
+    {
+     "seed": 2111675072,
+     "outcome": "soft_landing",
+     "miss_distance_m": 79.99396808373797
+    },
+    {
+     "seed": 882519748,
+     "outcome": "success",
+     "miss_distance_m": 17.792282279675533
+    },
+    {
+     "seed": 458084908,
+     "outcome": "soft_landing",
+     "miss_distance_m": 222.18392970984078
+    },
+    {
+     "seed": 514299168,
+     "outcome": "soft_landing",
+     "miss_distance_m": 83.5881822028658
+    },
+    {
+     "seed": 1531946086,
+     "outcome": "soft_landing",
+     "miss_distance_m": 29.311683847420696
+    },
+    {
+     "seed": 81727400,
+     "outcome": "success",
+     "miss_distance_m": 10.441048942663958
+    },
+    {
+     "seed": 2081811442,
+     "outcome": "soft_landing",
+     "miss_distance_m": 27.981510107875568
+    },
+    {
+     "seed": 1881665562,
+     "outcome": "soft_landing",
+     "miss_distance_m": 30.331247505174815
+    },
+    {
+     "seed": 1218766100,
+     "outcome": "soft_landing",
+     "miss_distance_m": 66.54975168354434
+    },
+    {
+     "seed": 1004442992,
+     "outcome": "soft_landing",
+     "miss_distance_m": 20.91529564596995
+    },
+    {
+     "seed": 1635176339,
+     "outcome": "soft_landing",
+     "miss_distance_m": 20.008924198176874
+    },
+    {
+     "seed": 1176037635,
+     "outcome": "success",
+     "miss_distance_m": 21.914979925308455
+    },
+    {
+     "seed": 1024744532,
+     "outcome": "soft_landing",
+     "miss_distance_m": 45.95366219315767
+    },
+    {
+     "seed": 691840439,
+     "outcome": "success",
+     "miss_distance_m": 8.691595777041913
+    },
+    {
+     "seed": 959359876,
+     "outcome": "success",
+     "miss_distance_m": 17.124533352151275
+    },
+    {
+     "seed": 1613457979,
+     "outcome": "soft_landing",
+     "miss_distance_m": 33.87982867798394
+    },
+    {
+     "seed": 118322299,
+     "outcome": "success",
+     "miss_distance_m": 12.56520073051204
+    },
+    {
+     "seed": 54109868,
+     "outcome": "success",
+     "miss_distance_m": 7.318396126492324
+    },
+    {
+     "seed": 1547041456,
+     "outcome": "soft_landing",
+     "miss_distance_m": 38.57856415998357
+    },
+    {
+     "seed": 799261786,
+     "outcome": "soft_landing",
+     "miss_distance_m": 44.669469835909034
+    },
+    {
+     "seed": 1726001976,
+     "outcome": "soft_landing",
+     "miss_distance_m": 68.7394370270151
+    },
+    {
+     "seed": 65176760,
+     "outcome": "soft_landing",
+     "miss_distance_m": 81.39963893251712
+    },
+    {
+     "seed": 1948207565,
+     "outcome": "soft_landing",
+     "miss_distance_m": 14.015886247618155
+    },
+    {
+     "seed": 263908779,
+     "outcome": "soft_landing",
+     "miss_distance_m": 26.406910991781718
+    }
+   ]
+  },
+  "3": {
+   "n": 200,
+   "success": 0.015,
+   "crash": 0.33,
+   "episodes": [
+    {
+     "seed": 2029167941,
+     "outcome": "soft_landing",
+     "miss_distance_m": 52.43596866682188
+    },
+    {
+     "seed": 1342382292,
+     "outcome": "success",
+     "miss_distance_m": 17.893347603080926
+    },
+    {
+     "seed": 1469265226,
+     "outcome": "soft_landing",
+     "miss_distance_m": 253.36856640036012
+    },
+    {
+     "seed": 1926751966,
+     "outcome": "crash",
+     "miss_distance_m": 147.80992764777787
+    },
+    {
+     "seed": 1241873585,
+     "outcome": "crash",
+     "miss_distance_m": 23.106805768846563
+    },
+    {
+     "seed": 1665772335,
+     "outcome": "crash",
+     "miss_distance_m": 41.8263338891659
+    },
+    {
+     "seed": 1790251937,
+     "outcome": "soft_landing",
+     "miss_distance_m": 107.45564397720769
+    },
+    {
+     "seed": 483628757,
+     "outcome": "soft_landing",
+     "miss_distance_m": 127.87894747931026
+    },
+    {
+     "seed": 119253154,
+     "outcome": "soft_landing",
+     "miss_distance_m": 62.02566860217594
+    },
+    {
+     "seed": 644602188,
+     "outcome": "soft_landing",
+     "miss_distance_m": 264.8812705731719
+    },
+    {
+     "seed": 612176794,
+     "outcome": "soft_landing",
+     "miss_distance_m": 78.06339002837743
+    },
+    {
+     "seed": 1875941739,
+     "outcome": "crash",
+     "miss_distance_m": 99.13205067593856
+    },
+    {
+     "seed": 1959843384,
+     "outcome": "crash",
+     "miss_distance_m": 35.64144234677454
+    },
+    {
+     "seed": 11307155,
+     "outcome": "soft_landing",
+     "miss_distance_m": 61.01852873887251
+    },
+    {
+     "seed": 1073283950,
+     "outcome": "crash",
+     "miss_distance_m": 78.31602814855994
+    },
+    {
+     "seed": 1763574599,
+     "outcome": "soft_landing",
+     "miss_distance_m": 180.7562909159892
+    },
+    {
+     "seed": 282266799,
+     "outcome": "timeout",
+     "miss_distance_m": 794.1370061264663
+    },
+    {
+     "seed": 1711693564,
+     "outcome": "crash",
+     "miss_distance_m": 106.45999947735459
+    },
+    {
+     "seed": 255728784,
+     "outcome": "soft_landing",
+     "miss_distance_m": 79.40209862353356
+    },
+    {
+     "seed": 1004882659,
+     "outcome": "soft_landing",
+     "miss_distance_m": 144.3752134358885
+    },
+    {
+     "seed": 1753345572,
+     "outcome": "crash",
+     "miss_distance_m": 116.97672968068339
+    },
+    {
+     "seed": 650757181,
+     "outcome": "soft_landing",
+     "miss_distance_m": 34.08696881901829
+    },
+    {
+     "seed": 733587778,
+     "outcome": "soft_landing",
+     "miss_distance_m": 81.81408371246071
+    },
+    {
+     "seed": 597914449,
+     "outcome": "soft_landing",
+     "miss_distance_m": 121.81482123914019
+    },
+    {
+     "seed": 1545052024,
+     "outcome": "crash",
+     "miss_distance_m": 17.31332232665503
+    },
+    {
+     "seed": 547328271,
+     "outcome": "crash",
+     "miss_distance_m": 81.17222784970123
+    },
+    {
+     "seed": 2126996169,
+     "outcome": "soft_landing",
+     "miss_distance_m": 29.547393885858636
+    },
+    {
+     "seed": 955794088,
+     "outcome": "soft_landing",
+     "miss_distance_m": 9.35799131718995
+    },
+    {
+     "seed": 1026816911,
+     "outcome": "soft_landing",
+     "miss_distance_m": 40.956723672498704
+    },
+    {
+     "seed": 1083509135,
+     "outcome": "soft_landing",
+     "miss_distance_m": 108.71817044567823
+    },
+    {
+     "seed": 1251001414,
+     "outcome": "soft_landing",
+     "miss_distance_m": 39.38059823664437
+    },
+    {
+     "seed": 1188626512,
+     "outcome": "soft_landing",
+     "miss_distance_m": 121.91132847097701
+    },
+    {
+     "seed": 1094029749,
+     "outcome": "soft_landing",
+     "miss_distance_m": 310.6802062119641
+    },
+    {
+     "seed": 2137820580,
+     "outcome": "crash",
+     "miss_distance_m": 258.26048893619935
+    },
+    {
+     "seed": 1734444721,
+     "outcome": "soft_landing",
+     "miss_distance_m": 74.13749094894744
+    },
+    {
+     "seed": 1702228509,
+     "outcome": "timeout",
+     "miss_distance_m": 1126.6574866413757
+    },
+    {
+     "seed": 1503827931,
+     "outcome": "timeout",
+     "miss_distance_m": 121.76419418266946
+    },
+    {
+     "seed": 1336119721,
+     "outcome": "soft_landing",
+     "miss_distance_m": 340.97033634378954
+    },
+    {
+     "seed": 732347575,
+     "outcome": "soft_landing",
+     "miss_distance_m": 80.44203142774323
+    },
+    {
+     "seed": 2123775745,
+     "outcome": "crash",
+     "miss_distance_m": 40.70615014119595
+    },
+    {
+     "seed": 1001222388,
+     "outcome": "soft_landing",
+     "miss_distance_m": 86.34356549338192
+    },
+    {
+     "seed": 462371908,
+     "outcome": "crash",
+     "miss_distance_m": 74.2338895953881
+    },
+    {
+     "seed": 1814811280,
+     "outcome": "soft_landing",
+     "miss_distance_m": 118.84058185934438
+    },
+    {
+     "seed": 344052722,
+     "outcome": "soft_landing",
+     "miss_distance_m": 270.2248593684432
+    },
+    {
+     "seed": 1841358262,
+     "outcome": "soft_landing",
+     "miss_distance_m": 26.06658143721717
+    },
+    {
+     "seed": 1315418783,
+     "outcome": "soft_landing",
+     "miss_distance_m": 123.30628706619754
+    },
+    {
+     "seed": 246345229,
+     "outcome": "soft_landing",
+     "miss_distance_m": 147.08088188325695
+    },
+    {
+     "seed": 94364743,
+     "outcome": "crash",
+     "miss_distance_m": 49.94723300702888
+    },
+    {
+     "seed": 955111941,
+     "outcome": "soft_landing",
+     "miss_distance_m": 23.178137665857516
+    },
+    {
+     "seed": 76622815,
+     "outcome": "crash",
+     "miss_distance_m": 117.74889295183533
+    },
+    {
+     "seed": 303992514,
+     "outcome": "crash",
+     "miss_distance_m": 74.32949298422935
+    },
+    {
+     "seed": 1105715322,
+     "outcome": "soft_landing",
+     "miss_distance_m": 87.06804220154476
+    },
+    {
+     "seed": 2083627519,
+     "outcome": "soft_landing",
+     "miss_distance_m": 15.091484695207713
+    },
+    {
+     "seed": 1001169815,
+     "outcome": "soft_landing",
+     "miss_distance_m": 39.05043897141108
+    },
+    {
+     "seed": 1736125124,
+     "outcome": "crash",
+     "miss_distance_m": 182.38525983658803
+    },
+    {
+     "seed": 1969602795,
+     "outcome": "soft_landing",
+     "miss_distance_m": 228.79100866690698
+    },
+    {
+     "seed": 1768373432,
+     "outcome": "soft_landing",
+     "miss_distance_m": 514.7395112903016
+    },
+    {
+     "seed": 1351253092,
+     "outcome": "soft_landing",
+     "miss_distance_m": 180.84746605935572
+    },
+    {
+     "seed": 947894554,
+     "outcome": "crash",
+     "miss_distance_m": 35.099402608709376
+    },
+    {
+     "seed": 1104059239,
+     "outcome": "crash",
+     "miss_distance_m": 100.93045798641134
+    },
+    {
+     "seed": 571810498,
+     "outcome": "soft_landing",
+     "miss_distance_m": 113.06126133749117
+    },
+    {
+     "seed": 1067027577,
+     "outcome": "soft_landing",
+     "miss_distance_m": 34.54375090697247
+    },
+    {
+     "seed": 814704260,
+     "outcome": "timeout",
+     "miss_distance_m": 779.662425142569
+    },
+    {
+     "seed": 531534247,
+     "outcome": "soft_landing",
+     "miss_distance_m": 14.586333924448406
+    },
+    {
+     "seed": 2132991553,
+     "outcome": "crash",
+     "miss_distance_m": 238.86306585133238
+    },
+    {
+     "seed": 25327476,
+     "outcome": "soft_landing",
+     "miss_distance_m": 104.75527772842125
+    },
+    {
+     "seed": 208719315,
+     "outcome": "soft_landing",
+     "miss_distance_m": 52.29719370902326
+    },
+    {
+     "seed": 413180458,
+     "outcome": "crash",
+     "miss_distance_m": 82.11041261672052
+    },
+    {
+     "seed": 2080950718,
+     "outcome": "soft_landing",
+     "miss_distance_m": 92.10820777745509
+    },
+    {
+     "seed": 1486127663,
+     "outcome": "soft_landing",
+     "miss_distance_m": 238.10669703860174
+    },
+    {
+     "seed": 1893744463,
+     "outcome": "crash",
+     "miss_distance_m": 71.96233744918256
+    },
+    {
+     "seed": 430799659,
+     "outcome": "soft_landing",
+     "miss_distance_m": 77.32965420021458
+    },
+    {
+     "seed": 1548284817,
+     "outcome": "soft_landing",
+     "miss_distance_m": 69.49320472394449
+    },
+    {
+     "seed": 793573184,
+     "outcome": "crash",
+     "miss_distance_m": 116.38955467451316
+    },
+    {
+     "seed": 1050150559,
+     "outcome": "soft_landing",
+     "miss_distance_m": 440.8771273512648
+    },
+    {
+     "seed": 8019223,
+     "outcome": "soft_landing",
+     "miss_distance_m": 115.38791481843049
+    },
+    {
+     "seed": 1326161204,
+     "outcome": "soft_landing",
+     "miss_distance_m": 38.759718754124144
+    },
+    {
+     "seed": 1782513926,
+     "outcome": "soft_landing",
+     "miss_distance_m": 235.82541704577875
+    },
+    {
+     "seed": 1425262066,
+     "outcome": "soft_landing",
+     "miss_distance_m": 153.10041121429344
+    },
+    {
+     "seed": 331702645,
+     "outcome": "crash",
+     "miss_distance_m": 248.50877744933445
+    },
+    {
+     "seed": 1146331534,
+     "outcome": "crash",
+     "miss_distance_m": 513.0324370606751
+    },
+    {
+     "seed": 574665130,
+     "outcome": "crash",
+     "miss_distance_m": 91.7775587180377
+    },
+    {
+     "seed": 2072097653,
+     "outcome": "soft_landing",
+     "miss_distance_m": 92.34038145875833
+    },
+    {
+     "seed": 1890498905,
+     "outcome": "crash",
+     "miss_distance_m": 94.93606008155544
+    },
+    {
+     "seed": 399930127,
+     "outcome": "soft_landing",
+     "miss_distance_m": 45.20631223573501
+    },
+    {
+     "seed": 1094767428,
+     "outcome": "soft_landing",
+     "miss_distance_m": 112.39053745770802
+    },
+    {
+     "seed": 2018102211,
+     "outcome": "crash",
+     "miss_distance_m": 25.688569490448664
+    },
+    {
+     "seed": 1819241301,
+     "outcome": "crash",
+     "miss_distance_m": 106.83851073119443
+    },
+    {
+     "seed": 1520252680,
+     "outcome": "crash",
+     "miss_distance_m": 76.81136844729252
+    },
+    {
+     "seed": 1373782155,
+     "outcome": "crash",
+     "miss_distance_m": 18.8188752575683
+    },
+    {
+     "seed": 90439482,
+     "outcome": "soft_landing",
+     "miss_distance_m": 21.902128772049565
+    },
+    {
+     "seed": 1592940980,
+     "outcome": "soft_landing",
+     "miss_distance_m": 134.21767763267033
+    },
+    {
+     "seed": 1016862180,
+     "outcome": "soft_landing",
+     "miss_distance_m": 40.860296971737206
+    },
+    {
+     "seed": 196485315,
+     "outcome": "crash",
+     "miss_distance_m": 139.08262304135081
+    },
+    {
+     "seed": 525027446,
+     "outcome": "soft_landing",
+     "miss_distance_m": 55.880717614736945
+    },
+    {
+     "seed": 1162097507,
+     "outcome": "soft_landing",
+     "miss_distance_m": 364.99831083754475
+    },
+    {
+     "seed": 1560763482,
+     "outcome": "crash",
+     "miss_distance_m": 141.38561607232327
+    },
+    {
+     "seed": 1090432574,
+     "outcome": "soft_landing",
+     "miss_distance_m": 168.03198243625312
+    },
+    {
+     "seed": 1316294025,
+     "outcome": "soft_landing",
+     "miss_distance_m": 197.17238691284916
+    },
+    {
+     "seed": 1871187063,
+     "outcome": "soft_landing",
+     "miss_distance_m": 144.5519762618295
+    },
+    {
+     "seed": 1473219434,
+     "outcome": "soft_landing",
+     "miss_distance_m": 874.9350449652409
+    },
+    {
+     "seed": 775808659,
+     "outcome": "soft_landing",
+     "miss_distance_m": 226.61391789980163
+    },
+    {
+     "seed": 1381360664,
+     "outcome": "soft_landing",
+     "miss_distance_m": 382.61008434863027
+    },
+    {
+     "seed": 1284590502,
+     "outcome": "soft_landing",
+     "miss_distance_m": 73.39149778500372
+    },
+    {
+     "seed": 232416244,
+     "outcome": "soft_landing",
+     "miss_distance_m": 58.78253469790865
+    },
+    {
+     "seed": 127241933,
+     "outcome": "crash",
+     "miss_distance_m": 8.252388953486708
+    },
+    {
+     "seed": 1417675532,
+     "outcome": "soft_landing",
+     "miss_distance_m": 57.46869860031321
+    },
+    {
+     "seed": 832432954,
+     "outcome": "crash",
+     "miss_distance_m": 333.859613608611
+    },
+    {
+     "seed": 1284902937,
+     "outcome": "soft_landing",
+     "miss_distance_m": 76.8040704058048
+    },
+    {
+     "seed": 693715271,
+     "outcome": "soft_landing",
+     "miss_distance_m": 82.348240882797
+    },
+    {
+     "seed": 484582550,
+     "outcome": "soft_landing",
+     "miss_distance_m": 112.9579692612015
+    },
+    {
+     "seed": 322551462,
+     "outcome": "crash",
+     "miss_distance_m": 250.7428529925294
+    },
+    {
+     "seed": 819442989,
+     "outcome": "soft_landing",
+     "miss_distance_m": 162.741312145878
+    },
+    {
+     "seed": 1753072729,
+     "outcome": "soft_landing",
+     "miss_distance_m": 79.43620391768451
+    },
+    {
+     "seed": 861136855,
+     "outcome": "soft_landing",
+     "miss_distance_m": 100.83311476861239
+    },
+    {
+     "seed": 814854448,
+     "outcome": "soft_landing",
+     "miss_distance_m": 9.40588126969833
+    },
+    {
+     "seed": 1235630863,
+     "outcome": "crash",
+     "miss_distance_m": 75.21225700589453
+    },
+    {
+     "seed": 2101845077,
+     "outcome": "soft_landing",
+     "miss_distance_m": 40.723678194608254
+    },
+    {
+     "seed": 842335582,
+     "outcome": "soft_landing",
+     "miss_distance_m": 69.24606654530939
+    },
+    {
+     "seed": 1266997513,
+     "outcome": "soft_landing",
+     "miss_distance_m": 223.35168575605942
+    },
+    {
+     "seed": 943789711,
+     "outcome": "crash",
+     "miss_distance_m": 188.63969599406568
+    },
+    {
+     "seed": 1299348411,
+     "outcome": "crash",
+     "miss_distance_m": 9.07632143989725
+    },
+    {
+     "seed": 957152604,
+     "outcome": "crash",
+     "miss_distance_m": 86.01851753225431
+    },
+    {
+     "seed": 1370087224,
+     "outcome": "crash",
+     "miss_distance_m": 323.63609775209875
+    },
+    {
+     "seed": 1175000482,
+     "outcome": "soft_landing",
+     "miss_distance_m": 228.03631406654824
+    },
+    {
+     "seed": 1452665837,
+     "outcome": "soft_landing",
+     "miss_distance_m": 56.92435292166622
+    },
+    {
+     "seed": 2054636807,
+     "outcome": "soft_landing",
+     "miss_distance_m": 44.02776122488468
+    },
+    {
+     "seed": 323814805,
+     "outcome": "soft_landing",
+     "miss_distance_m": 320.8748588127656
+    },
+    {
+     "seed": 1206101995,
+     "outcome": "soft_landing",
+     "miss_distance_m": 68.43347807965017
+    },
+    {
+     "seed": 945565970,
+     "outcome": "soft_landing",
+     "miss_distance_m": 219.59617272969712
+    },
+    {
+     "seed": 768789384,
+     "outcome": "soft_landing",
+     "miss_distance_m": 369.94804017453845
+    },
+    {
+     "seed": 514459690,
+     "outcome": "soft_landing",
+     "miss_distance_m": 35.04691929939716
+    },
+    {
+     "seed": 112227987,
+     "outcome": "success",
+     "miss_distance_m": 11.865282720576564
+    },
+    {
+     "seed": 864358513,
+     "outcome": "soft_landing",
+     "miss_distance_m": 61.070720278245915
+    },
+    {
+     "seed": 1774164004,
+     "outcome": "soft_landing",
+     "miss_distance_m": 70.63480399922963
+    },
+    {
+     "seed": 207670460,
+     "outcome": "success",
+     "miss_distance_m": 19.422678047038797
+    },
+    {
+     "seed": 872107328,
+     "outcome": "soft_landing",
+     "miss_distance_m": 71.95175769505393
+    },
+    {
+     "seed": 2078394913,
+     "outcome": "crash",
+     "miss_distance_m": 147.6303049369254
+    },
+    {
+     "seed": 2043260885,
+     "outcome": "soft_landing",
+     "miss_distance_m": 79.56727844241743
+    },
+    {
+     "seed": 461717654,
+     "outcome": "crash",
+     "miss_distance_m": 158.0768150015589
+    },
+    {
+     "seed": 16301541,
+     "outcome": "crash",
+     "miss_distance_m": 150.76054493901867
+    },
+    {
+     "seed": 1442604702,
+     "outcome": "crash",
+     "miss_distance_m": 87.25402963442065
+    },
+    {
+     "seed": 30628421,
+     "outcome": "crash",
+     "miss_distance_m": 106.0475893582816
+    },
+    {
+     "seed": 645147212,
+     "outcome": "soft_landing",
+     "miss_distance_m": 55.498217317248184
+    },
+    {
+     "seed": 1067425247,
+     "outcome": "soft_landing",
+     "miss_distance_m": 134.94141095919903
+    },
+    {
+     "seed": 1877066120,
+     "outcome": "soft_landing",
+     "miss_distance_m": 217.90814702682442
+    },
+    {
+     "seed": 199408321,
+     "outcome": "timeout",
+     "miss_distance_m": 224.44511444149694
+    },
+    {
+     "seed": 1422095322,
+     "outcome": "crash",
+     "miss_distance_m": 74.62231665776643
+    },
+    {
+     "seed": 1144680405,
+     "outcome": "soft_landing",
+     "miss_distance_m": 75.06692770327449
+    },
+    {
+     "seed": 282642812,
+     "outcome": "crash",
+     "miss_distance_m": 147.87478348200088
+    },
+    {
+     "seed": 1815944264,
+     "outcome": "crash",
+     "miss_distance_m": 148.17699665441341
+    },
+    {
+     "seed": 1814783285,
+     "outcome": "soft_landing",
+     "miss_distance_m": 36.31032187173764
+    },
+    {
+     "seed": 1036586537,
+     "outcome": "soft_landing",
+     "miss_distance_m": 283.9485870176838
+    },
+    {
+     "seed": 2029260745,
+     "outcome": "soft_landing",
+     "miss_distance_m": 153.83823670181383
+    },
+    {
+     "seed": 1303231671,
+     "outcome": "soft_landing",
+     "miss_distance_m": 159.7738001671784
+    },
+    {
+     "seed": 1941146521,
+     "outcome": "soft_landing",
+     "miss_distance_m": 282.1635157951845
+    },
+    {
+     "seed": 2062839177,
+     "outcome": "crash",
+     "miss_distance_m": 161.85500842826414
+    },
+    {
+     "seed": 1223462553,
+     "outcome": "crash",
+     "miss_distance_m": 265.8537312208224
+    },
+    {
+     "seed": 603127999,
+     "outcome": "crash",
+     "miss_distance_m": 103.97196027034813
+    },
+    {
+     "seed": 312372872,
+     "outcome": "crash",
+     "miss_distance_m": 136.7307605492307
+    },
+    {
+     "seed": 1208707450,
+     "outcome": "soft_landing",
+     "miss_distance_m": 148.55714914628047
+    },
+    {
+     "seed": 413312208,
+     "outcome": "soft_landing",
+     "miss_distance_m": 34.51537481784884
+    },
+    {
+     "seed": 1611082394,
+     "outcome": "crash",
+     "miss_distance_m": 43.95687883150935
+    },
+    {
+     "seed": 1992662284,
+     "outcome": "soft_landing",
+     "miss_distance_m": 37.77815343460076
+    },
+    {
+     "seed": 527090059,
+     "outcome": "crash",
+     "miss_distance_m": 66.08886136867987
+    },
+    {
+     "seed": 1186112100,
+     "outcome": "soft_landing",
+     "miss_distance_m": 109.38162645885272
+    },
+    {
+     "seed": 105583630,
+     "outcome": "crash",
+     "miss_distance_m": 81.70752941674245
+    },
+    {
+     "seed": 387733538,
+     "outcome": "soft_landing",
+     "miss_distance_m": 138.19268115946107
+    },
+    {
+     "seed": 809968073,
+     "outcome": "crash",
+     "miss_distance_m": 368.50253840867214
+    },
+    {
+     "seed": 1898497724,
+     "outcome": "soft_landing",
+     "miss_distance_m": 49.07832624685544
+    },
+    {
+     "seed": 2082001084,
+     "outcome": "soft_landing",
+     "miss_distance_m": 183.64615380739517
+    },
+    {
+     "seed": 1377764745,
+     "outcome": "crash",
+     "miss_distance_m": 32.43320876180047
+    },
+    {
+     "seed": 1252956126,
+     "outcome": "soft_landing",
+     "miss_distance_m": 146.74728872680777
+    },
+    {
+     "seed": 1223409138,
+     "outcome": "crash",
+     "miss_distance_m": 67.44798918208275
+    },
+    {
+     "seed": 130168481,
+     "outcome": "crash",
+     "miss_distance_m": 244.5260626762918
+    },
+    {
+     "seed": 808071975,
+     "outcome": "soft_landing",
+     "miss_distance_m": 307.65994244344574
+    },
+    {
+     "seed": 2111675072,
+     "outcome": "crash",
+     "miss_distance_m": 101.97383854261851
+    },
+    {
+     "seed": 882519748,
+     "outcome": "crash",
+     "miss_distance_m": 412.7735984911363
+    },
+    {
+     "seed": 458084908,
+     "outcome": "soft_landing",
+     "miss_distance_m": 94.15974602931632
+    },
+    {
+     "seed": 514299168,
+     "outcome": "soft_landing",
+     "miss_distance_m": 37.641572472874934
+    },
+    {
+     "seed": 1531946086,
+     "outcome": "soft_landing",
+     "miss_distance_m": 47.1152052150101
+    },
+    {
+     "seed": 81727400,
+     "outcome": "soft_landing",
+     "miss_distance_m": 92.30166974593351
+    },
+    {
+     "seed": 2081811442,
+     "outcome": "soft_landing",
+     "miss_distance_m": 91.03173043882235
+    },
+    {
+     "seed": 1881665562,
+     "outcome": "soft_landing",
+     "miss_distance_m": 58.768925368690496
+    },
+    {
+     "seed": 1218766100,
+     "outcome": "soft_landing",
+     "miss_distance_m": 122.57137185618681
+    },
+    {
+     "seed": 1004442992,
+     "outcome": "soft_landing",
+     "miss_distance_m": 121.64111029568086
+    },
+    {
+     "seed": 1635176339,
+     "outcome": "soft_landing",
+     "miss_distance_m": 97.26651916907508
+    },
+    {
+     "seed": 1176037635,
+     "outcome": "soft_landing",
+     "miss_distance_m": 77.29323771060868
+    },
+    {
+     "seed": 1024744532,
+     "outcome": "crash",
+     "miss_distance_m": 76.05322465327501
+    },
+    {
+     "seed": 691840439,
+     "outcome": "crash",
+     "miss_distance_m": 36.19008608807391
+    },
+    {
+     "seed": 959359876,
+     "outcome": "soft_landing",
+     "miss_distance_m": 19.17699470702745
+    },
+    {
+     "seed": 1613457979,
+     "outcome": "soft_landing",
+     "miss_distance_m": 339.7761850086989
+    },
+    {
+     "seed": 118322299,
+     "outcome": "soft_landing",
+     "miss_distance_m": 487.6606524941095
+    },
+    {
+     "seed": 54109868,
+     "outcome": "soft_landing",
+     "miss_distance_m": 315.06874384406353
+    },
+    {
+     "seed": 1547041456,
+     "outcome": "crash",
+     "miss_distance_m": 216.3556536228951
+    },
+    {
+     "seed": 799261786,
+     "outcome": "soft_landing",
+     "miss_distance_m": 159.41087461893656
+    },
+    {
+     "seed": 1726001976,
+     "outcome": "soft_landing",
+     "miss_distance_m": 415.22210500248616
+    },
+    {
+     "seed": 65176760,
+     "outcome": "soft_landing",
+     "miss_distance_m": 88.74058855756822
+    },
+    {
+     "seed": 1948207565,
+     "outcome": "crash",
+     "miss_distance_m": 75.32495198964759
+    },
+    {
+     "seed": 263908779,
+     "outcome": "soft_landing",
+     "miss_distance_m": 65.27608018133814
+    }
+   ]
+  }
+ },
+ "reference": {
+  "0": {
+   "success": 0.585,
+   "crash": 0.0
+  },
+  "3": {
+   "success": 0.03,
+   "crash": 0.455
+  }
+ },
+ "rule": {
+  "min_stage0": 0.4,
+  "stage3_crash_below": 0.455
+ },
+ "verdict": "continue"
+}
