@@ -841,3 +841,51 @@ V22's own stage-0 success on the 100 benchmark seeds, checkpoint by checkpoint (
   - Test 1 computed λ 0.995 advantages after the fact, with V22's trained critic. It showed the landing result reaching early decisions.
   - It did not test whether a critic can learn those targets during training. The horizon limit is real, but raising λ swaps it for advantage variance this setup cannot absorb.
 - **Consequence:** run 4 is V22 unchanged on a second seed (`--seed 1`), testing whether V22's 59% is reproducible.
+
+### Run 4 result: V22 reproduced on a second seed
+- **Configuration:** `v22_restored.yaml`, `--seed 1`. Started 2026-11-13 20:57 UTC.
+  - At 4.5M steps the run was killed by an out-of-memory error: a 10-worker early check ran beside training. It was resumed from the 4.5M checkpoint with curriculum state restored (`checkpoints_v24_run4/resolved_config_*.yaml`, two files).
+  - The resume counted 20M further steps, so the run ended at 24.5M. The 20M checkpoint is the like-for-like comparison with V22's final.
+  - Early checks now default to 3 workers when training is running.
+- **Curriculum:** stage 1 at 1.44M steps (V22 3.6M), stage 2 at 15.1M (V22 13.2M), stage 3 never (as V22). Explained variance 0.75–0.93 throughout.
+  - At the stage 0 graduation checkpoint (1.5M) calm-air success was 34% on the benchmark seeds (V22 24%).
+- **Benchmark** (100 paired seeds; success, crash rate in brackets; McNemar p against the baseline):
+
+  | Checkpoint | Stage 0 | Stage 1 | Stage 2 | Stage 3 |
+  |---|---|---|---|---|
+  | Baseline | 27% (0%) | 25% (0%) | 11% (6%) | 8% (39%) |
+  | V22 best (15M) | 59% (0%) | 16% (2%) | 2% (10%) | 0% (41%) |
+  | Run 4 best (15.5M) | **63%** [53, 72] (0%), p < 0.001 | **25%** (6%), p 1.0 | 8% (27%), p 0.63 | 1% (54%), p 0.016 |
+  | Run 4 at 20M | 17% (0%) | 11% (5%) | 7% (17%) | 0% (48%) |
+  | Run 4 final (24.5M) | 1% (0%) | 10% (2%) | 6% (8%) | 2% (43%) |
+
+- **What it shows:**
+  - V22's calm-air result is reproducible: 63% against 59%, intervals overlapping almost entirely. Stage 1 matches the baseline.
+  - In wind the policy crashes more than the baseline (stage 2: 27% against 6%; stage 3: 54% against 39%).
+  - Calm-air skill collapses after the policy reaches stage 2, on both seeds (V22 59% to 0%; run 4 63% to 1%). The 25% replay share does not prevent it.
+  - Extra steps under this curriculum did not help: training success at stage 2 was 2–7% for 9.4M steps, against the 15% bar.
+
+### Feasibility of the benchmark seeds
+- `analysis/feasibility_v24.py`, `results/feasibility_v24.json`. For every benchmark seed and stage: the episode's launch state, mean wind and randomised airframe, read from the environment; that airframe's trimmed glide polar from JSBSim's aerodynamics (airspeed within the commandable 9.5–16 m/s); best speed-to-fly with a crab into the crosswind; a 30° bank turn onto the course home; the kinetic-energy credit of the launch speed.
+- The model ignores gusts and the flare, so it is optimistic: "unreachable" is firm, "reachable" is only a necessary condition. No seed it calls unreachable was ever landed by any of the 22 benchmarked controllers.
+
+  | Stage | Reachable | Energy surplus, median (worst 10%) | Landed by at least one controller |
+  |---|---|---|---|
+  | 0 | 100 | 8.6× (6.4×) | 100 |
+  | 1 | 100 | 9.0× (4.9×) | 80 |
+  | 2 | 100 | 8.7× (4.2×) | 49 |
+  | 3 | 97 | 7.6× (2.9×) | 18 |
+
+- Energy is almost never the limit; the three unreachable cases are stage 3 headwinds of 5.8–6.7 m/s. The task is dissipating a large surplus precisely with no thrust and no drag devices.
+- Gust strength separates landed from failed stage 3 seeds: 11 of 21 landed below σ 0.5 m/s, 2 of 52 at σ 1.0 m/s or above.
+
+### Run 5, written before the run: run 4 best on a fixed stage mix
+- **Problem:** no run has trained at stage 3. The promotion bars (30% to leave stage 1, 15% to leave stage 2) sit at the best any controller has achieved, so in practice they block, and training at a harder stage erodes calm-air skill.
+- **Configuration:** `training/configs/v24_run5_mix.yaml` = `v22_restored.yaml` plus
+  - `curriculum.stage_weights: [0.2, 0.2, 0.3, 0.3]` (new key, null by default: every episode's stage drawn from the mix; promotion and `replay_frac` play no part),
+  - `ppo.total_timesteps: 10_000_000`, and its own logging directories.
+  - Launched with `--init-from checkpoints_v24_run4/best_model` (new option: weights and VecNormalize statistics; hyperparameters from the config; step counter 0; no curriculum state).
+  - This is two changes against run 4 (continued training and the mix), reported as one named configuration, not a single-variable test.
+- **Prediction:** stage 3 crash rate falls from 54% toward the baseline's 39%; stage 3 success 3–8%; calm-air success stays above 45%. Ceiling: 18 of 100 stage 3 seeds have ever been landed by any controller.
+- **Early stop** (`analysis/v24_run5_check.py`, development seeds only): at 2M and 5M steps, stop if calm-air success is below 40% or the stage 3 crash rate is not below run 4 best's on the same seeds.
+- **Tests:** `tests/test_stage_mix.py`.

@@ -295,6 +295,32 @@ def episode_stage(current_stage: int, replay_frac: float, rng: np.random.Generat
     return int(current_stage)
 
 
+def validate_stage_weights(weights) -> tuple[float, ...]:
+    """curriculum.stage_weights as a normalised tuple, one weight per stage.
+
+    Rejects the wrong length, negative weights and an all-zero list."""
+    w = tuple(float(x) for x in weights)
+    if len(w) != len(STAGES):
+        raise ValueError(f"stage_weights needs {len(STAGES)} values; got {len(w)}")
+    if any(x < 0 for x in w) or sum(w) <= 0:
+        raise ValueError(f"stage_weights must be non-negative with a positive sum; got {w}")
+    total = sum(w)
+    return tuple(x / total for x in w)
+
+
+def weighted_episode_stage(weights: tuple[float, ...], rng: np.random.Generator) -> int:
+    """The stage of one training episode under a fixed stage mix
+    (curriculum.stage_weights, SPEC V24 run 5): drawn with probability
+    weights[s], independent of the scheduler. One rng.random() per episode."""
+    u = rng.random()
+    acc = 0.0
+    for s, w in enumerate(weights):
+        acc += w
+        if u < acc:
+            return s
+    return max(s for s, w in enumerate(weights) if w > 0)   # float round-off at u ~ 1
+
+
 class CurriculumScheduler:
     """Tracks rolling episode success rate and advances the difficulty stage.
 

@@ -74,7 +74,8 @@ from stable_baselines3.common.vec_env import (
 from stable_baselines3.common.monitor import Monitor
 
 from env.glider_env import GliderEnv
-from env.curriculum import CurriculumScheduler, STAGES, outcome_bucket
+from env.curriculum import (CurriculumScheduler, STAGES, outcome_bucket,
+                            validate_stage_weights)
 
 # best_model.zip is selected by MultiStageEvalCallback: deterministic
 # success across EVERY curriculum stage, on a fixed seed set disjoint from
@@ -138,7 +139,8 @@ def apply_overrides(cfg: dict, overrides: list[str]) -> dict:
 
 
 def archive_resolved_config(cfg: dict, checkpoint_dir: str | pathlib.Path,
-                            resume: str | None = None, seed: int = 0) -> pathlib.Path:
+                            resume: str | None = None, seed: int = 0,
+                            init_from: str | None = None) -> pathlib.Path:
     """Write the fully resolved config (file + --set overrides) next to the
     checkpoints, with the command line and git commit (SPEC V24 Phase 0: no
     run before V24 archived one, so their configs had to be rebuilt from git).
@@ -157,7 +159,7 @@ def archive_resolved_config(cfg: dict, checkpoint_dir: str | pathlib.Path,
     path = pathlib.Path(checkpoint_dir) / f'resolved_config_{stamp}.yaml'
     with open(path, 'w', encoding='utf-8') as f:
         f.write(f"# argv: {' '.join(_sys.argv)}\n# git: {sha} dirty={dirty}\n"
-                f"# seed: {seed}  resume: {resume}\n")
+                f"# seed: {seed}  resume: {resume}  init_from: {init_from}\n")
         yaml.safe_dump(cfg, f, sort_keys=False)
     return path
 
@@ -391,8 +393,10 @@ class CurriculumCallback(BaseCallback):
         success_reward_min:  float = 400.0,
         replay_frac:         float = 0.0,
         verbose:             int   = 1,
+        stage_weights=None,
     ) -> None:
         super().__init__(verbose=verbose)
+        self.stage_weights      = stage_weights
         self.scheduler          = scheduler
         self.venv               = venv
         self.success_reward_min = success_reward_min
@@ -476,7 +480,8 @@ class CurriculumCallback(BaseCallback):
                 # Propagate to all parallel workers via set_attr (works for
                 # both DummyVecEnv and SubprocVecEnv).
                 self.venv.env_method('set_stage', stage_cfg)
-                self.venv.env_method('set_curriculum', stage, self.replay_frac)
+                self.venv.env_method('set_curriculum', stage, self.replay_frac,
+                                     None, self.stage_weights)
 
                 # Also update the VecNormalize's wrapped env reference
                 # so any future env-level cfg reads are consistent.
@@ -646,6 +651,37 @@ def checkpoint_obs_version(path: str) -> int:
     return int((data or {}).get('obs_version', 1))
 
 
+def init_model_from(cfg: dict, venv: VecNormalize, init_from: str,
+                    tb_log_dir: str | None = None, seed: int = 0) -> tuple[PPO, VecNormalize]:
+    """A fresh PPO built from cfg, carrying the policy weights and the
+    VecNormalize statistics of checkpoint `init_from` (SPEC V24 run 5).
+
+    Unlike --resume: every hyperparameter is the config's (not the saved
+    model's), num_timesteps starts at 0, and no curriculum state is read.
+    Returns (model, venv): the VecNormalize wrapper is replaced by the loaded
+    one around the same inner env, so callers must use the returned venv.
+    """
+    path = init_from if str(init_from).endswith('.zip') else f"{init_from}.zip"
+    print(f"Initialising a new run from the weights of: {path}")
+    want = flat_env_cfg(cfg)['obs_version']
+    have = checkpoint_obs_version(path)
+    if have != want:
+        raise ValueError(
+            f"observation version mismatch: {path} was trained on obs_version {have}, "
+            f"the config says {want}")
+    vecnorm_init = _vecnorm_path_for_checkpoint(path)
+    if not vecnorm_init.exists():
+        raise FileNotFoundError(f"no VecNormalize stats for {path} at {vecnorm_init}")
+    venv = VecNormalize.load(str(vecnorm_init), venv.venv)
+    venv.norm_reward = bool(cfg['ppo']['normalize_reward'])
+    venv.training = True
+    print(f"Loaded VecNormalize stats from {vecnorm_init}")
+    model = build_model(cfg, venv, tb_log_dir, seed)
+    model.set_parameters(path, exact_match=True, device=model.device)
+    model.obs_version = have
+    return model, venv
+
+
 class MultiStageEvalCallback(BaseCallback):
     """Selects best_model.zip by deterministic success across all stages.
 
@@ -761,14 +797,22 @@ class MultiStageEvalCallback(BaseCallback):
 # Training entry point
 # ---------------------------------------------------------------------------
 
-def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
+def train(cfg: dict, resume: str | None = None, seed: int = 0,
+          init_from: str | None = None) -> None:
     """Build and run the PPO training loop.
 
     Args:
-        cfg    : full config dict (from base.yaml + CLI overrides)
-        resume : path to a .zip checkpoint to resume from (no extension needed)
-        seed   : global RNG seed
+        cfg       : full config dict (from base.yaml + CLI overrides)
+        resume    : path to a .zip checkpoint to resume from (no extension needed)
+        seed      : global RNG seed
+        init_from : path to a .zip whose policy weights (and matching
+                    VecNormalize stats) start a NEW run (SPEC V24 run 5).
+                    Unlike resume: hyperparameters come from cfg, the step
+                    counter starts at 0, and the curriculum state is not
+                    restored. None = a fresh policy, as before.
     """
+    if resume and init_from:
+        raise ValueError("--resume and --init-from are mutually exclusive")
     ppo_cfg  = cfg['ppo']
     log_cfg  = cfg['logging']
     cur_cfg  = cfg['curriculum']
@@ -776,7 +820,7 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
 
     checkpoint_dir = pathlib.Path(log_cfg['checkpoint_dir'])
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    archive_resolved_config(cfg, checkpoint_dir, resume=resume, seed=seed)
+    archive_resolved_config(cfg, checkpoint_dir, resume=resume, seed=seed, init_from=init_from)
 
     tb_log_dir = log_cfg['tensorboard_log']
     pathlib.Path(tb_log_dir).mkdir(parents=True, exist_ok=True)
@@ -827,11 +871,23 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
     # happens to advance past stage 0, at which point set_stage first fires
     # with Stage 1's config. Apply the initial stage explicitly here, the same
     # way CurriculumCallback applies every later stage advance.
+    # curriculum.stage_weights (SPEC V24 run 5; null = off, the old behaviour):
+    # every episode's stage is drawn from a fixed mix and the promotion bars
+    # play no part. The scheduler is parked at the final stage, which can
+    # never advance, so its rolling log (success_rate, outcome_counts) reads
+    # the Stage 3 episodes and the other stages are logged as replay.
+    stage_weights = cur_cfg.get('stage_weights')
+    if stage_weights is not None:
+        stage_weights = validate_stage_weights(stage_weights)
+        if resume is None:
+            scheduler.reset(len(STAGES) - 1)
+        print(f"[Curriculum] fixed stage mix {stage_weights}; promotion disabled")
+
     venv.env_method('set_stage', scheduler.current_cfg)
     # ...and put every worker under the curriculum, so episodes replay
     # earlier stages at replay_frac and report info['episode_stage'].
     venv.env_method('set_curriculum', scheduler.current_stage, replay_frac,
-                    float(cur_cfg.get('stage0_wind_ms', 0.0)))
+                    float(cur_cfg.get('stage0_wind_ms', 0.0)), stage_weights)
 
     # --- Policy ----------------------------------------------------------
     if resume:
@@ -861,6 +917,8 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
             print(f"Warning: no matching VecNormalize stats found at "
                   f"{vecnorm_resume}; continuing with fresh running stats.")
         model.obs_version = have
+    elif init_from:
+        model, venv = init_model_from(cfg, venv, init_from, tb_log_dir, seed)
     else:
         model = build_model(cfg, venv, tb_log_dir, seed)
 
@@ -887,6 +945,7 @@ def train(cfg: dict, resume: str | None = None, seed: int = 0) -> None:
         venv        = venv,
         replay_frac = replay_frac,
         verbose     = 1,
+        stage_weights = stage_weights,
     )
 
     eval_cb = MultiStageEvalCallback(
@@ -959,6 +1018,12 @@ def _parse_args() -> argparse.Namespace:
         help='path to .zip checkpoint to resume training from',
     )
     parser.add_argument(
+        '--init-from', default=None,
+        metavar='CHECKPOINT',
+        help="start a NEW run from this .zip's policy weights and VecNormalize stats "
+             '(config hyperparameters, step counter 0, curriculum not restored)',
+    )
+    parser.add_argument(
         '--seed', type=int, default=0,
         help='global RNG seed (default: 0)',
     )
@@ -981,4 +1046,4 @@ if __name__ == '__main__':
     if args.dummy_vec:
         cfg['ppo']['n_envs'] = 1   # DummyVecEnv handles only 1 env elegantly
 
-    train(cfg=cfg, resume=args.resume, seed=args.seed)
+    train(cfg=cfg, resume=args.resume, seed=args.seed, init_from=args.init_from)

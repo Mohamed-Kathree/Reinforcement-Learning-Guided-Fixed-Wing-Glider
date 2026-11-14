@@ -280,6 +280,10 @@ curriculum:
   replay_frac:       0.25           # share of episodes replayed at an earlier stage (uniform over
                                      # stages 0 .. current-1) once past Stage 0, so skills from
                                      # easier stages stay in the training distribution.
+  stage_weights:     null           # SPEC V24 run 5. null = off (the scheduler's stage plus
+                                     # replay, as above). A list of 4 weights = every training
+                                     # episode's stage is drawn from this fixed mix; promotion
+                                     # and replay_frac then play no part.
 
 # ---------------------------------------------------------------------------
 # Logging and checkpointing

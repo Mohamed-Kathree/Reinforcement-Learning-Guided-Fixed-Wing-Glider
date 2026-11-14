@@ -49,7 +49,8 @@ from sim.wind import WindModel
 from sim.sensor_models import SensorSuite
 from sim.math_utils import build_state, wrap_pi
 from env.reward import compute_reward, DEFAULT_REWARD_CFG
-from env.curriculum import DR_SCALE, STAGES, episode_stage, stage_ranges
+from env.curriculum import (DR_SCALE, STAGES, episode_stage, stage_ranges,
+                            validate_stage_weights, weighted_episode_stage)
 from env.nav_features import OBS_DIMS, obs_v2_from_v1, obs_v3_from_v1
 from env.reward import cone_potential
 from env.wind_estimate import WindEstimator
@@ -394,6 +395,7 @@ class GliderEnv(gym.Env):
         # the env runs whatever cfg it was given, as before replay existed.
         self._curriculum_stage: int | None = None
         self._replay_frac: float = 0.0
+        self._stage_weights: tuple[float, ...] | None = None   # curriculum.stage_weights
         self._replay_rng: np.random.Generator | None = None
         self._episode_stage: int | None = None
 
@@ -433,8 +435,12 @@ class GliderEnv(gym.Env):
         if self._curriculum_stage is not None:
             if self._replay_rng is None:
                 self._replay_rng = np.random.default_rng()
-            self._episode_stage = episode_stage(
-                self._curriculum_stage, self._replay_frac, self._replay_rng)
+            if self._stage_weights is not None:
+                self._episode_stage = weighted_episode_stage(self._stage_weights,
+                                                             self._replay_rng)
+            else:
+                self._episode_stage = episode_stage(
+                    self._curriculum_stage, self._replay_frac, self._replay_rng)
             self.cfg.update(STAGES[self._episode_stage])
             # Training-only light wind at Stage 0 (curriculum.stage0_wind_ms):
             # evaluation pins stages with set_stage() and never gets here.
@@ -698,7 +704,8 @@ class GliderEnv(gym.Env):
     # ------------------------------------------------------------------
 
     def set_curriculum(self, stage: int, replay_frac: float = 0.0,
-                       stage0_wind_ms: float | None = None) -> None:
+                       stage0_wind_ms: float | None = None,
+                       stage_weights=None) -> None:
         """Put the env under the curriculum at `stage`, with replay.
 
         From the next reset() on, each episode runs at `stage`, or with
@@ -715,6 +722,11 @@ class GliderEnv(gym.Env):
             raise ValueError(f"replay_frac must be in [0, 1); got {replay_frac}")
         self._curriculum_stage = int(stage)
         self._replay_frac = float(replay_frac)
+        # stage_weights (SPEC V24 run 5): every episode's stage is drawn from
+        # this fixed mix instead (replay_frac is then unused). None = the
+        # scheduler's stage plus replay, as before.
+        self._stage_weights = (validate_stage_weights(stage_weights)
+                               if stage_weights is not None else None)
         if stage0_wind_ms is not None:
             if stage0_wind_ms < 0:
                 raise ValueError(f"stage0_wind_ms must be >= 0; got {stage0_wind_ms}")
