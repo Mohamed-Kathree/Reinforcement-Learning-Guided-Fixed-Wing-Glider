@@ -3,273 +3,331 @@
 > **COS 731/732 Honours Project — University of the Western Cape**
 > Mohamed Yusuf Kathree · 4253340 · [Project Website](https://sites.google.com/myuwc.ac.za/rlglide/home)
 
-A simulation-first reinforcement learning system that autonomously guides a 1.1 kg hand-launched fixed-wing glider back to its launch point using only onboard sensors. The RL policy is trained in a physics-validated JSBSim environment and deployed on a Raspberry Pi 5, with an ESP32 handling real-time stabilisation and safety enforcement.
+A hand-launched glider with no motor has to find its own way back to the launch point and land
+there, using only on-board sensors. This project trains a PPO reinforcement-learning policy in a
+physics-validated JSBSim simulation and combines it with a deterministic return-to-launch
+controller through an on-board wind gate.
+
+**Selected controller: Run 4 – Gated.** Run 4's trained policy flies from launch. Between 8 and
+15 s after launch, the first time the on-board wind estimate exceeds 1.5 m/s, control passes to
+the deterministic baseline for the rest of the flight.
 
 ---
 
-## Table of Contents
+## Contents
 
-- [Overview](#overview)
+- [Results](#results)
 - [Architecture](#architecture)
-- [Directory Structure](#directory-structure)
+- [Repository layout](#repository-layout)
 - [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Physics Validation](#physics-validation)
+- [Quick start](#quick-start)
+- [Dashboard](#dashboard)
 - [Training](#training)
 - [Evaluation](#evaluation)
-- [Visualisation](#visualisation)
-- [Dashboard](#dashboard)
+- [Reproducing the headline result](#reproducing-the-headline-result)
+- [Curriculum stages](#curriculum-stages)
+- [Reward](#reward)
 - [Testing](#testing)
-- [Key Design Decisions](#key-design-decisions)
-- [Interface Contracts](#interface-contracts)
-- [Curriculum Stages](#curriculum-stages)
-- [Reward Function](#reward-function)
-- [Diagnostics](#diagnostics)
-- [Project Status](#project-status)
-- [References](#references)
+- [Documentation](#documentation)
+- [Status and limitations](#status-and-limitations)
 
 ---
 
-## Overview
+## Results
 
-Hand-launched gliders face highly variable launch conditions and outdoor disturbances that make traditional rule-based guidance difficult to generalise. This project trains a PPO reinforcement learning policy in a simulation environment that mirrors the onboard hardware stack, enabling direct sim-to-real transfer without retuning.
+One evaluation on 100 paired simulated launches per wind stage (`episode_seeds(100, 0)`). Gate
+settings were tuned on 200 separate development seeds and frozen before this evaluation.
+Success = touchdown inside the home radius with landing quality above 0.5. p-values are exact
+McNemar tests of success against the baseline on the same launches.
 
-The task is fundamentally one of energy management: the glider can only trade altitude for airspeed while continuously losing energy to drag. The policy must learn to optimise the return-to-launch (RTL) objective while respecting hard safety constraints on stall margin, bank angle, and minimum altitude above ground level.
+| Stage (max wind) | Baseline | Run 4 alone | **Run 4 – Gated** | p (gated vs baseline) |
+|---|---|---|---|---|
+| 0 (calm) | 27% (0% crash) | 63% (0%) | **58%** (0%) | < 0.001 |
+| 1 (3 m/s) | 25% (0%) | 25% (6%) | **35%** (3%) | 0.17 |
+| 2 (6 m/s) | 11% (6%) | 8% (27%) | **19%** (13%) | 0.15 |
+| 3 (9 m/s) | 8% (39%) | 1% (54%) | **7%** (47%) | 1.00 |
 
-**Term 2 status:** Physics simulation validated, Gymnasium environment implemented, deterministic baseline benchmarked at 100% (Stage 0) down to 84% (Stage 3) success (see [Curriculum Stages](#curriculum-stages) for the full table and correction history). Training infrastructure ready.
+- **Significant only in calm air**, where success more than doubles.
+- **Stages 1–2:** the highest success of any controller tested, but not significant on 100 launches.
+- **Stage 3:** no success gain, and a higher observed crash rate than the baseline (not
+  significant, p 0.20). Strong-wind safety is **not** established.
+- **Simulation only.** No flight tests yet. The simulated speed hold uses true airspeed; the
+  glider has no pitot.
 
-**Term 3 goal:** Train PPO policy to exceed 60% success at Stage 3 (0–9 m/s wind, 20% sensor noise, 15 m home radius).
+Source: `results/gated_v24_run4_benchmark.json`. The full record, including negative results for
+runs 1–3 and 5, is in [`docs/SPEC_V20_decisions.md`](docs/SPEC_V20_decisions.md).
+
+**Feasibility.** A per-launch energy analysis (`analysis/feasibility_v24.py`) shows home is
+physically reachable on 397 of the 400 benchmark launches, usually with 7–9× the energy needed.
+The task is limited by shedding that surplus precisely without thrust or airbrakes, and by gusts,
+not by energy.
+
+### Training runs (V22 configuration onwards)
+
+| Run | Change | Best model, success by stage 0 / 1 / 2 / 3 | Outcome |
+|---|---|---|---|
+| V22 | reference | 59 / 16 / 2 / 0% | reference for the runs below |
+| V23 run 1 | λ 0.995, cone shaping and other changes bundled | 35 / 6 / 3 / 0% | negative |
+| V23 run 2 | as run 1 without cone shaping | 27 / 8 / 5 / 2% | negative |
+| V24 run 3 | λ 0.995 alone | 7 / 0 / 1 / 0% | negative: the critic could not fit λ 0.995 targets |
+| **V24 run 4** | V22 config, seed 1 | **63 / 25 / 8 / 1%** | V22 reproduced; used in the selected controller |
+| V24 run 5 | run 4 best on a fixed stage mix | 63 / 20 / 8 / 0% (final: 15 / 11 / 2 / 1%) | fewer stage-3 crashes, lost calm-air skill |
 
 ---
 
 ## Architecture
 
-The system uses a three-layer hierarchy separated by timing rate and responsibility:
-
 ```
-┌──────────────────────────────────────────────────────────┐
-│  Layer 1 — RL Policy                    20 Hz, Pi 5      │
-│  Input:  12-element noisy observation vector             │
-│  Output: [bank_cmd, speed_cmd] ∈ [-1, 1]²               │
-│  Algorithm: PPO (Stable-Baselines3)                      │
-└──────────────────────────────────────────────────────────┘
-                           ↓
-┌──────────────────────────────────────────────────────────┐
-│  Layer 2 — Attitude Controller         200 Hz, ESP32     │
-│  Roll PD + Pitch 1/V² + Coordinated Rudder               │
-│  Output: [aileron, elevator, rudder] (rad)               │
-│  Safety shield: bank > 50°, AGL < 8 m                   │
-└──────────────────────────────────────────────────────────┘
-                           ↓
-┌──────────────────────────────────────────────────────────┐
-│  Layer 3 — JSBSim Physics              200 Hz            │
-│  6-DOF dynamics + validated aero tables                  │
-│  Actuator lag/rate limits · Sensor noise models          │
-│  Wind: mean NED + Ornstein–Uhlenbeck gusts               │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Wind gate                                  20 Hz, on board   │
+│  Wind estimate from GPS ground speed, course and heading.     │
+│  8–15 s after launch: first estimate > 1.5 m/s → baseline.    │
+│  One-way. baseline/wind_gate.py, baseline/wind_gated.py       │
+└──────────────────────────────────────────────────────────────┘
+                              ↓
+┌──────────────────────────────────────────────────────────────┐
+│  Guidance: Run 4 policy  or  deterministic baseline   20 Hz   │
+│  Policy: PPO, MLP 128×128, 8 stacked frames of 12 values      │
+│  Output: [bank ±45°, airspeed 9.5–16 m/s]                     │
+└──────────────────────────────────────────────────────────────┘
+                              ↓
+┌──────────────────────────────────────────────────────────────┐
+│  Attitude controller                    200 Hz, ESP32 (sim)   │
+│  Roll PD + speed-scheduled pitch + coordinated rudder         │
+│  Safety shield: bank ≤ 45°, pitch ≤ 20°                       │
+└──────────────────────────────────────────────────────────────┘
+                              ↓
+┌──────────────────────────────────────────────────────────────┐
+│  JSBSim physics                                      200 Hz   │
+│  6-DOF, validated aero, actuator lag and rate limits          │
+│  Sensor models (GPS 5 Hz, baro 25 Hz, ultrasonic 20 Hz, IMU)  │
+│  Wind: mean NED + Ornstein–Uhlenbeck gusts                    │
+│  Airframe randomised per episode (mass, CG, inertia, aero)    │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-This separation keeps safety deterministic and independent of the learning component. The Python simulation mirrors the ESP32 firmware exactly, so policies trained in simulation run without modification on hardware.
+**Airframe (as built):** flying mass ≈ 1.64 kg (estimated 1.50–1.80), span 2.0 m, wing area
+0.38 m², glide ratio ≈ 14 at trim. Mass properties: `aircraft/mass_properties.yaml`.
 
 ---
 
-## Directory Structure
+## Repository layout
 
 ```
-rl-glider/
-│
-├── aircraft/                       # JSBSim aircraft definitions
-│   └── rlglider/
-│       └── rlglider.xml           # FDM: mass, aero tables, actuator dynamics
-│
-├── analysis/                       # Visualisation and plotting
-│   └── plot_trajectories.py       # 3D paths, ground track, time-series
-│
-├── baseline/                       # Deterministic RTL benchmark
-│   └── deterministic_rtl.py       # Proportional heading controller
-│
-├── env/                            # Gymnasium environment
-│   ├── glider_env.py              # GliderEnv — owns simulation loop
-│   ├── reward.py                  # Hierarchical reward function
-│   └── curriculum.py             # 4-stage curriculum scheduler
-│
-├── sim/                            # Physics simulation components
-│   ├── jsbsim_fdm.py             # JSBSim wrapper (SI interface)
-│   ├── sensor_models.py          # GPS, IMU, Baro, LiDAR with noise
-│   ├── wind.py                   # Mean wind + OU gust generator
-│   └── math_utils.py             # Quaternion/Euler conversions, state builder
-│
-├── tests/                          # Pytest unit test suite
-│   └── test_dynamics.py          # Physics, sensors, actuators, baseline
-│
-├── training/                       # RL training and evaluation
-│   ├── configs/
-│   │   └── base.yaml             # Single source of truth for all params
-│   ├── train.py                  # PPO training entry point
-│   └── benchmark.py              # the single evaluator: policy vs paired baseline
-│
-├── scratch/                        # Diagnostic and debug scripts
-│   ├── bench_rtl.py              # Quick baseline sanity check
-│   ├── diag_ctrl.py              # Attitude controller episode trace
-│   └── jsbsim_smoke.py           # JSBSim installation test
-│
-├── validate_glide.py               # 5 physics validation gates
-├── requirements.txt                # Python dependencies
-└── README.md
+aircraft/            JSBSim aircraft (rlglider.xml), FDM generator, mass properties
+sim/                 JSBSim wrapper, sensor models, wind, mass solver
+env/                 GliderEnv, reward, curriculum, observation features, wind estimator
+baseline/            Deterministic RTL controller; wind gate and gated controller
+training/            train.py, benchmark.py (the single evaluator), configs/
+  configs/base.yaml          current defaults (every change behind a key; old behaviour default)
+  configs/v22_restored.yaml  V22 configuration, used by runs 3 and 4
+  configs/v24_run5_mix.yaml  run 5 (fixed stage mix)
+analysis/            Diagnostics, gate tuning, feasibility, dashboard data export
+  seeds/dev_seeds.json       200 development seeds (tuning only; never the benchmark seeds)
+  negative_results/          archived configs and hashes for the V23 negative runs
+results/             Benchmark and analysis outputs (JSON)
+backend/             FastAPI server for the dashboard (records flights, runs checks, streams training)
+frontend/            React + Vite dashboard
+tests/               Pytest suite (232 tests)
+docs/                Decisions record and diagnostic summaries
+deployment/          Archived V14 deployment model (legacy)
+checkpoints_*/       Model checkpoints per run (not all tracked)
+validate_glide.py    Five physics validation gates
 ```
 
 ---
 
 ## Installation
 
-**Requirements:** Python 3.10+, JSBSim 1.3.1+
+**Requirements:** Python 3.10+ (developed on 3.14), JSBSim 1.3.1+, Node.js 20+ for the dashboard.
 
 ```bash
-# Clone the repository
-git clone https://github.com/CS-UWC/rl-glider.git
-cd rl-glider
+git clone https://github.com/Mohamed-Kathree/Reinforcement-Learning-Guided-Fixed-Wing-Glider.git
+cd Reinforcement-Learning-Guided-Fixed-Wing-Glider
 
-# Install Python dependencies
+python -m venv venv
+venv\Scripts\activate            # Windows; source venv/bin/activate elsewhere
 pip install -r requirements.txt
+pip install -r backend/requirements.txt   # dashboard backend only
 
-# Verify JSBSim is working
-python scratch/jsbsim_smoke.py
-```
-
-**`requirements.txt` includes:**
-- `jsbsim >= 1.3.1`
-- `gymnasium`
-- `stable-baselines3`
-- `numpy`, `scipy`
-- `matplotlib`
-- `pytest`
-
----
-
-## Quick Start
-
-### 1 — Validate the physics simulator
-
-All five gates must pass before any training run is permitted:
-
-```bash
-python validate_glide.py
-```
-
-Expected output:
-```
-[PASS] Gate 1 — Energy Conservation    drift=0.003%  (threshold < 0.1%)
-[PASS] Gate 2 — Glide Ratio            L/D=14.2      (threshold 10–20)
-[PASS] Gate 3 — Stall Behaviour        CL drops past alpha=12 deg
-[PASS] Gate 4 — Trim Stability         max|q|=0.008 rad/s  (threshold < 0.1)
-[PASS] Gate 5 — Attitude Integrity     Euler angles finite over 30s
-
-All 5 gates PASSED. Simulator ready for training.
-```
-
-### 2 — Run the unit tests
-
-```bash
-pytest tests/test_dynamics.py -v
-```
-
-### 3 — Benchmark the baseline controller
-
-```bash
-python -m training.benchmark --policy baseline --episodes 100
-```
-
-### 4 — Start training
-
-```bash
-python -m training.train --config training/configs/base.yaml --seed 42
+cd frontend && npm install
 ```
 
 ---
 
-## Physics Validation
+## Quick start
 
-`validate_glide.py` runs five correctness gates before any training is allowed. Each gate targets a different class of physics error:
+```bash
+python validate_glide.py                 # 1. physics gates (must all pass)
+pytest tests -q                          # 2. test suite
+python -m training.benchmark --policy baseline --episodes 100   # 3. baseline benchmark
+```
 
-| Gate | Test | Criterion | Detects |
-|------|------|-----------|---------|
-| 1. Energy conservation | CD=0 straight glide, 10 s | drift < 0.1% | Integration errors, wrong mass/velocity |
-| 2. Glide ratio | Trimmed glide, 5 s | 10 < L/D < 20 | Incorrect aerodynamic scaling |
-| 3. Stall | Sweep α past 12° | CL drops | Missing post-stall regime in aero table |
-| 4. Trim stability | Trimmed flight, 15 s | \|q\| < 0.1 rad/s | Longitudinal instability |
-| 5. Attitude integrity | Free flight, 30 s | Euler angles finite | Quaternion normalisation failure |
+---
 
-All five pass with JSBSim 1.3.1 and `aircraft/rlglider/rlglider.xml`.
+## Dashboard
+
+```bash
+python -m uvicorn backend.main:app --port 8000     # backend, from the repo root
+cd frontend && npm run dev                         # frontend, http://localhost:5173
+```
+
+| Page | Purpose |
+|---|---|
+| Overview | What the system does, headline results and limitations, architecture and specs |
+| Validation | Run 4 – Gated benchmark: charts, paired significance, per-stage readings, gate behaviour, conclusions; live physics and unit checks |
+| Flight Replay | Record a flight with the gated controller (default), the baseline or the legacy V14 policy, then replay it frame by frame. Gated flights show when the gate handed over |
+| Baseline | Fresh baseline benchmark on random launches |
+| Training | Live and archived training runs |
+| Analysis | Touchdown scatter and failure gallery across recorded flights |
+
+Light appearance by default; dark via the header toggle. The backend accepts requests from any
+local port. Validation figures come from `frontend/src/data/validation.json`, generated by
+`python analysis/export_dashboard_data.py` from the result files;
+`tests/test_dashboard_data.py` fails if it is stale.
 
 ---
 
 ## Training
 
 ```bash
-# Train from scratch
-python -m training.train \
-    --config training/configs/base.yaml \
-    --seed 42
+# The configuration behind the selected controller (V22 settings, second seed)
+python -m training.train --config training/configs/v22_restored.yaml --seed 1 \
+    --set logging.checkpoint_dir=checkpoints_v24_run4/ logging.tensorboard_log=runs_v24_run4/
 
-# Resume from checkpoint
-python -m training.train \
-    --resume checkpoints/ppo_glider_1000000_steps \
-    --seed 42
+# Resume (restores VecNormalize stats and curriculum state)
+python -m training.train --config ... --resume checkpoints_v24_run4/ppo_glider_4500000_steps
 
-# Override specific parameters
-python -m training.train \
-    --set ppo.n_envs=16 ppo.total_timesteps=50000000
+# Start a NEW run from a checkpoint's weights (config hyperparameters, step counter 0)
+python -m training.train --config training/configs/v24_run5_mix.yaml \
+    --init-from checkpoints_v24_run4/best_model --seed 2
 
-# Monitor with TensorBoard
-tensorboard --logdir runs/
+tensorboard --logdir runs_v24_run4/
 ```
 
-**Training outputs:**
-```
-checkpoints/
-├── ppo_glider_<step>_steps.zip    # Policy checkpoint
-├── vecnormalize_<step>.pkl        # Matching normalisation stats
-└── best_model.zip                 # Best evaluation checkpoint
-```
+Every launch writes `resolved_config_<UTC>.yaml` (config, argv, git SHA) into its checkpoint
+directory. `--resume` continues the step count, so resuming at 4.5M with a 20M budget trains to
+24.5M.
 
-### PPO Hyperparameters
+| PPO parameter | Value |
+|---|---|
+| Environments × rollout | 8 × 2048 |
+| Batch / epochs | 256 / 10 |
+| Learning rate | 3 × 10⁻⁴ (constant) |
+| γ / GAE λ | 0.999 / 0.95 |
+| Clip / target KL | 0.2 / 0.03 |
+| Entropy coefficient / min action std | 0.005 / 0.2 |
+| Network | MLP 128 × 128, 8 stacked frames |
+| Checkpoints | every 100k steps |
 
-| Parameter | Value |
-|-----------|-------|
-| Rollout steps per worker | 2048 |
-| Mini-batch size | 256 |
-| Learning rate | 3 × 10⁻⁴ |
-| Clipping range (ε) | 0.2 |
-| Entropy coefficient | 0.01 |
-| Discount factor (γ) | 0.99 |
-| Checkpoint interval | 100k steps |
-| Evaluation interval | 50k steps |
-
-Three callbacks manage the lifecycle: `CurriculumCallback` advances stages at 80% rolling success, `CheckpointCallback` saves policy and normalisation stats every 100k steps, and `EvalCallback` tracks the best-performing checkpoint.
+Model selection: `best_model.zip` is the checkpoint with the highest mean deterministic success
+over all four stages on 10 selection seeds per stage (disjoint from the benchmark seeds).
 
 ---
 
 ## Evaluation
 
 ```bash
-# Trained policy vs the deterministic baseline, paired on identical seeds,
-# all four curriculum stages, 100 episodes each
+# Policy vs baseline, paired on identical seeds, stages 0-3, 100 episodes each
 python -m training.benchmark --policy trained \
-    --model checkpoints_v20/best_model.zip \
-    --vecnorm checkpoints_v20/vecnormalize_best.pkl
+    --model checkpoints_v24_run4/best_model.zip \
+    --vecnorm checkpoints_v24_run4/vecnormalize_best.pkl \
+    --config training/configs/v22_restored.yaml \
+    --out results/benchmark_v24run4_best_15.5M.json
 
-# Floor controls and the baseline alone (no model required)
-python -m training.benchmark --policy random
+python -m training.benchmark --policy random      # floor controls
 python -m training.benchmark --policy zero
-python -m training.benchmark --policy baseline --stages 3 --episodes 50
-
-# Home-information ablation: obs[0] dx_home, obs[1] dy_home, obs[3] course zeroed
-python -m training.benchmark --policy trained --model ... --vecnorm ... --ablate-home
 ```
 
-**Reported:** four outcome buckets (success / soft landing / crash / timeout)
-with Wilson 95% intervals, mean landing quality and miss distance, and, for
-paired runs, the success contingency table with McNemar's exact p-value.
-Every episode's sampled airframe (`dr_params`), outcome, miss distance and
-landing quality is written to `results/benchmark_*.json` with a provenance
-block (policy, VecNormalize and config SHA-256, git SHA, UTC timestamp).
+Reported per stage: four outcomes (success / soft landing / crash / timeout) with Wilson 95%
+intervals, landing quality, miss distance, and for paired runs the contingency table and exact
+McNemar p. Every episode's airframe, outcome and launch state are saved with a provenance block
+(model, VecNormalize and config hashes, git SHA).
+
+---
+
+## Reproducing the headline result
+
+```bash
+# 1. Tune the gate on the 200 development seeds (writes results/gate_tune_v24_dev_run4.json)
+GATE_POLICY=run4 python analysis/gate_tune_v24.py tune
+
+# 2. Values are frozen in training/configs/base.yaml under gate.run4
+
+# 3. One evaluation on the benchmark seeds (writes results/gated_v24_run4_benchmark.json)
+GATE_POLICY=run4 python analysis/gate_tune_v24.py evaluate
+
+# 4. Regenerate the dashboard data
+python analysis/export_dashboard_data.py
+```
+
+On Windows PowerShell, set the variable with `$env:GATE_POLICY = "run4"` first. Without
+`GATE_POLICY` the script runs the original V22 gate.
+
+---
+
+## Curriculum stages
+
+| Stage | Max wind | Home radius | Launch height | Airframe variation |
+|---|---|---|---|---|
+| 0 Calm | 0 m/s | 25 m | 25 m | 25% of full range |
+| 1 Light wind | 3 m/s | 22 m | 23 m | 50% |
+| 2 Moderate wind | 6 m/s | 20 m | 21 m | 75% |
+| 3 Strong wind | 9 m/s | 20 m | 20 m | 100% |
+
+Wind is drawn uniformly from 0 to the maximum in a random direction, with gusts, sensor noise and
+sensor dropout that grow by stage (`env/curriculum.py`). Training advances at 35% / 30% / 15%
+rolling success (100-episode window), with 25% of episodes replayed at earlier stages. An
+optional `curriculum.stage_weights` key replaces promotion with a fixed stage mix (run 5).
+
+---
+
+## Reward
+
+```
+quality     = q_sink · q_roll · q_speed · q_alpha            (each in [0,1], graded at touchdown)
+
+r_step      = w_path · v_ground · dt
+            − w_unreach · max(0, d_home/h − L/D_usable)      (h ≥ h_barrier only, capped)
+            − w_stall · max(0, α − α_safe)
+            − w_bank  · max(0, |φ| − φ_soft)
+            − w_smooth · ‖a − a_prev‖²
+
+r_touchdown = quality · ( w_land · σ/(σ + d_home) + w_bullseye · exp(−(d_home/2)²) )
+            − (1 − quality) · w_crash
+```
+
+Weights: `training/configs/base.yaml` (`reward:`), implementation: `env/reward.py`.
+
+---
+
+## Testing
+
+```bash
+pytest tests -q          # 232 tests, about 5 minutes
+```
+
+Includes physics and sensor tests, V22 restore and reward-reference tests, gate tests (the gate
+reads only on-board inputs; development and benchmark seeds are disjoint), stage-mix and
+`--init-from` tests, and dashboard data and gated-recording tests.
+
+---
+
+## Documentation
+
+- [`docs/SPEC_V20_decisions.md`](docs/SPEC_V20_decisions.md): every decision, run, prediction
+  and result from V20 to V24, including negative results.
+- `docs/V23_horizon_tests_summary.md`, `docs/V23_gate_D_summary.md`: diagnostic summaries.
+- `docs/context_wind_problem.md`, `docs/context_v23_revision.md`: background on the wind problem.
+
+---
+
+## Status and limitations
+
+- Simulation results only. No real flights yet.
+- The simulated attitude loop holds speed from true airspeed; the real glider has no pitot and
+  would use GPS ground speed, which differs in wind. Fly first tests in calm air.
+- One evaluation of 100 launches per stage: large effects only. Stage 1–2 gains and Stage 3
+  crash differences need more seeds to confirm or rule out.
+- Mass properties beyond the fuselage and tail are estimates; weigh the aircraft before flying.
+- Calm-air skill degrades once training moves to harder stages, under every curriculum tried.
