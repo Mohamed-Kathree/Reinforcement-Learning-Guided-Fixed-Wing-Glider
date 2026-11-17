@@ -1,16 +1,17 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <title>RL Glider · RTL Dashboard</title>
+    <meta name="description" content="Return-to-launch autonomy for a hand-launched fixed-wing glider: a reinforcement-learning policy with a deterministic fallback, and its validation." />
+    <title>RL Glider</title>
+    <script>
+      // Apply the remembered appearance before first paint (App.tsx owns it after that).
+      try {
+        if (localStorage.getItem("rl-glider-theme") === "dark") document.documentElement.dataset.theme = "dark";
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

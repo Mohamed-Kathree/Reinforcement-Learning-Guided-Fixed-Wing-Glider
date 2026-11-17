@@ -34,10 +34,16 @@ export default function BaselinePanel({ onSelectEpisode }: BaselinePanelProps) {
   return (
     <section className="panel baseline-panel">
       <div className="panel-header">
-        <h2>Baseline (Deterministic RTL)</h2>
+        <div>
+          <h1>Baseline</h1>
+          <p className="page-subtitle">
+            The deterministic return-to-launch controller: the reference every result is compared with,
+            and the gated controller's fallback. Run a fresh benchmark on random launches.
+          </p>
+        </div>
         <div className="replay-controls">
-          <label>
-            Episodes/stage{" "}
+          <label className="control-label">
+            Flights per stage
             <input
               type="number"
               min={1}
@@ -47,17 +53,24 @@ export default function BaselinePanel({ onSelectEpisode }: BaselinePanelProps) {
               style={{ width: "4rem" }}
             />
           </label>
-          <button onClick={handleRun} disabled={running}>
-            {running ? "Running…" : "Run baseline"}
+          <button className="btn-primary" onClick={handleRun} disabled={running}>
+            {running ? "Running…" : "Run benchmark"}
           </button>
         </div>
       </div>
 
       {error && <p className="error-text">{error}</p>}
-      {running && <p className="placeholder">Running {nEpisodes} episodes × 4 stages — this can take a little while.</p>}
+      {running && <p className="placeholder" role="status">Flying {nEpisodes} launches × 4 stages. This can take a few minutes.</p>}
+      {!running && !result && !error && (
+        <div className="empty-state">
+          <strong>No benchmark run in this session</strong>
+          Results here use fresh random launches, so they will differ slightly from the fixed 100-seed
+          benchmark on the Validation page.
+        </div>
+      )}
 
       {result && (
-        <div className="baseline-stages">
+        <div className="surface baseline-stages">
           {result.stages.map((s) => {
             return (
               <div key={s.stage} className="baseline-stage">

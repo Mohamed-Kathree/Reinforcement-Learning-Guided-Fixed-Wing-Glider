@@ -82,10 +82,15 @@ export default function TrainingPanel() {
   return (
     <section className="panel training-panel">
       <div className="panel-header">
-        <h2>Training Monitor</h2>
+        <div>
+          <h1>Training</h1>
+          <p className="page-subtitle">
+            Live and archived PPO training runs: curriculum stage, success rate, losses and reward terms.
+          </p>
+        </div>
         <div className="replay-controls">
-          <label>
-            Total timesteps{" "}
+          <label className="control-label">
+            Timesteps
             <input
               type="number"
               min={1000}
@@ -95,7 +100,7 @@ export default function TrainingPanel() {
               style={{ width: "6rem" }}
             />
           </label>
-          <button onClick={handleStart} disabled={status?.running}>Start</button>
+          <button className="btn-primary" onClick={handleStart} disabled={status?.running}>Start run</button>
           <button onClick={handleStop} disabled={!status?.running}>Stop</button>
         </div>
       </div>
@@ -117,10 +122,10 @@ export default function TrainingPanel() {
           {runSnapshots.length > 0 && runSnapshots.some((s) => s.count > 0) ? (
             <MetricsGrid runs={runSnapshots} />
           ) : (
-            <p className="placeholder">
-              No data yet — start a training run, select a past run below, or reopen this tab
-              while one is already running.
-            </p>
+            <div className="empty-state">
+              <strong>No training data selected</strong>
+              Select a past run from the run list, or start a run to stream it live.
+            </div>
           )}
         </div>
         <div className="training-side">

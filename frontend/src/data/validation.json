@@ -1,0 +1,257 @@
+{
+ "generated_by": "analysis/export_dashboard_data.py",
+ "sources": [
+  "results/gated_v24_run4_benchmark.json",
+  "results/gated_v24_benchmark.json",
+  "results/feasibility_v24.json",
+  "training/configs/base.yaml gate.run4"
+ ],
+ "controller": {
+  "name": "Run 4 \u2013 Gated Controller",
+  "policy_checkpoint": "checkpoints_v24_run4/best_model.zip",
+  "gate": {
+   "threshold_ms": 1.5,
+   "t_earliest_s": 8.0,
+   "t_latest_s": 15.0,
+   "mode": "window"
+  }
+ },
+ "evaluation": {
+  "seed_set": "benchmark: episode_seeds(100, 0)",
+  "n_seeds": 100,
+  "evaluations": 1,
+  "tuning_seed_set": "analysis/seeds/dev_seeds.json (200 development seeds)",
+  "test": "two-sided exact McNemar, paired on seed",
+  "alpha": 0.05
+ },
+ "stages": [
+  {
+   "stage": 0,
+   "label": "Calm",
+   "max_wind_ms": 0,
+   "n": 100,
+   "gated": {
+    "success": 0.58,
+    "success_ci95": [
+     0.4821,
+     0.672
+    ],
+    "crash": 0.0,
+    "crash_ci95": [
+     0.0,
+     0.037
+    ],
+    "median_miss_m": 21.0
+   },
+   "baseline": {
+    "success": 0.27,
+    "crash": 0.0,
+    "median_miss_m": 38.0
+   },
+   "run4_alone": {
+    "success": 0.63,
+    "crash": 0.0
+   },
+   "v22_gated": {
+    "success": 0.58,
+    "crash": 0.0
+   },
+   "paired_success": {
+    "both": 15,
+    "gated_only": 43,
+    "baseline_only": 12,
+    "neither": 30,
+    "p": 3.305e-05
+   },
+   "paired_crash": {
+    "gated_only": 0,
+    "baseline_only": 0,
+    "p": 1.0
+   },
+   "handover_share_of_episodes": 0.06,
+   "baseline_share_of_flight_time": 0.0425,
+   "handover_time_median_s": 8.55,
+   "crash_timing": {
+    "total": 0,
+    "after_handover": 0,
+    "policy_only_after_window_opened": 0,
+    "before_window_opened": 0
+   },
+   "feasibility": {
+    "reachable": 100,
+    "landed_by_any_controller": 100
+   }
+  },
+  {
+   "stage": 1,
+   "label": "Light wind, up to 3 m/s",
+   "max_wind_ms": 3,
+   "n": 100,
+   "gated": {
+    "success": 0.35,
+    "success_ci95": [
+     0.2636,
+     0.4475
+    ],
+    "crash": 0.03,
+    "crash_ci95": [
+     0.0103,
+     0.0845
+    ],
+    "median_miss_m": 30.8
+   },
+   "baseline": {
+    "success": 0.25,
+    "crash": 0.0,
+    "median_miss_m": 37.8
+   },
+   "run4_alone": {
+    "success": 0.25,
+    "crash": 0.06
+   },
+   "v22_gated": {
+    "success": 0.27,
+    "crash": 0.01
+   },
+   "paired_success": {
+    "both": 8,
+    "gated_only": 27,
+    "baseline_only": 17,
+    "neither": 48,
+    "p": 0.1742
+   },
+   "paired_crash": {
+    "gated_only": 3,
+    "baseline_only": 0,
+    "p": 0.25
+   },
+   "handover_share_of_episodes": 0.52,
+   "baseline_share_of_flight_time": 0.3502,
+   "handover_time_median_s": 9.200000000000001,
+   "crash_timing": {
+    "total": 3,
+    "after_handover": 0,
+    "policy_only_after_window_opened": 3,
+    "before_window_opened": 0
+   },
+   "feasibility": {
+    "reachable": 100,
+    "landed_by_any_controller": 80
+   }
+  },
+  {
+   "stage": 2,
+   "label": "Moderate wind, up to 6 m/s",
+   "max_wind_ms": 6,
+   "n": 100,
+   "gated": {
+    "success": 0.19,
+    "success_ci95": [
+     0.1251,
+     0.2778
+    ],
+    "crash": 0.13,
+    "crash_ci95": [
+     0.0776,
+     0.2098
+    ],
+    "median_miss_m": 56.4
+   },
+   "baseline": {
+    "success": 0.11,
+    "crash": 0.06,
+    "median_miss_m": 52.2
+   },
+   "run4_alone": {
+    "success": 0.08,
+    "crash": 0.27
+   },
+   "v22_gated": {
+    "success": 0.13,
+    "crash": 0.09
+   },
+   "paired_success": {
+    "both": 3,
+    "gated_only": 16,
+    "baseline_only": 8,
+    "neither": 73,
+    "p": 0.1516
+   },
+   "paired_crash": {
+    "gated_only": 12,
+    "baseline_only": 5,
+    "p": 0.1435
+   },
+   "handover_share_of_episodes": 0.77,
+   "baseline_share_of_flight_time": 0.4856,
+   "handover_time_median_s": 8.0,
+   "crash_timing": {
+    "total": 13,
+    "after_handover": 7,
+    "policy_only_after_window_opened": 5,
+    "before_window_opened": 1
+   },
+   "feasibility": {
+    "reachable": 100,
+    "landed_by_any_controller": 49
+   }
+  },
+  {
+   "stage": 3,
+   "label": "Strong wind, up to 9 m/s",
+   "max_wind_ms": 9,
+   "n": 100,
+   "gated": {
+    "success": 0.07,
+    "success_ci95": [
+     0.0343,
+     0.1375
+    ],
+    "crash": 0.47,
+    "crash_ci95": [
+     0.3751,
+     0.5671
+    ],
+    "median_miss_m": 67.6
+   },
+   "baseline": {
+    "success": 0.08,
+    "crash": 0.39,
+    "median_miss_m": 64.4
+   },
+   "run4_alone": {
+    "success": 0.01,
+    "crash": 0.54
+   },
+   "v22_gated": {
+    "success": 0.06,
+    "crash": 0.36
+   },
+   "paired_success": {
+    "both": 2,
+    "gated_only": 5,
+    "baseline_only": 6,
+    "neither": 87,
+    "p": 1.0
+   },
+   "paired_crash": {
+    "gated_only": 19,
+    "baseline_only": 11,
+    "p": 0.2005
+   },
+   "handover_share_of_episodes": 0.79,
+   "baseline_share_of_flight_time": 0.5347,
+   "handover_time_median_s": 8.0,
+   "crash_timing": {
+    "total": 47,
+    "after_handover": 35,
+    "policy_only_after_window_opened": 9,
+    "before_window_opened": 3
+   },
+   "feasibility": {
+    "reachable": 97,
+    "landed_by_any_controller": 18
+   }
+  }
+ ]
+}

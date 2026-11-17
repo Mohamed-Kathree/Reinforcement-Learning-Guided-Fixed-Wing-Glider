@@ -1,3 +1,7 @@
+/* index.css -- reset and design tokens. Component styles live in App.css.
+   Light is the default appearance; [data-theme="dark"] on <html> switches
+   (App.tsx's theme toggle, remembered per browser). */
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -6,19 +10,142 @@ html, body, #root {
   height: 100%;
 }
 
+:root {
+  /* Surfaces */
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-alt: #fafafc;
+  --surface-sunken: #f0f0f3;
+  --sidebar-bg: rgba(245, 245, 247, 0.82);
+  --header-bg: rgba(245, 245, 247, 0.78);
+  --border: #e3e3e8;
+  --border-strong: #d2d2d7;
+
+  /* Text (all AA on --surface and --bg) */
+  --text: #1d1d1f;
+  --text-dim: #48484c;
+  --text-faint: #6e6e73;
+
+  /* Accent: the selected controller, links, focus */
+  --accent: #0066cc;
+  --accent-fill: #0071e3;
+  --accent-soft: rgba(0, 113, 227, 0.09);
+  --accent-ring: rgba(0, 113, 227, 0.32);
+
+  /* Status: text-safe colour + fill colour for marks */
+  --success: #1d7a35;
+  --success-fill: #34a853;
+  --warning: #a35200;
+  --warning-fill: #f29d0c;
+  --danger: #c4161c;
+  --danger-fill: #ef4136;
+  --neutral-fill: #8e8e93;
+
+  /* Chart series */
+  --series-selected: #0071e3;
+  --series-baseline: #9a9aa0;
+  --series-v22: #5e5ce6;
+  --series-alone: #8cbcf2;
+  --chart-grid: #ececf0;
+  --chart-axis: #c7c7cc;
+
+  /* Shape and depth */
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-xs: 6px;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 1px rgba(0, 0, 0, 0.02);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.05);
+
+  /* Type */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI",
+    system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display",
+    "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --text-2xs: 0.6875rem;  /* 11 */
+  --text-xs: 0.75rem;     /* 12 */
+  --text-sm: 0.8125rem;   /* 13 */
+  --text-base: 0.9375rem; /* 15 */
+  --text-md: 1.0625rem;   /* 17 */
+  --text-lg: 1.375rem;    /* 22 */
+  --text-xl: 1.75rem;     /* 28 */
+  --text-2xl: 2.125rem;   /* 34 */
+
+  /* Spacing: 4 px base */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-alt: #232325;
+  --surface-sunken: #2c2c2e;
+  --sidebar-bg: rgba(18, 18, 20, 0.82);
+  --header-bg: rgba(0, 0, 0, 0.72);
+  --border: #2f2f32;
+  --border-strong: #3a3a3c;
+
+  --text: #f5f5f7;
+  --text-dim: #c7c7cc;
+  --text-faint: #98989d;
+
+  --accent: #4ba3ff;
+  --accent-fill: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.16);
+  --accent-ring: rgba(10, 132, 255, 0.45);
+
+  --success: #4cd472;
+  --success-fill: #30d158;
+  --warning: #ffb340;
+  --warning-fill: #ff9f0a;
+  --danger: #ff6961;
+  --danger-fill: #ff453a;
+  --neutral-fill: #8e8e93;
+
+  --series-selected: #0a84ff;
+  --series-baseline: #8e8e93;
+  --series-v22: #7d7aff;
+  --series-alone: #5a8fc8;
+  --chart-grid: #2c2c2e;
+  --chart-axis: #48484a;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 6px 20px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-base);
+  line-height: 1.5;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color-scheme: dark;
 }
 
-h1, h2, h3, p {
+h1, h2, h3, h4, p {
   margin: 0;
 }
 
 code {
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+button, select, input {
+  font-family: inherit;
 }

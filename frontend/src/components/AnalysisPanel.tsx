@@ -39,16 +39,22 @@ export default function AnalysisPanel({ onSelectEpisode }: AnalysisPanelProps) {
   return (
     <section className="panel analysis-panel">
       <div className="panel-header">
-        <h2>Analysis</h2>
+        <div>
+          <h1>Analysis</h1>
+          <p className="page-subtitle">
+            Every recorded flight in the archive, across controllers: where it touched down, and the
+            failures worth replaying.
+          </p>
+        </div>
       </div>
 
       <div className="home-section">
-        <h3 className="viewer-label">Touchdown scatter</h3>
+        <h2>Touchdown scatter</h2>
         <TouchdownScatter summaries={summaries} error={error} />
       </div>
 
       <div className="home-section">
-        <h3 className="viewer-label">Failure gallery</h3>
+        <h2>Failure gallery</h2>
         <FailureGallery summaries={summaries} error={error} onSelectEpisode={onSelectEpisode} />
       </div>
     </section>

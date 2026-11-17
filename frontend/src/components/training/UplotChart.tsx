@@ -17,6 +17,11 @@ import type { Point } from "./lttb";
 import type { StageBand } from "./useMetricsStream";
 import { stageBandsPlugin } from "./stageBandsPlugin";
 
+// Canvas cannot read CSS variables, so axis and grid use neutral greys that
+// stay legible in both the light and dark appearance.
+const AXIS_COLOR = "#8e8e93";
+const GRID_COLOR = "rgba(142, 142, 147, 0.2)";
+
 // One shared sync group so every chart in the grid shares a single cursor/
 // zoom (§B3's "shared cursor synchronised across every chart").
 const SYNC_KEY = "rl-glider-training-charts";
@@ -52,10 +57,10 @@ export default function UplotChart({ series, stageBands, height = 180, valueForm
       legend: { show: true },
       scales: { x: { time: false } },
       axes: [
-        { stroke: "#a7a8b3", grid: { stroke: "#26262f", width: 1 } },
+        { stroke: AXIS_COLOR, grid: { stroke: GRID_COLOR, width: 1 } },
         {
-          stroke: "#a7a8b3",
-          grid: { stroke: "#26262f", width: 1 },
+          stroke: AXIS_COLOR,
+          grid: { stroke: GRID_COLOR, width: 1 },
           values: (_u, ticks) => ticks.map((t) => (valueFormatter ? valueFormatter(t) : String(t))),
         },
       ],

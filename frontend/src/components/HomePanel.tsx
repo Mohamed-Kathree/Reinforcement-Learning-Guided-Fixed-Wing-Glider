@@ -1,36 +1,40 @@
 // HomePanel.tsx
 // =============
-// V16 Phase C1 §C1.7 -- fixes D5 (the old version was a static text wall,
-// the weakest possible first impression). Hero is a full-bleed looping 3D
-// ground track of the best recently recorded episode (FlightScene in
-// autoplay mode); everything the old static version had is kept below the
-// fold, restyled, not deleted -- it's real reference material, just no
-// longer the first thing a visitor sees.
+// Overview. Says, in this order: what the system does, what the validation
+// shows, and what it does not show. The hero loops the best of the most
+// recent recorded flights (FlightScene autoplay). Headline figures come from
+// src/data/validation.ts, the same source as the Validation page.
 //
 // "Best" is picked from the most recent RECENT_SCAN_LIMIT recordings, not
-// the whole data/episodes/ archive (837 files at last count) -- fetching
-// every trajectory client-side just to rank them isn't viable, and this
-// project has its own standing warning about mixing pre- and post-fix
-// recordings (see the verification checklist), so scanning only the most
-// recent ones sidesteps both problems at once.
+// the whole data/episodes/ archive (800+ files): fetching every trajectory
+// client-side just to rank them isn't viable, and recent recordings avoid
+// mixing pre- and post-fix data.
 import { useEffect, useState } from "react";
 import FlightScene from "./FlightScene";
 import type { Trajectory } from "../types";
+import type { Tab } from "../useHashRoute";
+import { controllerShortLabel } from "../controllers";
+import { CONTROLLER_NAME, GATE, STAGES, formatP, pct } from "../data/validation";
+import { IconAlert, IconArrowRight, IconCheck, IconInfo } from "../icons";
 
 const API_BASE = "http://localhost:8000";
 const RECENT_SCAN_LIMIT = 20;
 
 function pickBest(trajectories: Trajectory[]): Trajectory | null {
   if (trajectories.length === 0) return null;
-  const successes = trajectories.filter((t) => t.meta.outcome === "success");
-  const softLandings = trajectories.filter((t) => t.meta.outcome === "soft_landing");
-  const pool = successes.length > 0 ? successes : softLandings.length > 0 ? softLandings : trajectories;
+  // Prefer flights of the selected controller, then fall back to any.
+  const gated = trajectories.filter((t) => t.meta.controller === "gated");
+  const pool0 = gated.length > 0 ? gated : trajectories;
+  const successes = pool0.filter((t) => t.meta.outcome === "success");
+  const softLandings = pool0.filter((t) => t.meta.outcome === "soft_landing");
+  const pool = successes.length > 0 ? successes : softLandings.length > 0 ? softLandings : pool0;
   return pool.reduce((best, t) => (t.meta.quality > best.meta.quality ? t : best));
 }
 
-export default function HomePanel() {
-  // undefined = still loading, null = nothing to show (empty archive or a
-  // fetch error), a Trajectory once one's picked.
+const [s0, s1, s2, s3] = STAGES;
+
+export default function HomePanel({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+  // undefined = loading, null = nothing to show (empty archive or fetch error)
   const [best, setBest] = useState<Trajectory | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +44,7 @@ export default function HomePanel() {
       try {
         const idsRes = await fetch(`${API_BASE}/api/episode`);
         if (!idsRes.ok) throw new Error(`${idsRes.status} ${idsRes.statusText}`);
-        const ids = (await idsRes.json()) as string[]; // already newest-first
+        const ids = (await idsRes.json()) as string[]; // newest first
         const recent = ids.slice(0, RECENT_SCAN_LIMIT);
         const trajectories = await Promise.all(
           recent.map((id) =>
@@ -66,22 +70,34 @@ export default function HomePanel() {
 
   return (
     <div className="home">
-      <section className="home-hero">
+      <section className="home-intro">
+        <p className="eyebrow">COS 731/732 Honours Project · University of the Western Cape</p>
+        <h1>Return-to-launch autonomy for a hand-launched glider</h1>
+        <p className="lede">
+          A fixed-wing glider with no motor must find its own way back to where it was launched and land
+          there, using only on-board sensors. The selected controller, <strong>{CONTROLLER_NAME}</strong>,
+          lets a reinforcement-learning policy fly and hands control to a deterministic baseline when the
+          on-board wind estimate says conditions are beyond it.
+        </p>
+      </section>
+
+      <section className="home-hero" aria-label="Recorded flight">
         {best === undefined ? (
-          <div className="home-hero-loading placeholder">Loading recent flight data…</div>
+          <div className="home-hero-loading" role="status">Loading recent flight data…</div>
         ) : best === null ? (
-          <div className="home-hero-empty placeholder">
+          <div className="home-hero-empty">
             {error
-              ? `Could not load recorded episode data (${error}).`
-              : "No flights recorded yet — record one from the Baseline or Flight Replay tab to see it here."}
+              ? `Recorded flights are unavailable (${error}). Start the backend to see one here.`
+              : "No flights recorded yet. Record one from Flight Replay to see it here."}
           </div>
         ) : (
           <>
             <FlightScene frames={best.frames} currentIndex={0} rHome={best.meta.R_home} autoplay />
+            <div className="home-hero-caption">Recorded simulation flight</div>
             <div className="home-hero-overlay">
               <div className="home-hero-stat">
                 <span>Controller</span>
-                <strong>{best.meta.controller}</strong>
+                <strong>{controllerShortLabel(best.meta.controller)}</strong>
               </div>
               <div className="home-hero-stat">
                 <span>Stage</span>
@@ -92,81 +108,179 @@ export default function HomePanel() {
                 <strong>{best.meta.outcome.replace("_", " ")}</strong>
               </div>
               <div className="home-hero-stat">
-                <span>Quality</span>
+                <span>Landing quality</span>
                 <strong>{(best.meta.quality * 100).toFixed(0)}%</strong>
               </div>
               <div className="home-hero-stat">
-                <span>R_home</span>
-                <strong>{best.meta.R_home.toFixed(0)} m</strong>
+                <span>Miss distance</span>
+                <strong>{best.meta.final_dist_home.toFixed(0)} m</strong>
               </div>
             </div>
           </>
         )}
       </section>
 
-      <section className="home-intro">
-        <p className="eyebrow">COS 731/732 Honours Project · University of the Western Cape</p>
-        <h1>RL-Guided Return-to-Launch for a Hand-Launched Fixed-Wing Glider</h1>
-        <p className="lede">
-          A 1.1&nbsp;kg hand-launched glider that, after losing power, must find its own way back
-          to the launch point using only onboard sensors. A PPO reinforcement-learning policy is
-          trained entirely in a physics-validated JSBSim simulation and is designed to transfer to
-          a Raspberry Pi 5 / ESP32 hardware stack without retuning.
-        </p>
-      </section>
-
-      <section className="home-section">
-        <h2>The problem</h2>
-        <p>
-          Hand-launched gliders face highly variable launch energy and outdoor wind disturbances
-          that make hand-tuned guidance brittle. The task is fundamentally energy management: the
-          glider can only trade altitude for airspeed while continuously losing energy to drag, so
-          the return-to-launch policy must optimise a flight path home while respecting hard safety
-          margins on stall angle, bank angle, and height above ground.
-        </p>
-      </section>
-
-      <section className="home-section">
-        <h2>Control architecture</h2>
+      <section className="home-section" aria-labelledby="findings-h">
+        <h2 id="findings-h">What the validation shows</h2>
         <p className="section-note">
-          Three layers, separated by timing rate and responsibility, so safety-critical
-          stabilisation never depends on the learned policy.
+          One evaluation on 100 paired simulated launches per wind stage, against the deterministic baseline.
         </p>
-        <div className="arch-stack">
+        <div className="summary-grid">
+          <div className="surface summary-item">
+            <span className="badge badge-success"><IconCheck width={12} height={12} aria-hidden="true" />Statistically significant</span>
+            <div className="summary-figure">
+              {pct(s0.gated.success)}<small>vs {pct(s0.baseline.success)} baseline</small>
+            </div>
+            <h3>Calm air: more than double</h3>
+            <p>Return-to-launch success in calm air, with no crashes (p {formatP(s0.paired_success.p)}).</p>
+          </div>
+          <div className="surface summary-item">
+            <span className="badge badge-warning"><IconInfo width={12} height={12} aria-hidden="true" />Not significant</span>
+            <div className="summary-figure">
+              {pct(s1.gated.success)} · {pct(s2.gated.success)}
+              <small>vs {pct(s1.baseline.success)} · {pct(s2.baseline.success)}</small>
+            </div>
+            <h3>Moderate wind: encouraging</h3>
+            <p>
+              Highest numerical success of any controller tested at Stages 1 and 2, but too few launches to
+              rule out chance (p {formatP(s1.paired_success.p)} and {formatP(s2.paired_success.p)}).
+            </p>
+          </div>
+          <div className="surface summary-item">
+            <span className="badge badge-danger"><IconAlert width={12} height={12} aria-hidden="true" />Limitation</span>
+            <div className="summary-figure">
+              {pct(s3.gated.crash)}<small>crashes vs {pct(s3.baseline.crash)}</small>
+            </div>
+            <h3>Strong wind: safety not established</h3>
+            <p>
+              At up to 9 m/s the gated controller crashes more often than the baseline (not significant,
+              p {formatP(s3.paired_crash.p)}) and does not land more often.
+            </p>
+          </div>
+        </div>
+        <div className="link-row">
+          <button className="btn-plain" onClick={() => onNavigate("validation")}>
+            Full validation results <IconArrowRight width={14} height={14} aria-hidden="true" />
+          </button>
+        </div>
+      </section>
+
+      <section className="home-section" aria-labelledby="arch-h">
+        <h2 id="arch-h">Control architecture</h2>
+        <p className="section-note">
+          Layers separated by rate and responsibility, so stabilisation never depends on the learned policy.
+        </p>
+        <div className="surface arch-stack">
+          <div className="arch-layer arch-layer-gate">
+            <div className="arch-layer-head">
+              <span className="arch-rate">20 Hz</span>
+              <strong>Wind gate</strong>
+              <span className="arch-target">on-board inputs only</span>
+            </div>
+            <p>
+              Estimates the wind from GPS ground speed and heading. Between {GATE.t_earliest_s} and{" "}
+              {GATE.t_latest_s} s after launch, the first estimate above {GATE.threshold_ms} m/s hands control
+              to the baseline for the rest of the flight.
+            </p>
+          </div>
           <div className="arch-layer">
             <div className="arch-layer-head">
               <span className="arch-rate">20 Hz</span>
-              <strong>RL Policy</strong>
-              <span className="arch-target">Raspberry Pi 5</span>
+              <strong>Guidance: Run 4 policy or baseline</strong>
+              <span className="arch-target">Raspberry Pi 5 (target)</span>
             </div>
-            <p>11-element noisy observation in, <code>[bank_cmd, speed_cmd]</code> out. PPO (Stable-Baselines3).</p>
+            <p>
+              PPO policy (Stable-Baselines3, 128 × 128 MLP) on 8 stacked frames of a 12-value observation, or
+              the deterministic baseline. Both output <code>[bank, airspeed]</code> commands.
+            </p>
           </div>
-          <div className="arch-arrow">↓</div>
           <div className="arch-layer">
             <div className="arch-layer-head">
               <span className="arch-rate">200 Hz</span>
-              <strong>Attitude Controller</strong>
+              <strong>Attitude controller</strong>
               <span className="arch-target">ESP32 (simulated)</span>
             </div>
-            <p>Roll PD + speed-scheduled pitch + coordinated rudder. Safety shield clips bank and pulls up below minimum AGL.</p>
+            <p>Roll PD, speed-scheduled pitch and coordinated rudder. A safety shield limits bank and pulls up near the ground.</p>
           </div>
-          <div className="arch-arrow">↓</div>
           <div className="arch-layer">
             <div className="arch-layer-head">
               <span className="arch-rate">200 Hz</span>
-              <strong>JSBSim Physics</strong>
-              <span className="arch-target">6-DOF FDM</span>
+              <strong>JSBSim physics</strong>
+              <span className="arch-target">6-DOF flight model</span>
             </div>
-            <p>Validated aero tables, actuator lag/rate limits, wind = mean NED + Ornstein–Uhlenbeck gusts.</p>
+            <p>Validated aerodynamics, actuator lag and rate limits, mean wind plus Ornstein–Uhlenbeck gusts.</p>
           </div>
         </div>
       </section>
 
-      <section className="home-section">
-        <h2>Physics validation</h2>
+      <section className="home-section" aria-labelledby="problem-h">
+        <h2 id="problem-h">The problem</h2>
+        <p>
+          With no thrust and no airbrakes, a hand-launched glider gets one attempt. A per-launch
+          feasibility analysis shows home is within gliding reach on {STAGES.reduce((a, s) => a + s.feasibility.reachable, 0)} of
+          400 benchmark launches, usually with several times the energy needed. The difficulty is shedding
+          that surplus precisely enough to touch down gently near the launch point, especially in gusts.
+        </p>
+      </section>
+
+      <section className="home-section home-grid">
+        <div className="surface">
+          <h2>Aircraft and sensors</h2>
+          <ul className="spec-list">
+            <li><span>Flying mass</span><strong>≈ 1.64 kg (est. 1.50–1.80)</strong></li>
+            <li><span>Wingspan / area</span><strong>2.0 m / 0.38 m²</strong></li>
+            <li><span>Glide ratio at trim</span><strong>≈ 14</strong></li>
+            <li><span>Launch</span><strong>by hand, 20–25 m height</strong></li>
+            <li><span>GPS</span><strong>5 Hz</strong></li>
+            <li><span>Barometer</span><strong>25 Hz</strong></li>
+            <li><span>Ground sensing</span><strong>ultrasonic, 20 Hz, &lt; 4.5 m</strong></li>
+            <li><span>Airspeed sensor</span><strong>none (no pitot)</strong></li>
+          </ul>
+        </div>
+        <div className="surface">
+          <h2>Policy and training</h2>
+          <ul className="spec-list">
+            <li><span>Algorithm</span><strong>PPO, MLP 128 × 128</strong></li>
+            <li><span>Observation</span><strong>12 values × 8 stacked frames</strong></li>
+            <li><span>Action</span><strong>bank ± 45°, airspeed 9.5–16 m/s</strong></li>
+            <li><span>Discount γ / GAE λ</span><strong>0.999 / 0.95</strong></li>
+            <li><span>Rollout / batch</span><strong>8 envs × 2048 / 256</strong></li>
+            <li><span>Curriculum advance</span><strong>35 / 30 / 15% rolling success</strong></li>
+            <li><span>Run 4 checkpoint</span><strong>best model, 15.5M steps</strong></li>
+          </ul>
+        </div>
+      </section>
+
+      <section className="home-section" aria-labelledby="curr-h">
+        <h2 id="curr-h">Wind stages</h2>
         <p className="section-note">
-          Five correctness gates must pass before any training run is permitted — each targets a
-          distinct class of simulation error. Run live from the Validation tab.
+          Four stages of increasing wind, gusts, sensor noise and airframe variation. Validation results are
+          reported per stage.
+        </p>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Stage</th>
+                <th className="num">Max wind</th>
+                <th className="num">Home radius</th>
+                <th className="num">Launch height</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>0 · Calm</td><td className="num">0 m/s</td><td className="num">25 m</td><td className="num">25 m</td></tr>
+              <tr><td>1 · Light wind</td><td className="num">3 m/s</td><td className="num">22 m</td><td className="num">23 m</td></tr>
+              <tr><td>2 · Moderate wind</td><td className="num">6 m/s</td><td className="num">20 m</td><td className="num">21 m</td></tr>
+              <tr><td>3 · Strong wind, full variation</td><td className="num">9 m/s</td><td className="num">20 m</td><td className="num">20 m</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="home-section" aria-labelledby="gates-h">
+        <h2 id="gates-h">Physics validation</h2>
+        <p className="section-note">
+          Five correctness gates must pass before any training run. Run them live from the Validation page.
         </p>
         <div className="table-wrap">
           <table>
@@ -184,62 +298,8 @@ export default function HomePanel() {
         </div>
       </section>
 
-      <section className="home-section home-grid">
-        <div>
-          <h2>Aircraft &amp; sensors</h2>
-          <ul className="spec-list">
-            <li><span>Mass</span><strong>1.1 kg</strong></li>
-            <li><span>Wingspan</span><strong>2.0 m</strong></li>
-            <li><span>Wing area</span><strong>0.38 m²</strong></li>
-            <li><span>Glide ratio (L/D)</span><strong>≈ 12–14</strong></li>
-            <li><span>Launch</span><strong>hand/ground, ~15–25 m peak alt.</strong></li>
-            <li><span>GPS</span><strong>NEO-6M, ~5 Hz, ~2.5 m CEP</strong></li>
-            <li><span>Ground sensing</span><strong>ultrasonic, 20 Hz, valid &lt; 4.5 m</strong></li>
-            <li><span>No pitot, no LiDAR</span><strong>dropped from earlier design</strong></li>
-          </ul>
-        </div>
-        <div>
-          <h2>Policy &amp; training</h2>
-          <ul className="spec-list">
-            <li><span>Algorithm</span><strong>PPO, MlpPolicy [128, 128]</strong></li>
-            <li><span>Observation</span><strong>11-element, float32</strong></li>
-            <li><span>Action</span><strong>[bank ±45°, speed 5–13 m/s]</strong></li>
-            <li><span>Parallel envs</span><strong>8 × SubprocVecEnv</strong></li>
-            <li><span>Rollout / batch</span><strong>2048 / 256</strong></li>
-            <li><span>Discount γ</span><strong>0.999</strong></li>
-            {/* Verified against training/configs/base.yaml + env/curriculum.py
-                during V16 Phase A (Gate A) -- the previous "80% / 100
-                episodes" here was stale. */}
-            <li><span>Curriculum advance</span><strong>60% success / 50-episode window</strong></li>
-            <li><span>Target run</span><strong>20M timesteps</strong></li>
-          </ul>
-        </div>
-      </section>
-
-      <section className="home-section">
-        <h2>Curriculum</h2>
-        <p className="section-note">
-          Four stages of increasing wind, sensor noise, and aerodynamic domain randomisation. Launch
-          altitude and home radius are hardware-derived, not arbitrary — see the Baseline tab for
-          measured performance per stage.
-        </p>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Stage</th><th>Max wind</th><th>Home radius</th><th>Launch alt.</th></tr>
-            </thead>
-            <tbody>
-              <tr><td>0 — calm</td><td>0 m/s</td><td>25 m</td><td>25 m</td></tr>
-              <tr><td>1 — light wind</td><td>3 m/s</td><td>22 m</td><td>23 m</td></tr>
-              <tr><td>2 — moderate</td><td>6 m/s</td><td>20 m</td><td>21 m</td></tr>
-              <tr><td>3 — full domain rand.</td><td>9 m/s</td><td>20 m</td><td>20 m</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="home-section">
-        <h2>Reward shaping</h2>
+      <section className="home-section" aria-labelledby="reward-h">
+        <h2 id="reward-h">Reward</h2>
         <pre className="reward-formula">{`quality  =  q_sink · q_roll · q_speed · q_alpha          (each ∈ [0,1], graded at touchdown)
 
 r_step   =  w_path  · v_ground · dt

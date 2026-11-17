@@ -79,9 +79,22 @@ class FlightConditions(BaseModel):
     launch_offset_max_m: float
 
 
+class GateRecord(BaseModel):
+    """What the wind gate did in one 'gated' episode (baseline/wind_gated.py
+    WindGatedActor.episode_record()). None for every other controller."""
+    mode: str
+    handed_over: bool
+    handover_time_s: Optional[float] = None
+    wind_est_at_decision_ms: Optional[float] = None
+    baseline_share_of_flight: float = 0.0
+    steps: int = 0
+
+
 class TrajectoryMeta(BaseModel):
     stage: int
-    controller: Literal["baseline", "rl"]
+    # "gated" = the selected controller: run 4's best policy behind the
+    # window wind gate, deterministic baseline as the fallback.
+    controller: Literal["baseline", "rl", "gated"]
     outcome: Outcome
     R_home: float
     alt0: float
@@ -98,6 +111,7 @@ class TrajectoryMeta(BaseModel):
         wind_speed=0.0, gust_intensity=0.0, sensor_noise=0.0, dropout_prob=0.0,
         launch_offset_min_m=0.0, launch_offset_max_m=0.0,
     )
+    gate: Optional[GateRecord] = None   # set for controller == "gated" only
 
 
 class ControlSurfaces(BaseModel):

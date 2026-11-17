@@ -20,7 +20,8 @@ const METRIC_LABELS: Record<MetricKey, string> = {
   value_loss: "Value loss",
 };
 
-const RUN_COLORS = ["#22d3ee", "#4caf50", "#e0a930", "#f4543c", "#d946ef", "#4dd0e1"];
+// Legible on both light and dark surfaces.
+const RUN_COLORS = ["#0a84ff", "#30a14e", "#e08600", "#e5383b", "#8e5bd8", "#1fa2b8"];
 
 function formatValue(key: MetricKey, v: number | null): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";

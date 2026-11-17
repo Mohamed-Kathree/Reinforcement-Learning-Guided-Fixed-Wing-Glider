@@ -31,6 +31,11 @@ DT_RL = 0.050
 # is reused after that, instead of re-reading the checkpoint files on every
 # /api/episode/record call.
 _rl_actor = None
+_gated_actor = None
+
+# The selected controller (SPEC V24): run 4's best policy, gated by the
+# window wind gate frozen in training/configs/base.yaml gate.run4.window.
+GATED_POLICY = ("checkpoints_v24_run4", "best_model.zip", "vecnormalize_best.pkl")
 
 
 def _load_rl_policy():
@@ -58,6 +63,32 @@ def _load_rl_policy():
 
     _rl_actor = PolicyActor(model_path, vecnorm_path)
     return _rl_actor
+
+
+def _load_gated_actor():
+    """Run 4's best policy behind the window wind gate, once.
+
+    The gate reads only the observation vector (baseline/wind_gate.py), so
+    it behaves here exactly as in analysis/gate_tune_v24.py's evaluation.
+    """
+    global _gated_actor
+    if _gated_actor is not None:
+        return _gated_actor
+
+    from baseline.wind_gated import WindGatedActor
+    from training.benchmark import PolicyActor, load_config
+
+    folder, model_name, vecnorm_name = GATED_POLICY
+    model_path = config.GLIDER_REPO_ROOT / folder / model_name
+    vecnorm_path = config.GLIDER_REPO_ROOT / folder / vecnorm_name
+    if not model_path.is_file() or not vecnorm_path.is_file():
+        raise NotImplementedError(
+            f"Gated replay needs {model_name} + {vecnorm_name} under {folder}/ -- "
+            f"not found at {model_path.parent}.")
+    gate_cfg = load_config()["gate"]["run4"]
+    _gated_actor = WindGatedActor.from_config(PolicyActor(model_path, vecnorm_path),
+                                              gate_cfg, "window")
+    return _gated_actor
 
 
 def _extract_true_state(env) -> dict:
@@ -102,7 +133,9 @@ def record_episode(
     """Run one episode and record its full TRUE-state trajectory to disk.
 
     Args:
-        controller : "baseline" (DeterministicRTL) or "rl" (the tracked
+        controller : "gated" (the selected controller: run 4's best policy
+                     behind the window wind gate, baseline fallback),
+                     "baseline" (DeterministicRTL) or "rl" (the tracked
                      deployment/best_model/ checkpoint -- the 20M-step
                      reward-fix retrain's best_model.zip, evaluated in
                      Rl-Glider-Context-File-Code-V14-RewardFix-Retrain-Final-Outcome.md).
@@ -130,8 +163,8 @@ def record_episode(
     Returns:
         The recorded Trajectory (also written to config.EPISODES_DIR).
     """
-    if controller not in ("baseline", "rl"):
-        raise ValueError(f"controller must be 'baseline' or 'rl'; got {controller!r}")
+    if controller not in ("baseline", "rl", "gated"):
+        raise ValueError(f"controller must be 'baseline', 'rl' or 'gated'; got {controller!r}")
     if not 0 <= stage < 4:
         raise ValueError(f"stage must be in [0, 3]; got {stage}")
     for name, value in (("wind_speed", wind_speed), ("gust_intensity", gust_intensity),
@@ -180,7 +213,7 @@ def record_episode(
         # Stepping the raw GliderEnv here (for TRUE-state recording, see
         # module docstring); the actor stacks and normalises observations
         # the way training did.
-        rl_actor = _load_rl_policy()
+        rl_actor = _load_gated_actor() if controller == "gated" else _load_rl_policy()
         rl_actor.reset(seed)
         act = rl_actor.act
         # The policy's own observation version (V20-V22 deployment models are
@@ -252,6 +285,11 @@ def record_episode(
     quality = float(info.get("quality", 0.0))
     final_dist_home = float(info.get("dist_home", 0.0))
 
+    gate_record = None
+    if controller == "gated":
+        from .schemas import GateRecord
+        gate_record = GateRecord(**rl_actor.episode_record())
+
     episode_id = f"{controller}-s{stage}-{uuid.uuid4().hex[:8]}"
     trajectory = Trajectory(
         episode_id=episode_id,
@@ -274,6 +312,7 @@ def record_episode(
                 launch_offset_min_m=float(stage_cfg.get("launch_offset_min_m", 0.0)),
                 launch_offset_max_m=float(stage_cfg.get("launch_offset_max_m", 0.0)),
             ),
+            gate=gate_record,
         ),
         home_ned=[0.0, 0.0, 0.0],
         frames=frames,

@@ -15,7 +15,7 @@ const STAGE_COLORS = [
   "rgba(224, 169, 48, 0.06)",
   "rgba(244, 84, 60, 0.06)",
 ];
-const RULE_COLOR = "rgba(255, 255, 255, 0.18)";
+const RULE_COLOR = "rgba(142, 142, 147, 0.45)";
 
 export function stageBandsPlugin(getBands: () => StageBand[]): uPlot.Plugin {
   return {

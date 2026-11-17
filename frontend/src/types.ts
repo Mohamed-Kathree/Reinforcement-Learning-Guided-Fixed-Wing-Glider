@@ -39,7 +39,19 @@ export interface TestRunResult {
 // Flight trajectory -- the core data contract (Milestones 2-4)
 // ---------------------------------------------------------------------------
 
-export type Controller = "baseline" | "rl";
+// "gated" is the selected controller: run 4's policy behind the window wind
+// gate, with the deterministic baseline as fallback (backend/recorder.py).
+export type Controller = "baseline" | "rl" | "gated";
+
+// What the wind gate did in one "gated" episode; absent for other controllers.
+export interface GateRecord {
+  mode: string;
+  handed_over: boolean;
+  handover_time_s: number | null;
+  wind_est_at_decision_ms: number | null;
+  baseline_share_of_flight: number;
+  steps: number;
+}
 
 // "soft_landing" reflects the Phase 4 precision-landing task (env/reward.py):
 // dist_home < R_home no longer ends the episode by itself, and most episodes
@@ -73,6 +85,7 @@ export interface TrajectoryMeta {
   quality: number;           // landing-quality grade [0,1]; 0 for a real timeout
   final_dist_home: number;   // dist_home (m) at the final frame
   conditions: FlightConditions;
+  gate?: GateRecord | null;
 }
 
 export interface ControlSurfaces {

@@ -4,6 +4,7 @@ import InstrumentCluster from "./InstrumentCluster";
 import AnnunciatorRow from "./AnnunciatorRow";
 import { kinematicsAt } from "../kinematics";
 import type { Controller, Trajectory } from "../types";
+import { CONTROLLER_OPTIONS, DEFAULT_CONTROLLER, controllerLabel, controllerShortLabel } from "../controllers";
 
 const API_BASE = "http://localhost:8000";
 
@@ -21,7 +22,7 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [stage, setStage] = useState(0);
-  const [controller, setController] = useState<Controller>("baseline");
+  const [controller, setController] = useState<Controller>(DEFAULT_CONTROLLER);
   // V16 Phase D §D2 -- optional matched seed, so a baseline/RL pair can be
   // recorded on the same seed and compared apples-to-apples in Compare mode
   // (which already handles any episode id, including rl-*, with no changes
@@ -128,37 +129,52 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
 
   return (
     <div className="episode-viewer">
-      <div className="panel-header">
-        {label && <h3 className="viewer-label">{label}</h3>}
-        <div className="replay-controls">
+      {label && <h3 className="viewer-label" style={{ marginBottom: "var(--space-2)" }}>Viewer {label}</h3>}
+      <div className="surface replay-toolbar">
+        <label className="toolbar-field">
+          Controller
+          <select value={controller} onChange={(e) => setController(e.target.value as Controller)}>
+            {CONTROLLER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="toolbar-field">
+          Wind stage
           <select value={stage} onChange={(e) => setStage(Number(e.target.value))}>
             {[0, 1, 2, 3].map((s) => (
               <option key={s} value={s}>Stage {s}</option>
             ))}
           </select>
-          <select value={controller} onChange={(e) => setController(e.target.value as Controller)}>
-            <option value="baseline">Baseline (DeterministicRTL)</option>
-            <option value="rl">RL policy</option>
-          </select>
+        </label>
+        <label className="toolbar-field">
+          Seed
           <input
             type="number"
-            placeholder="seed (random)"
-            title="Seed (optional) -- set the same value on both A and B in Compare mode to record a matched baseline/RL pair"
+            placeholder="Random"
+            title="Optional. Use the same seed in both viewers in Compare mode to fly two controllers on an identical launch."
             value={seedInput}
             onChange={(e) => setSeedInput(e.target.value)}
             style={{ width: "8rem" }}
           />
-          <button onClick={handleRecord} disabled={recording}>
-            {recording ? "Recording…" : `Record ${controller}`}
-          </button>
-          <select value={selected ?? ""} onChange={(e) => setSelected(e.target.value)}>
-            {episodeIds.length === 0 && <option value="">No recorded episodes</option>}
+        </label>
+        <button className="btn-primary" onClick={handleRecord} disabled={recording}>
+          {recording ? "Recording…" : "Record flight"}
+        </button>
+        <div className="toolbar-spacer" />
+        <label className="toolbar-field">
+          Recorded flight
+          <select value={selected ?? ""} onChange={(e) => setSelected(e.target.value)} style={{ maxWidth: "16rem" }}>
+            {episodeIds.length === 0 && <option value="">No recorded flights</option>}
             {episodeIds.map((id) => (
               <option key={id} value={id}>{id}</option>
             ))}
           </select>
-        </div>
+        </label>
       </div>
+      <p className="controller-note">
+        {CONTROLLER_OPTIONS.find((o) => o.value === controller)?.description}
+      </p>
 
       <label className="custom-conditions-toggle">
         <input
@@ -222,7 +238,9 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
             </span>
             <span>quality {trajectory.meta.quality.toFixed(2)}</span>
             <span>final dist {trajectory.meta.final_dist_home.toFixed(1)} m</span>
-            <span>{trajectory.meta.controller}</span>
+            <span className="badge badge-outline" title={controllerLabel(trajectory.meta.controller)}>
+              {controllerShortLabel(trajectory.meta.controller)}
+            </span>
             <span>seed {trajectory.meta.seed}</span>
           </div>
           <div className="replay-meta replay-meta-conditions">
@@ -235,12 +253,32 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
                 ? `–${trajectory.meta.conditions.launch_offset_max_m.toFixed(0)}` : ""}m out</span>
           </div>
 
+          {trajectory.meta.gate && (
+            <div className="gate-strip" role="note">
+              <strong>Wind gate</strong>
+              {trajectory.meta.gate.handed_over ? (
+                <span>
+                  Handed over to the baseline at{" "}
+                  <strong>{(trajectory.meta.gate.handover_time_s ?? 0).toFixed(1)} s</strong>
+                  {trajectory.meta.gate.wind_est_at_decision_ms !== null &&
+                    ` (wind estimate ${trajectory.meta.gate.wind_est_at_decision_ms.toFixed(2)} m/s)`}
+                  ; the baseline flew {Math.round(trajectory.meta.gate.baseline_share_of_flight * 100)}% of the flight.
+                </span>
+              ) : (
+                <span>No handover: the Run 4 policy flew the whole flight.</span>
+              )}
+            </div>
+          )}
+
           <div className="replay-layout">
             <div className="replay-visual">
               <div className="scrubber-row">
-                <button onClick={() => setPlaying((p) => !p)}>{playing ? "Pause" : "Play"}</button>
+                <button onClick={() => setPlaying((p) => !p)} aria-pressed={playing}>
+                  {playing ? "Pause" : "Play"}
+                </button>
                 <input
                   type="range"
+                  aria-label="Flight time"
                   min={0}
                   max={trajectory.frames.length - 1}
                   value={frameIndex}
@@ -281,6 +319,14 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
                     <h4>Aircraft</h4>
                     <div className="telemetry-rows">
                       <div><span>Time</span><strong>{frame.t.toFixed(2)} s</strong></div>
+                      {trajectory.meta.gate && (
+                        <div><span>Flying</span><strong>
+                          {trajectory.meta.gate.handed_over &&
+                          frame.t >= (trajectory.meta.gate.handover_time_s ?? Infinity)
+                            ? "Baseline"
+                            : "Run 4 policy"}
+                        </strong></div>
+                      )}
                       <div><span>AGL</span><strong>{frame.agl.toFixed(1)} m</strong></div>
                       <div><span>Dist home</span><strong>{frame.dist_home.toFixed(1)} m</strong></div>
                       <div><span>Ground speed</span><strong>{groundSpeed.toFixed(1)} m/s</strong></div>
