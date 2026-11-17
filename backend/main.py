@@ -24,7 +24,9 @@ app = FastAPI(title="RL Glider Showcase Dashboard")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    # Any local dev-server port: Vite moves to 5174+ when 5173 is taken, and
+    # a fixed origin then silently blocks every request ("Failed to fetch").
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
