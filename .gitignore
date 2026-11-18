@@ -268,3 +268,7 @@ data/train_stream.jsonl
 
 # Generated ixz validation variants (aircraft/generate_fdm.py --ixz-variants)
 analysis/fdm_variants/
+
+# Flight-test data written by the dashboard backend (fetched Pi logs, stub Pi)
+data/flightlogs/
+data/pi_stub/

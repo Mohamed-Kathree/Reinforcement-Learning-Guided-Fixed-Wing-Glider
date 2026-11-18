@@ -19,6 +19,7 @@ from .routers import baseline as baseline_router
 from .routers import episodes as episodes_router
 from .routers import tests as tests_router
 from .routers import training as training_router
+from .routers import flighttest as flighttest_router
 
 app = FastAPI(title="RL Glider Showcase Dashboard")
 
@@ -36,6 +37,7 @@ app.include_router(tests_router.router)
 app.include_router(episodes_router.router)
 app.include_router(baseline_router.router)
 app.include_router(training_router.router)
+app.include_router(flighttest_router.router)
 
 
 @app.get("/api/health")

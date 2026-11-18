@@ -1,3 +1,4 @@
 fastapi
 uvicorn[standard]
 pydantic
+pyserial  # flight-test ground station serial link (optional; stub works without it)

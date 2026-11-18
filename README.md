@@ -130,7 +130,7 @@ backend/             FastAPI server for the dashboard (records flights, runs che
 frontend/            React + Vite dashboard
 flighttest/          Flight-test ground code: packet schema and codegen, safety reference, calibration (see flighttest/README.md)
 firmware/            ESP32 protocol and safety C code, generated header (host-tested only; see firmware/README.md)
-tests/               Pytest suite (301 tests)
+tests/               Pytest suite (324 tests)
 docs/                Decisions record and diagnostic summaries
 deployment/          Archived V14 deployment model (legacy)
 checkpoints_*/       Model checkpoints per run (not all tracked)
@@ -309,7 +309,7 @@ Weights: `training/configs/base.yaml` (`reward:`), implementation: `env/reward.p
 ## Testing
 
 ```bash
-pytest tests -q          # 301 tests, about 5 minutes
+pytest tests -q          # 324 tests, about 5 minutes
 ```
 
 Includes physics and sensor tests, V22 restore and reward-reference tests, gate tests (the gate
