@@ -97,9 +97,15 @@ def gen_python(schema: dict) -> str:
     L += ["", "# Servo channels (index = position in Command.servo_us)",
           "SERVOS = ["]
     for s in schema["servos"]:
-        L.append(f"    {{\"index\": {s['index']}, \"name\": \"{s['name']}\", \"gpio\": {s['gpio']}, "
-                 f"\"type\": \"{s['type']}\", \"min_us\": {s['min_us']}, \"max_us\": {s['max_us']}}},")
-    L += ["]", "", "# Safety constants (enforced in firmware/protocol/rlg_safety.c and flighttest/safety.py)"]
+        L.append(f"    {{\"index\": {s['index']}, \"name\": \"{s['name']}\", \"gpio\": {s['gpio']}}},")
+    L += ["]", "",
+          "# Per-servo limits live in flighttest/config/calibration.json, never here.",
+          "# These are reference envelopes for validating that file, and the compiled-in outer clamp.",
+          "SERVO_TYPES = {" + ", ".join(f"\"{k}\": ({v['min_us']}, {v['max_us']})"
+                                        for k, v in schema["servo_types"].items()) + "}",
+          f"ABS_MIN_US = {schema['absolute_us']['min']}",
+          f"ABS_MAX_US = {schema['absolute_us']['max']}",
+          "", "# Safety constants (enforced in firmware/protocol/rlg_safety.c and flighttest/safety.py)"]
     for k, v in schema["safety"].items():
         if not k.startswith("_"):
             L.append(f"{k.upper()} = {v}")
@@ -222,10 +228,11 @@ def gen_c(schema: dict) -> str:
         L.append(f"    RLG_MODE_{m['name']} = {m['value']},  /* {m['doc']} */")
     L += ["} rlg_mode_t;", "", f"#define RLG_NUM_SERVOS {len(schema['servos'])}"]
     for s in schema["servos"]:
-        L.append(f"#define RLG_SERVO_{s['name'].upper()} {s['index']}  /* GPIO{s['gpio']}, {s['type']} */")
-    L += ["", "/* Hard travel limits, enforced by rlg_safety.c regardless of what the ground sends. */",
-          "static const uint16_t RLG_SERVO_MIN_US[RLG_NUM_SERVOS] __attribute__((unused)) = {" + ", ".join(str(s["min_us"]) for s in schema["servos"]) + "};",
-          "static const uint16_t RLG_SERVO_MAX_US[RLG_NUM_SERVOS] __attribute__((unused)) = {" + ", ".join(str(s["max_us"]) for s in schema["servos"]) + "};",
+        L.append(f"#define RLG_SERVO_{s['name'].upper()} {s['index']}  /* GPIO{s['gpio']} */")
+    L += ["", "/* Outer envelope only. Per-servo travel limits are runtime values from",
+          " * flighttest/config/calibration.json (pushed to NVS; rlg_safety_set_limits). */",
+          f"#define RLG_ABS_MIN_US {schema['absolute_us']['min']}u",
+          f"#define RLG_ABS_MAX_US {schema['absolute_us']['max']}u",
           "static const uint8_t RLG_SERVO_GPIO[RLG_NUM_SERVOS] __attribute__((unused)) = {" + ", ".join(str(s["gpio"]) for s in schema["servos"]) + "};",
           "", "/* Safety constants */"]
     for k, v in schema["safety"].items():
@@ -260,9 +267,9 @@ def gen_c(schema: dict) -> str:
 def gen_vectors(schema: dict, packets_mod) -> str:
     T, C = packets_mod.Telemetry, packets_mod.Command
     tel = T(seq=513, roll=0.1, pitch=-0.25, yaw=3.0, p=0.01, q=-0.02, r=0.5, alt_baro=12.75, sonar=-1.0,
-            lat=-33.93, lon=18.63, vn=1.5, ve=-2.25, rail_v=5.05,
+            lat=-33.93, lon=18.63, vn=1.5, ve=-2.25, rail_adc_v=2.48,
             status=packets_mod.pack_status(mode=packets_mod.FLIGHT, armed=1, airborne=1, gps_fix=2, gps_sats=9,
-                                           baro_ref_captured=1, baro_warm=1, rail_v_valid=1))
+                                           baro_ref_captured=1, baro_warm=1, rail_v_valid=1, pi_failsafe=1))
     cmd = C(seq=65535, mode=packets_mod.BENCH, servo_us=[1500, 1480, 1600, 1520])
     vecs = {"crc8": [{"ascii": "123456789", "crc": schema["crc8"]["check_value_123456789"]},
                      {"hex": "", "crc": packets_mod.crc8(b"")},

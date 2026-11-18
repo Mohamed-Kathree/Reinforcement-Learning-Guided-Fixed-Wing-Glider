@@ -18,6 +18,10 @@ SRC = [os.path.join(ROOT, "firmware", "protocol", "rlg_crc8.c"),
 _LIB = None
 
 
+class CSensors(ctypes.Structure):
+    _fields_ = [("baro_alt_m", ctypes.c_float), ("gps_speed_ms", ctypes.c_float), ("gps_fix", ctypes.c_uint8)]
+
+
 def compiler() -> str | None:
     return shutil.which("gcc") or shutil.which("cc") or shutil.which("clang")
 
@@ -46,9 +50,17 @@ def load():
     lib.rlg_test_decode_command.argtypes = [u8p, ctypes.POINTER(ctypes.c_uint32)]
     lib.rlg_safety_sizeof.restype = ctypes.c_size_t
     lib.rlg_safety_init.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16), ctypes.c_uint32]
-    lib.rlg_safety_on_command.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_bool, u8p, ctypes.c_size_t]
+    sp = ctypes.POINTER(CSensors)
+    lib.rlg_safety_on_command.argtypes = [ctypes.c_void_p, ctypes.c_uint32, sp, u8p, ctypes.c_size_t]
     lib.rlg_safety_on_command.restype = ctypes.c_int
-    lib.rlg_safety_tick.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    lib.rlg_safety_tick.argtypes = [ctypes.c_void_p, ctypes.c_uint32, sp]
+    lib.rlg_safety_on_pi_setpoint.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    lib.rlg_safety_pi_failsafe.argtypes = [ctypes.c_void_p]
+    lib.rlg_safety_pi_failsafe.restype = ctypes.c_bool
+    lib.rlg_safety_is_airborne.argtypes = [ctypes.c_void_p, ctypes.c_uint32, sp]
+    lib.rlg_safety_is_airborne.restype = ctypes.c_bool
+    lib.rlg_safety_set_limits.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16)]
+    lib.rlg_safety_set_limits.restype = ctypes.c_bool
     lib.rlg_safety_flight_output.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16)]
     lib.rlg_safety_flight_output.restype = ctypes.c_bool
     lib.rlg_safety_status_bits.argtypes = [ctypes.c_void_p]

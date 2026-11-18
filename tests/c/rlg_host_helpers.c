@@ -6,13 +6,13 @@
 size_t rlg_test_telemetry_size(void) { return sizeof(rlg_telemetry_t); }
 size_t rlg_test_command_size(void) { return sizeof(rlg_command_t); }
 
-/* out[]: seq, roll, pitch, yaw, p, q, r, alt_baro, sonar, lat, lon, vn, ve, rail_v, status, crc */
+/* out[]: seq, roll, pitch, yaw, p, q, r, alt_baro, sonar, lat, lon, vn, ve, rail_adc_v, status, crc */
 void rlg_test_decode_telemetry(const uint8_t *frame, double out[16])
 {
     rlg_telemetry_t t;
     memcpy(&t, frame, sizeof t);
     double v[16] = {t.seq, t.roll, t.pitch, t.yaw, t.p, t.q, t.r, t.alt_baro, t.sonar,
-                    t.lat, t.lon, t.vn, t.ve, t.rail_v, (double)t.status, t.crc8};
+                    t.lat, t.lon, t.vn, t.ve, t.rail_adc_v, (double)t.status, t.crc8};
     memcpy(out, v, sizeof v);
 }
 

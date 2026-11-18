@@ -1,11 +1,11 @@
 {
- "version": 1,
- "_comment": "Read and written by the ground app (flighttest/calibration.py validates every save). Values marked measured=false are placeholders, not measurements.",
+ "version": 2,
+ "_comment": "Read and written by the ground app (flighttest/calibration.py validates every save). Values marked measured/calibrated=false are placeholders, not measurements. Per-servo limits live here, not in code: the elevator servo has already been swapped once.",
  "servos": {
-  "aileron_l": {"neutral_us": 1500, "direction": 1, "measured": false, "measured_on": null},
-  "aileron_r": {"neutral_us": 1500, "direction": 1, "measured": false, "measured_on": null},
-  "elevator": {"neutral_us": 1500, "direction": 1, "measured": false, "measured_on": null},
-  "rudder": {"neutral_us": 1500, "direction": 1, "measured": false, "measured_on": null}
+  "aileron_l": {"type": "MG90S", "neutral_us": 1500, "direction": 1, "min_us": 600, "max_us": 2300, "sweep_min_us": 700, "sweep_max_us": 2200, "measured": false, "measured_on": null},
+  "aileron_r": {"type": "MG90S", "neutral_us": 1500, "direction": 1, "min_us": 600, "max_us": 2300, "sweep_min_us": 700, "sweep_max_us": 2200, "measured": false, "measured_on": null},
+  "elevator": {"type": "MG90S", "neutral_us": 1500, "direction": 1, "min_us": 600, "max_us": 2300, "sweep_min_us": 700, "sweep_max_us": 2200, "measured": false, "measured_on": null},
+  "rudder": {"type": "MG90S", "neutral_us": 1500, "direction": 1, "min_us": 600, "max_us": 2300, "sweep_min_us": 700, "sweep_max_us": 2200, "measured": false, "measured_on": null}
  },
  "imu": {
   "_comment": "body = board_to_body @ board. Body frame: x forward, y right, z down. Must be a signed permutation with determinant +1. The current signs are stale and being re-derived.",
@@ -16,5 +16,14 @@
  "baro": {
   "warmup_s": 120,
   "_comment": "Ground pressure reference is captured on the arm command after warm-up, never at boot."
+ },
+ "rail": {
+  "_comment": "5 V rail sensed through a ~2:1 divider on GPIO34 (ADC1). The ESP32 sends the voltage at the pin; rail_v = scale * adc_v + offset_v. Indicative until calibrated against a multimeter. The ADC is nonlinear below ~0.15 V and above ~3.0 V; a 2:1 divider puts 5 V near 2.5 V.",
+  "adc_gpio": 34,
+  "scale": 2.0,
+  "offset_v": 0.0,
+  "calibrated": false,
+  "calibrated_on": null,
+  "brownout_v": 4.75
  }
 }

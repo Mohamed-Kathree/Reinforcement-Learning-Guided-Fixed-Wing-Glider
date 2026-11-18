@@ -8,7 +8,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass, field
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SYNC = 0xA5
 CRC_POLY = 0x07
 CRC_INIT = 0x00
@@ -22,18 +22,27 @@ MODE_NAMES = {0: "DISARMED", 1: "FLIGHT", 2: "BENCH", 3: "REPLAY"}
 
 # Servo channels (index = position in Command.servo_us)
 SERVOS = [
-    {"index": 0, "name": "aileron_l", "gpio": 13, "type": "MG90S", "min_us": 600, "max_us": 2300},
-    {"index": 1, "name": "aileron_r", "gpio": 14, "type": "MG90S", "min_us": 600, "max_us": 2300},
-    {"index": 2, "name": "elevator", "gpio": 25, "type": "MG996R", "min_us": 1000, "max_us": 2000},
-    {"index": 3, "name": "rudder", "gpio": 27, "type": "MG90S", "min_us": 600, "max_us": 2300},
+    {"index": 0, "name": "aileron_l", "gpio": 13},
+    {"index": 1, "name": "aileron_r", "gpio": 14},
+    {"index": 2, "name": "elevator", "gpio": 25},
+    {"index": 3, "name": "rudder", "gpio": 27},
 ]
+
+# Per-servo limits live in flighttest/config/calibration.json, never here.
+# These are reference envelopes for validating that file, and the compiled-in outer clamp.
+SERVO_TYPES = {"MG90S": (600, 2300), "MG996R": (1000, 2000)}
+ABS_MIN_US = 600
+ABS_MAX_US = 2300
 
 # Safety constants (enforced in firmware/protocol/rlg_safety.c and flighttest/safety.py)
 COMMAND_TIMEOUT_MS = 150
 REARM_CONSECUTIVE_FRAMES = 5
 ARM_IDLE_EXPIRY_MS = 120000
-AIRBORNE_ALT_M = 3.0
+AIRBORNE_ALT_M = 5.0
 AIRBORNE_GROUND_SPEED_MS = 2.0
+FLIGHT_LATCH_MS = 60000
+PI_TIMEOUT_MS = 150
+PI_RESUME_FRAMES = 5
 
 # Status bitfield
 STATUS_BITS = {
@@ -48,6 +57,7 @@ STATUS_BITS = {
     "rail_v_valid": (15, 1),
     "timeout_disarmed": (16, 1),
     "cmd_rejected_airborne": (17, 1),
+    "pi_failsafe": (18, 1),
 }
 
 
@@ -92,11 +102,11 @@ class Telemetry:
     lon: float = 0.0
     vn: float = 0.0
     ve: float = 0.0
-    rail_v: float = 0.0
+    rail_adc_v: float = 0.0
     status: int = 0
 
     def encode(self) -> bytes:
-        body = struct.pack(self.FMT[:-1], SYNC, self.TYPE, self.seq, self.roll, self.pitch, self.yaw, self.p, self.q, self.r, self.alt_baro, self.sonar, self.lat, self.lon, self.vn, self.ve, self.rail_v, self.status)
+        body = struct.pack(self.FMT[:-1], SYNC, self.TYPE, self.seq, self.roll, self.pitch, self.yaw, self.p, self.q, self.r, self.alt_baro, self.sonar, self.lat, self.lon, self.vn, self.ve, self.rail_adc_v, self.status)
         return body + bytes([crc8(body[1:])])
 
     @classmethod
@@ -137,7 +147,7 @@ class Telemetry:
         i += 1
         kw["ve"] = v[i]
         i += 1
-        kw["rail_v"] = v[i]
+        kw["rail_adc_v"] = v[i]
         i += 1
         kw["status"] = v[i]
         i += 1

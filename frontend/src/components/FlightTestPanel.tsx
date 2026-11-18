@@ -34,7 +34,8 @@ const CHECKLIST: { group: string; items: { id: string; text: string }[] }[] = [
   {
     group: "Power and links",
     items: [
-      { id: "rail", text: "5 V rail minimum measured under full servo load: at least 4.75 V. Record the value." },
+      { id: "rail-cal", text: "Rail divider (GPIO34) calibrated against a multimeter; scale factor saved in the calibration file." },
+      { id: "rail", text: "5 V rail minimum measured under full servo load (all four MG90S): at least 4.75 V. Record the value." },
       { id: "link", text: "ESP-NOW telemetry packet loss measured at walking distance." },
       { id: "log", text: "Pi writes the full-rate log to SD and it can be retrieved over WiFi on the ground." },
     ],
@@ -43,7 +44,9 @@ const CHECKLIST: { group: string; items: { id: string; text: string }[] }[] = [
     group: "Safety",
     items: [
       { id: "override", text: "Manual override / abort tested: surfaces centre and controller disarms." },
-      { id: "timeout", text: "Command timeout tested: no command for 150 ms centres the surfaces." },
+      { id: "timeout", text: "Ground-link timeout tested in BENCH: no command for 150 ms centres the surfaces." },
+      { id: "pi-timeout", text: "Pi-link timeout tested in FLIGHT on the bench: stopping the Pi's setpoints enters failsafe glide within 150 ms." },
+      { id: "airborne", text: "Airborne test checked: BENCH refused for 60 s after FLIGHT, and while walking with a GPS fix." },
       { id: "wind", text: "Wind measured at launch height with an anemometer and within the limit below." },
       { id: "baseline-first", text: "Deterministic baseline flown first, in calm air, before the learned controller." },
     ],
@@ -86,9 +89,10 @@ export default function FlightTestPanel() {
       </div>
 
       <Callout tone={blocking ? "danger" : "warning"} title="Not cleared for flight">
-        {blocking} blocking hardware issue{blocking === 1 ? "" : "s"}, {total - complete} of {total} pre-flight checks
-        open, and the flight-test tools (link status, control-surface tester, live telemetry, replay with servo
-        playback) are not built yet.
+        {blocking > 0 && `${blocking} blocking hardware issue${blocking === 1 ? "" : "s"}, `}
+        {HARDWARE_ISSUES.length - blocking} hardware item{HARDWARE_ISSUES.length - blocking === 1 ? "" : "s"} to check,{" "}
+        {total - complete} of {total} pre-flight checks open, and the flight-test tools (link status,
+        control-surface tester, live telemetry, replay with servo playback) are not built yet.
       </Callout>
 
       <section className="section" aria-labelledby="limits-h" style={{ marginTop: "var(--space-6)" }}>
@@ -169,7 +173,7 @@ export default function FlightTestPanel() {
           <li><span>Mass properties</span><div>Only the fuselage and tail have been weighed. Mass, CG and inertia in the simulator are estimates.</div></li>
           <li><span>IMU frame</span><div>Axis signs are being re-derived for the current mount; attitude in the simulator is exact.</div></li>
           <li><span>Barometer</span><div>Real drift (~0.3 m) and warm-up (~2 m) are larger than a fresh simulated reading; capture the reference on arm.</div></li>
-          <li><span>Power</span><div>The rail's minimum voltage under servo load has not been measured; the simulator has no brownouts.</div></li>
+          <li><span>Power</span><div>The rail's minimum voltage under servo load has not been measured (budget ~5.6 A against ~5 A); the simulator has no brownouts.</div></li>
         </ul>
       </section>
 

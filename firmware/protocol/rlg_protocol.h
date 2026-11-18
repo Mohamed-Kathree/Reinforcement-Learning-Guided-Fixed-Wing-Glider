@@ -11,7 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define RLG_SCHEMA_VERSION 1
+#define RLG_SCHEMA_VERSION 2
 #define RLG_SYNC 0xA5u
 #define RLG_CRC_POLY 0x07u
 #define RLG_CRC_INIT 0x00u
@@ -24,22 +24,26 @@ typedef enum {
 } rlg_mode_t;
 
 #define RLG_NUM_SERVOS 4
-#define RLG_SERVO_AILERON_L 0  /* GPIO13, MG90S */
-#define RLG_SERVO_AILERON_R 1  /* GPIO14, MG90S */
-#define RLG_SERVO_ELEVATOR 2  /* GPIO25, MG996R */
-#define RLG_SERVO_RUDDER 3  /* GPIO27, MG90S */
+#define RLG_SERVO_AILERON_L 0  /* GPIO13 */
+#define RLG_SERVO_AILERON_R 1  /* GPIO14 */
+#define RLG_SERVO_ELEVATOR 2  /* GPIO25 */
+#define RLG_SERVO_RUDDER 3  /* GPIO27 */
 
-/* Hard travel limits, enforced by rlg_safety.c regardless of what the ground sends. */
-static const uint16_t RLG_SERVO_MIN_US[RLG_NUM_SERVOS] __attribute__((unused)) = {600, 600, 1000, 600};
-static const uint16_t RLG_SERVO_MAX_US[RLG_NUM_SERVOS] __attribute__((unused)) = {2300, 2300, 2000, 2300};
+/* Outer envelope only. Per-servo travel limits are runtime values from
+ * flighttest/config/calibration.json (pushed to NVS; rlg_safety_set_limits). */
+#define RLG_ABS_MIN_US 600u
+#define RLG_ABS_MAX_US 2300u
 static const uint8_t RLG_SERVO_GPIO[RLG_NUM_SERVOS] __attribute__((unused)) = {13, 14, 25, 27};
 
 /* Safety constants */
 #define RLG_COMMAND_TIMEOUT_MS 150u
 #define RLG_REARM_CONSECUTIVE_FRAMES 5u
 #define RLG_ARM_IDLE_EXPIRY_MS 120000u
-#define RLG_AIRBORNE_ALT_M 3.0f
+#define RLG_AIRBORNE_ALT_M 5.0f
 #define RLG_AIRBORNE_GROUND_SPEED_MS 2.0f
+#define RLG_FLIGHT_LATCH_MS 60000u
+#define RLG_PI_TIMEOUT_MS 150u
+#define RLG_PI_RESUME_FRAMES 5u
 
 /* Status bitfield */
 #define RLG_STATUS_MODE_LSB 0u
@@ -64,6 +68,8 @@ static const uint8_t RLG_SERVO_GPIO[RLG_NUM_SERVOS] __attribute__((unused)) = {1
 #define RLG_STATUS_TIMEOUT_DISARMED_MASK 0x00010000u
 #define RLG_STATUS_CMD_REJECTED_AIRBORNE_LSB 17u
 #define RLG_STATUS_CMD_REJECTED_AIRBORNE_MASK 0x00020000u
+#define RLG_STATUS_PI_FAILSAFE_LSB 18u
+#define RLG_STATUS_PI_FAILSAFE_MASK 0x00040000u
 
 #define RLG_TYPE_TELEMETRY 1u  /* glider -> ground, ESP-NOW, 5 Hz */
 typedef struct __attribute__((packed)) {
@@ -82,7 +88,7 @@ typedef struct __attribute__((packed)) {
     float lon;  /* offset 40 */
     float vn;  /* offset 44 */
     float ve;  /* offset 48 */
-    float rail_v;  /* offset 52 */
+    float rail_adc_v;  /* offset 52 */
     uint32_t status;  /* offset 56 */
     uint8_t crc8;  /* offset 60 */
 } rlg_telemetry_t;
@@ -103,7 +109,7 @@ _Static_assert(offsetof(rlg_telemetry_t, lat) == 36, "Telemetry.lat offset");
 _Static_assert(offsetof(rlg_telemetry_t, lon) == 40, "Telemetry.lon offset");
 _Static_assert(offsetof(rlg_telemetry_t, vn) == 44, "Telemetry.vn offset");
 _Static_assert(offsetof(rlg_telemetry_t, ve) == 48, "Telemetry.ve offset");
-_Static_assert(offsetof(rlg_telemetry_t, rail_v) == 52, "Telemetry.rail_v offset");
+_Static_assert(offsetof(rlg_telemetry_t, rail_adc_v) == 52, "Telemetry.rail_adc_v offset");
 _Static_assert(offsetof(rlg_telemetry_t, status) == 56, "Telemetry.status offset");
 _Static_assert(offsetof(rlg_telemetry_t, crc8) == 60, "Telemetry.crc8 offset");
 

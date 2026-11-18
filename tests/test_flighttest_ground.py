@@ -27,6 +27,7 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
+from flighttest import calibration as C  # noqa: E402
 from flighttest import logs  # noqa: E402
 from flighttest.ground import COMMAND_PERIOD_MS, UI_IDLE_EXPIRY_MS, GroundStation  # noqa: E402
 from flighttest.links import Link, StubLink  # noqa: E402
@@ -35,11 +36,12 @@ from flighttest.protocol import packets as P  # noqa: E402
 from flighttest.stub_glider import StubGlider  # noqa: E402
 
 NEUTRAL = [1480, 1510, 1500, 1495]
+CAL = C.with_updates(C.load(), **{f"servos.{n}.neutral_us": v for n, v in zip(C.SERVO_NAMES, NEUTRAL)})
 
 
-def rig(loss=0.0, seed=0, **kw):
-    g = StubGlider(NEUTRAL, now_ms=0, seed=seed, loss=loss, **kw)
-    gs = GroundStation(StubLink(g), neutral_us=NEUTRAL)
+def rig(loss=0.0, seed=0, cal=CAL, **kw):
+    g = StubGlider(C.neutral_us(cal), now_ms=0, seed=seed, loss=loss, limits=C.limits(cal), **kw)
+    gs = GroundStation(StubLink(g), cal=cal)
     return g, gs
 
 
@@ -90,7 +92,7 @@ class FakeLink(Link):
 
 def test_sequence_wrap_duplicates_and_reboots():
     link = FakeLink()
-    gs = GroundStation(link)
+    gs = GroundStation(link, cal=CAL)
     for t, seq in enumerate([65534, 65535, 1, 1, 2, 40000, 40001]):   # 0 lost at wrap? 65535->1 skips 0
         link.inbox += P.Telemetry(seq=seq).encode()
         gs.step(t * 200)
@@ -100,7 +102,7 @@ def test_sequence_wrap_duplicates_and_reboots():
 
 def test_crc_drops_counted_not_delivered():
     link = FakeLink()
-    gs = GroundStation(link)
+    gs = GroundStation(link, cal=CAL)
     bad = bytearray(P.Telemetry(seq=5).encode())
     bad[10] ^= 0xFF
     link.inbox += bytes(bad) + P.Telemetry(seq=6).encode()
@@ -111,7 +113,7 @@ def test_crc_drops_counted_not_delivered():
 # ---------------------------------------------------------------- commands
 
 def test_cannot_arm_flight_or_without_link():
-    gs = GroundStation(None)
+    gs = GroundStation(None, cal=CAL)
     with pytest.raises(RuntimeError):
         gs.arm(P.BENCH, 0)
     g, gs = rig()
@@ -133,10 +135,14 @@ def test_bench_arms_through_firmware_and_moves_surfaces():
     assert st["mode"] == P.BENCH and st["armed"] == 1
 
 
-def test_ui_values_are_clamped():
+def test_ui_values_are_clamped_to_calibration_limits():
     g, gs = rig()
     gs.arm(P.BENCH, 0)
-    assert gs.set_servos([5000, 0, 2500, 1500], 0) == [2300, 600, 2000, 1500]
+    assert gs.set_servos([5000, 0, 2500, 1500], 0) == [2300, 600, 2300, 1500]
+    narrow = C.with_updates(CAL, **{"servos.elevator.max_us": 2000, "servos.elevator.sweep_max_us": 1950})
+    gs.set_calibration(narrow)                        # e.g. a different servo fitted
+    assert gs.session["servo_us"][2] == 2000
+    assert gs.set_servos([1500, 1500, 2300, 1500], 1) == [1500, 1500, 2000, 1500]
 
 
 def test_command_rate_never_exceeds_20hz():
@@ -199,25 +205,83 @@ def test_link_drop_times_out_in_firmware_then_rearms_after_recovery():
     assert g.safety.s.armed                           # 5 consecutive frames re-arm
 
 
-def test_airborne_glider_refuses_bench():
+def test_cold_start_bench_still_works():
+    """The ~2 m warm-up transient cannot make a cold bench system read airborne:
+    there is no baro reference yet, so the baro does not vote."""
     g, gs = rig()
-    g.airborne = True
-    gs.arm(P.BENCH, 0)
-    gs.set_servos([2000] * 4, 0)
-    run(gs, 0, 1000)
+    run(gs, 0, 5000)                                  # 5 s after boot, baro still warming
+    gs.arm(P.BENCH, 5000)
+    run(gs, 5000, 5600)
+    assert g.safety.s.armed and not g.airborne
+
+
+def test_moving_glider_with_gps_fix_refuses_bench():
+    g, gs = rig()
+    run(gs, 0, 40_000, dt=50)                         # GPS 3D fix after 35 s
+    g.set_flying(True)                                # 9 m/s ground speed
+    gs.arm(P.BENCH, 40_000)
+    gs.set_servos([2000] * 4, 40_000)
+    run(gs, 40_000, 41_000)
     assert not g.safety.s.armed and g.safety.s.servo_us == NEUTRAL
+    assert glider_report(gs)["cmd_rejected_airborne"] == 1 and glider_report(gs)["airborne"] == 1
+
+
+def test_without_fix_or_reference_only_the_flight_latch_protects():
+    """Stated plainly: with no GPS fix and no baro reference, a moving glider
+    reads grounded. Real flights are always armed in FLIGHT first, and the
+    60 s latch is what makes the firmware refuse BENCH/REPLAY then."""
+    g, gs = rig()
+    g.set_flying(True)
+    gs.arm(P.BENCH, 0)
+    run(gs, 0, 600)
+    assert g.safety.s.armed                           # no vote: accepted
+    gs.disarm(600)
+    run(gs, 600, 800)
+    g.arm_flight_locally(800)
+    gs.arm(P.BENCH, 900)
+    run(gs, 900, 1500)
+    assert not g.safety.s.armed or g.safety.s.mode == P.FLIGHT
     assert glider_report(gs)["cmd_rejected_airborne"] == 1
 
 
 # ---------------------------------------------------------------- sensors in telemetry
 
-def test_rail_voltage_reported_as_not_measured_without_a_sensor():
+def test_rail_voltage_scaled_from_calibration_and_marked_indicative():
+    g, gs = rig()                                     # divider fitted (GPIO34), scale not calibrated
+    run(gs, 0, 2000)
+    adc, v = gs.latest["rail_adc_v"], gs.latest["rail_v"]
+    assert 2.4 < adc < 2.6 and v == pytest.approx(2.0 * adc)
+    rail = gs.latest["rail"]
+    assert rail["measured"] and not rail["calibrated"] and "indicative" in rail["note"] and rail["level"] == "ok"
+    cal = C.with_updates(CAL, **{"rail.scale": 1.98, "rail.calibrated": True})
+    gs.set_calibration(cal)
+    run(gs, 2000, 3000)
+    assert gs.latest["rail"]["note"] is None and gs.latest["rail_v"] == pytest.approx(1.98 * gs.latest["rail_adc_v"])
+
+
+def test_rail_not_measured_without_divider():
+    g, gs = rig(rail_sensor=False)
+    run(gs, 0, 2000)
+    assert gs.latest["rail_v"] is None and gs.latest["rail"]["level"] is None
+    assert gs.latest["status"]["rail_v_valid"] == 0
+
+
+def test_rail_brownout_levels():
     g, gs = rig()
-    run(gs, 0, 2000)
-    assert gs.latest["rail_v"] is None and gs.latest["status"]["rail_v_valid"] == 0
-    g, gs = rig(rail_sensor=True)
-    run(gs, 0, 2000)
-    assert 4.5 < gs.latest["rail_v"] < 5.2
+    assert gs.rail_state(4.70)["level"] == "brownout"
+    assert gs.rail_state(4.85)["level"] == "low"
+    assert gs.rail_state(5.05)["level"] == "ok"
+
+
+def test_pi_failsafe_visible_in_telemetry():
+    g, gs = rig()
+    run(gs, 0, 1000)
+    g.arm_flight_locally(1000)
+    run(gs, 1000, 2000)
+    assert glider_report(gs)["pi_failsafe"] == 0
+    g.pi_alive = False
+    run(gs, 2000, 3000)
+    assert glider_report(gs)["pi_failsafe"] == 1 and glider_report(gs)["mode"] == P.FLIGHT
 
 
 def test_baro_warm_and_gps_fix_progress():

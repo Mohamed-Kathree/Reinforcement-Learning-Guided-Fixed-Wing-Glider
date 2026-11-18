@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from collections import deque
 
+from flighttest import calibration as C
 from flighttest.links import Link
 from flighttest.protocol import packets as P
 
@@ -34,17 +35,15 @@ STATS_WINDOW_MS = 5_000
 HISTORY_LEN = 300                 # 60 s at 5 Hz
 DISARM_BURST = 4
 
-LIMITS = [(s["min_us"], s["max_us"]) for s in P.SERVOS]
-
-
-def _clamp(us: list[int]) -> list[int]:
-    return [max(lo, min(hi, int(v))) for v, (lo, hi) in zip(us, LIMITS)]
+RAIL_HEADROOM_V = 0.15            # "low" warning band above brownout
 
 
 class GroundStation:
-    def __init__(self, link: Link | None = None, neutral_us: list[int] | None = None) -> None:
+    def __init__(self, link: Link | None = None, cal: dict | None = None) -> None:
+        """cal: the calibration file (flighttest/calibration.py). Servo limits,
+        neutrals and rail scaling all come from it; nothing is hard-coded."""
         self.link = link
-        self.neutral_us = list(neutral_us) if neutral_us else [1500] * len(P.SERVOS)
+        self.set_calibration(cal if cal is not None else C.load())
         self.parser = P.StreamParser()
         self.reset_stats()
         self.session: dict | None = None
@@ -55,6 +54,19 @@ class GroundStation:
         self.history: deque = deque(maxlen=HISTORY_LEN)
         self.latest: dict | None = None
         self._pending_disarm = 0
+
+    def set_calibration(self, cal: dict) -> None:
+        problems = C.validate(cal)
+        if problems:
+            raise ValueError("invalid calibration: " + "; ".join(problems))
+        self.cal = cal
+        self.neutral_us = C.neutral_us(cal)
+        self.min_us, self.max_us = C.limits(cal)
+        if getattr(self, "session", None):
+            self.session["servo_us"] = self._clamp(self.session["servo_us"])
+
+    def _clamp(self, us: list[int]) -> list[int]:
+        return [max(lo, min(hi, int(v))) for v, lo, hi in zip(us, self.min_us, self.max_us)]
 
     # ------------------------------------------------------------------ link
     def connect(self, link: Link) -> None:
@@ -93,7 +105,7 @@ class GroundStation:
             raise RuntimeError("not armed: arm a BENCH or REPLAY session first")
         if len(us) != len(P.SERVOS):
             raise ValueError(f"need {len(P.SERVOS)} servo values")
-        self.session["servo_us"] = _clamp(us)
+        self.session["servo_us"] = self._clamp(us)
         self.session["last_ui_ms"] = now_ms
         return self.session["servo_us"]
 
@@ -156,14 +168,27 @@ class GroundStation:
             "roll": t.roll, "pitch": t.pitch, "yaw": t.yaw, "p": t.p, "q": t.q, "r": t.r,
             "alt_baro": t.alt_baro, "sonar": t.sonar if st["sonar_valid"] and t.sonar >= 0 else None,
             "lat": t.lat, "lon": t.lon, "vn": t.vn, "ve": t.ve,
-            "rail_v": t.rail_v if st["rail_v_valid"] and t.rail_v >= 0 else None,
+            "rail_adc_v": t.rail_adc_v if st["rail_v_valid"] and t.rail_adc_v >= 0 else None,
+            "rail_v": C.rail_volts(self.cal, t.rail_adc_v) if st["rail_v_valid"] else None,
             "status": st, "mode": P.MODE_NAMES.get(st["mode"], str(st["mode"])),
         }
+        self.latest["rail"] = self.rail_state(self.latest["rail_v"])
         self.history.append({k: self.latest[k] for k in
                              ("t_ms", "roll", "pitch", "r", "alt_baro", "sonar", "rail_v")}
                             | {"gps_sats": st["gps_sats"], "gps_fix": st["gps_fix"], "loss_pct": self.loss_pct()})
 
     # ------------------------------------------------------------------ reporting
+    def rail_state(self, rail_v: float | None) -> dict:
+        """Rail voltage with its trustworthiness: brownout below 4.75 V corrupts the Pi's SD card."""
+        r = self.cal["rail"]
+        level = None if rail_v is None else (
+            "brownout" if rail_v < r["brownout_v"] else
+            "low" if rail_v < r["brownout_v"] + RAIL_HEADROOM_V else "ok")
+        return {"volts": rail_v, "level": level, "brownout_v": r["brownout_v"],
+                "calibrated": bool(r["calibrated"]), "measured": rail_v is not None,
+                "note": None if rail_v is None else (None if r["calibrated"]
+                                                     else "indicative: divider scale not yet calibrated")}
+
     def rate_hz(self) -> float:
         n = sum(r for _, r, _ in self.events)
         return n / (STATS_WINDOW_MS / 1000.0)

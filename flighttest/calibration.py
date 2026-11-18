@@ -2,31 +2,35 @@
 calibration.py
 ==============
 The flight-test calibration file (flighttest/config/calibration.json): per-servo
-neutral and direction, the IMU board-to-body transform, barometer warm-up.
-Stored, never hard-coded. Every load and save is validated here.
+type, neutral, direction, travel limits and sweep range; the IMU board-to-body
+transform; barometer warm-up; rail-voltage divider scaling. Stored, never
+hard-coded. Every load and save is validated here.
 
-IMU convention (flight-test brief): body frame x forward, y right, z down.
-The board-to-body transform must be a signed permutation with determinant +1.
-An odd number of sign flips gives a left-handed frame: plausible Euler angles,
-silently wrong cross products. validate() refuses it.
+Servos: per-servo limits come from this file (the elevator servo has already
+been swapped once). Each servo's limits must sit inside its type's envelope
+(protocol schema servo_types), and
+    min_us <= sweep_min_us <= neutral_us <= sweep_max_us <= max_us.
 
-Bench checks for a verified transform (check_imu_readings):
-  level board        -> az near -1.00 g
-  nose up            -> positive pitch
-  right wing down    -> positive roll
-  nose right         -> positive gz
+IMU convention: body frame x forward, y right, z down. The transform must be a
+signed permutation with determinant +1; an odd number of sign flips gives a
+left-handed frame (plausible Euler angles, silently wrong cross products).
+
+Rail voltage: the ESP32 reports the voltage at the GPIO34 ADC pin; the rail is
+scale * adc_v + offset_v. Indicative until calibrated against a multimeter.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 from copy import deepcopy
 
 from flighttest.protocol import packets as P
 
 DEFAULT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "calibration.json")
-SERVO_LIMITS = {s["name"]: (s["min_us"], s["max_us"]) for s in P.SERVOS}
+SERVO_NAMES = [s["name"] for s in P.SERVOS]
+RAIL_ADC_PINS = (34, 36, 39)      # free ADC1 input-only pins (32 = Pi UART, 35 = sonar echo)
 
 
 def det3(m: list[list[int]]) -> int:
@@ -35,21 +39,35 @@ def det3(m: list[list[int]]) -> int:
             + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]))
 
 
+def _servo_problems(name: str, sv: dict) -> list[str]:
+    out = []
+    t = sv.get("type")
+    if t not in P.SERVO_TYPES:
+        return [f"{name}.type {t!r} is not a known servo type {sorted(P.SERVO_TYPES)}"]
+    lo_t, hi_t = P.SERVO_TYPES[t]
+    keys = ("min_us", "sweep_min_us", "neutral_us", "sweep_max_us", "max_us")
+    vals = [sv.get(k) for k in keys]
+    if any(not isinstance(v, int) or isinstance(v, bool) for v in vals):
+        return [f"{name}: {', '.join(keys)} must all be integers"]
+    if vals[0] < lo_t or vals[-1] > hi_t:
+        out.append(f"{name}: limits {vals[0]}-{vals[-1]} us exceed the {t} envelope {lo_t}-{hi_t} us")
+    if vals != sorted(vals):
+        out.append(f"{name}: need min_us <= sweep_min_us <= neutral_us <= sweep_max_us <= max_us, got {vals}")
+    if sv.get("direction") not in (1, -1):
+        out.append(f"{name}.direction must be +1 or -1, got {sv.get('direction')!r}")
+    return out
+
+
 def validate(cal: dict) -> list[str]:
     """Every problem with a calibration dict; empty list = valid."""
     problems: list[str] = []
     servos = cal.get("servos", {})
-    if set(servos) != set(SERVO_LIMITS):
-        problems.append(f"servos must be exactly {sorted(SERVO_LIMITS)}, got {sorted(servos)}")
+    if set(servos) != set(SERVO_NAMES):
+        problems.append(f"servos must be exactly {sorted(SERVO_NAMES)}, got {sorted(servos)}")
     for name, sv in servos.items():
-        if name not in SERVO_LIMITS:
-            continue
-        lo, hi = SERVO_LIMITS[name]
-        n = sv.get("neutral_us")
-        if not isinstance(n, int) or not lo <= n <= hi:
-            problems.append(f"{name}.neutral_us {n!r} outside the {lo}-{hi} us travel limit")
-        if sv.get("direction") not in (1, -1):
-            problems.append(f"{name}.direction must be +1 or -1, got {sv.get('direction')!r}")
+        if name in SERVO_NAMES:
+            problems += _servo_problems(name, sv)
+
     m = cal.get("imu", {}).get("board_to_body")
     if (not isinstance(m, list) or len(m) != 3 or any(not isinstance(r, list) or len(r) != 3 for r in m)
             or any(v not in (-1, 0, 1) for r in m for v in r)):
@@ -62,9 +80,21 @@ def validate(cal: dict) -> list[str]:
         elif det3(m) != 1:
             problems.append(f"imu.board_to_body has determinant {det3(m)}: a left-handed frame "
                             "(odd number of sign flips). Flip one more axis or undo one.")
+
     w = cal.get("baro", {}).get("warmup_s")
     if not isinstance(w, (int, float)) or w < 0:
         problems.append(f"baro.warmup_s must be a non-negative number, got {w!r}")
+
+    rail = cal.get("rail", {})
+    if rail.get("adc_gpio") not in RAIL_ADC_PINS:
+        problems.append(f"rail.adc_gpio must be a free ADC1 pin {RAIL_ADC_PINS} (ADC2 is unusable with the radio on)")
+    sc, off, bo = rail.get("scale"), rail.get("offset_v"), rail.get("brownout_v")
+    if not isinstance(sc, (int, float)) or not math.isfinite(sc) or not 1.0 <= sc <= 4.0:
+        problems.append(f"rail.scale must be between 1 and 4 (divider ratio), got {sc!r}")
+    if not isinstance(off, (int, float)) or not math.isfinite(off) or abs(off) > 0.5:
+        problems.append(f"rail.offset_v must be within +/-0.5 V, got {off!r}")
+    if not isinstance(bo, (int, float)) or not 4.0 <= bo <= 5.5:
+        problems.append(f"rail.brownout_v must be 4.0-5.5 V, got {bo!r}")
     return problems
 
 
@@ -88,9 +118,31 @@ def save(cal: dict, path: str = DEFAULT_PATH) -> None:
     os.replace(tmp, path)
 
 
+def _per_servo(cal: dict, key: str) -> list[int]:
+    return [cal["servos"][n][key] for n in SERVO_NAMES]
+
+
 def neutral_us(cal: dict) -> list[int]:
-    """Neutrals in Command.servo_us order."""
-    return [cal["servos"][s["name"]]["neutral_us"] for s in P.SERVOS]
+    """In Command.servo_us order."""
+    return _per_servo(cal, "neutral_us")
+
+
+def limits(cal: dict) -> tuple[list[int], list[int]]:
+    """(min_us, max_us) travel limits in Command.servo_us order."""
+    return _per_servo(cal, "min_us"), _per_servo(cal, "max_us")
+
+
+def sweep(cal: dict) -> tuple[list[int], list[int]]:
+    """(sweep_min_us, sweep_max_us): the normal operating range, for UI sliders."""
+    return _per_servo(cal, "sweep_min_us"), _per_servo(cal, "sweep_max_us")
+
+
+def rail_volts(cal: dict, adc_v: float | None) -> float | None:
+    """Rail voltage from the ADC pin voltage; None if not measured."""
+    if adc_v is None or adc_v < 0:
+        return None
+    r = cal["rail"]
+    return r["scale"] * adc_v + r["offset_v"]
 
 
 def board_to_body(cal: dict, v: list[float]) -> list[float]:

@@ -13,7 +13,7 @@ Flight-test API (flight-test phase 2). Thin layer over the flighttest package:
     POST /api/ft/servos   {"servo_us": [4]}   any rate; sent at <= 20 Hz
     POST /api/ft/keepalive
     GET/PUT /api/ft/calibration         validated on every save
-    POST /api/ft/stub?airborne=&loss=&rail_sensor=   stub glider only
+    POST /api/ft/stub?flying=&loss=&rail_sensor=&pi_alive=&flight_arm=   stub glider only
     GET  /api/ft/pi/logs ; POST /api/ft/pi/logs/{name}/fetch
     GET  /api/ft/logs ; GET /api/ft/logs/{name}       fetched logs, parsed for replay
     WS   /ws/ft                         snapshot + new telemetry points, 5 Hz
@@ -51,7 +51,7 @@ class Runtime:
         from flighttest.ground import GroundStation
         self.lock = threading.Lock()
         self.cal = calibration.load()
-        self.ground = GroundStation(neutral_us=calibration.neutral_us(self.cal))
+        self.ground = GroundStation(cal=self.cal)
         self.pi = None
         self.stub_glider = None
         self._pi_cache: tuple[float, dict] | None = None
@@ -107,7 +107,8 @@ def status() -> dict:
         snap = r.ground.snapshot(_now_ms())
     snap["pi"] = r.pi_status()
     snap["stub"] = None if r.stub_glider is None else {
-        "airborne": r.stub_glider.airborne, "loss": r.stub_glider.loss, "rail_sensor": r.stub_glider.rail_sensor}
+        "flying": r.stub_glider.alt_true > 0, "airborne": r.stub_glider.airborne, "loss": r.stub_glider.loss,
+        "rail_sensor": r.stub_glider.rail_sensor, "pi_alive": r.stub_glider.pi_alive}
     return snap
 
 
@@ -125,7 +126,8 @@ def connect(transport: str = "stub", port: Optional[str] = None, baud: int = 115
     r = rt()
     with r.lock:
         if transport == "stub":
-            r.stub_glider = StubGlider(calibration.neutral_us(r.cal), now_ms=_now_ms(), seed=int(time.time()))
+            r.stub_glider = StubGlider(calibration.neutral_us(r.cal), now_ms=_now_ms(), seed=int(time.time()),
+                                       limits=calibration.limits(r.cal))
             r.ground.connect(StubLink(r.stub_glider))
         elif transport == "serial":
             if not port:
@@ -224,30 +226,36 @@ def put_calibration(cal: dict = Body(...)) -> dict:
         raise HTTPException(400, str(exc))
     with r.lock:
         r.cal = cal
-        r.ground.neutral_us = calibration.neutral_us(cal)
-        if r.stub_glider is not None:     # the stub "firmware" picks up neutrals immediately
+        r.ground.set_calibration(cal)
+        if r.stub_glider is not None:     # the stub "firmware" picks up neutrals and limits immediately
             r.stub_glider.safety.s.neutral_us = calibration.neutral_us(cal)
+            r.stub_glider.safety.set_limits(*calibration.limits(cal))
     # HARDWARE SEAM: the real ESP32 keeps neutrals in NVS; pushing them is not implemented.
     return {"calibration": cal, "problems": [], "pushed_to_firmware": False}
 
 
 @router.post("/api/ft/stub")
-def stub(airborne: Optional[bool] = None, loss: Optional[float] = None, rail_sensor: Optional[bool] = None) -> dict:
+def stub(flying: Optional[bool] = None, loss: Optional[float] = None, rail_sensor: Optional[bool] = None,
+         pi_alive: Optional[bool] = None, flight_arm: Optional[bool] = None) -> dict:
     r = rt()
     with r.lock:
         g = r.stub_glider
         if g is None:
             raise HTTPException(409, "the stub glider is not connected")
-        if airborne is not None:
-            g.airborne = airborne
-            g.alt_true = 10.0 if airborne else 0.0
+        if flying is not None:            # whether the firmware then *detects* airborne is up to its rules
+            g.set_flying(flying)
+        if pi_alive is not None:
+            g.pi_alive = pi_alive
+        if flight_arm:                    # simulate arming FLIGHT (not a ground-app action)
+            g.arm_flight_locally(_now_ms())
         if loss is not None:
             if not 0.0 <= loss <= 1.0:
                 raise HTTPException(400, "loss must be 0..1")
             g.loss = loss
         if rail_sensor is not None:
             g.rail_sensor = rail_sensor
-        return {"airborne": g.airborne, "loss": g.loss, "rail_sensor": g.rail_sensor}
+        return {"flying": g.alt_true > 0, "airborne": g.airborne, "loss": g.loss,
+                "rail_sensor": g.rail_sensor, "pi_alive": g.pi_alive}
 
 
 @router.get("/api/ft/pi/logs")

@@ -63,7 +63,7 @@ def test_round_trip_and_vectors():
                 assert got == pytest.approx(want, rel=1e-6)
             else:
                 assert got == want
-    t = P.Telemetry(seq=1, sonar=-1.0, rail_v=-1.0)
+    t = P.Telemetry(seq=1, sonar=-1.0, rail_adc_v=-1.0)
     assert P.Telemetry.decode(t.encode()).sonar == -1.0
 
 
@@ -166,7 +166,7 @@ def test_c_struct_layout_matches_python():
             out = (ctypes.c_double * 16)()
             lib.rlg_test_decode_telemetry(host_lib.buf(raw), out)
             want = [pkt.seq, pkt.roll, pkt.pitch, pkt.yaw, pkt.p, pkt.q, pkt.r, pkt.alt_baro, pkt.sonar,
-                    pkt.lat, pkt.lon, pkt.vn, pkt.ve, pkt.rail_v, pkt.status, raw[-1]]
+                    pkt.lat, pkt.lon, pkt.vn, pkt.ve, pkt.rail_adc_v, pkt.status, raw[-1]]
             assert list(out) == pytest.approx(want, rel=0, abs=0)
         else:
             out = (ctypes.c_uint32 * 7)()

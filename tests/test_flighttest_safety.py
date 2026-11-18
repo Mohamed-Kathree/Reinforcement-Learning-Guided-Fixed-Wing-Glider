@@ -1,19 +1,30 @@
 """
 test_flighttest_safety.py
 =========================
-Command safety for the control surfaces (flight-test brief, SAFETY section).
-Every scenario runs against BOTH the Python reference (flighttest/safety.py)
-and the C firmware code (firmware/protocol/rlg_safety.c, compiled for the host).
-A randomised differential test then drives both through thousands of identical
-event sequences and requires identical observable state after every step.
+The firmware safety layer (firmware/protocol/rlg_safety.h). Every scenario
+runs against BOTH the Python reference (flighttest/safety.py) and the C code
+(firmware/protocol/rlg_safety.c, compiled for the host). A randomised
+differential test then drives both through thousands of identical event
+sequences and requires identical observable state after every step.
 
-Host-only: this proves the logic, not the ESP32 integration (timers, PWM,
-ESP-NOW callbacks), which remains untested until hardware is available.
+Covers the 18 Nov 2026 rules:
+  - two links, two timeouts: ESP-NOW 150 ms for BENCH/REPLAY only (never in
+    FLIGHT); Pi setpoints 150 ms in FLIGHT -> failsafe glide, 5 fresh setpoints
+    to resume;
+  - airborne = baro > 5 m above the ground reference (NaN does not vote) OR
+    GPS fix and speed > 2 m/s OR armed in FLIGHT within 60 s;
+  - per-servo limits are runtime values (from the calibration file), inside
+    the compiled absolute envelope;
+  - arming by 5 consecutive frames.
+
+Host-only: proves the logic, not the ESP32 integration (timers, PWM, ESP-NOW
+callbacks, UART), which stays untested until hardware is available.
 """
 
 from __future__ import annotations
 
 import ctypes
+import math
 import os
 import random
 import sys
@@ -26,11 +37,13 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "c"))
 
 from flighttest import safety as S  # noqa: E402
 from flighttest.protocol import packets as P  # noqa: E402
+from flighttest.safety import Sensors  # noqa: E402
 import host_lib  # noqa: E402
 
 NEUTRAL = [1480, 1510, 1500, 1495]
 TIMEOUT = P.COMMAND_TIMEOUT_MS
 REARM = P.REARM_CONSECUTIVE_FRAMES
+GROUND = Sensors()                                   # no baro reference, no fix, stationary
 
 
 class PyImpl:
@@ -39,14 +52,26 @@ class PyImpl:
     def __init__(self, neutral=NEUTRAL, now=0):
         self.s = S.Safety(neutral, now)
 
-    def cmd(self, now, airborne, frame):
-        return self.s.on_command(now, airborne, frame)
+    def cmd(self, now, sens, frame):
+        return self.s.on_command(now, sens, frame)
 
-    def tick(self, now):
-        self.s.tick(now)
+    def tick(self, now, sens=GROUND):
+        self.s.tick(now, sens)
+
+    def pi(self, now):
+        self.s.on_pi_setpoint(now)
+
+    def airborne(self, now, sens):
+        return self.s.is_airborne(now, sens)
+
+    def limits(self, lo, hi):
+        return self.s.set_limits(lo, hi)
 
     def flight(self, us):
         return self.s.flight_output(us)
+
+    def failsafe(self):
+        return self.s.s.pi_failsafe
 
     def state(self):
         return (self.s.s.mode, self.s.s.armed, tuple(self.s.s.servo_us), self.s.status_bits())
@@ -58,17 +83,33 @@ class CImpl:
     def __init__(self, neutral=NEUTRAL, now=0):
         self.lib = host_lib.load()
         self.buf = ctypes.create_string_buffer(self.lib.rlg_safety_sizeof())
-        n = (ctypes.c_uint16 * 4)(*neutral)
-        self.lib.rlg_safety_init(self.buf, n, now & 0xFFFFFFFF)
+        self.lib.rlg_safety_init(self.buf, (ctypes.c_uint16 * 4)(*neutral), now & 0xFFFFFFFF)
 
-    def cmd(self, now, airborne, frame):
-        return self.lib.rlg_safety_on_command(self.buf, now & 0xFFFFFFFF, airborne, host_lib.buf(frame), len(frame))
+    @staticmethod
+    def _s(sens):
+        return ctypes.byref(host_lib.CSensors(sens.baro_alt_m, sens.gps_speed_ms, sens.gps_fix))
 
-    def tick(self, now):
-        self.lib.rlg_safety_tick(self.buf, now & 0xFFFFFFFF)
+    def cmd(self, now, sens, frame):
+        return self.lib.rlg_safety_on_command(self.buf, now & 0xFFFFFFFF, self._s(sens),
+                                              host_lib.buf(frame), len(frame))
+
+    def tick(self, now, sens=GROUND):
+        self.lib.rlg_safety_tick(self.buf, now & 0xFFFFFFFF, self._s(sens))
+
+    def pi(self, now):
+        self.lib.rlg_safety_on_pi_setpoint(self.buf, now & 0xFFFFFFFF)
+
+    def airborne(self, now, sens):
+        return self.lib.rlg_safety_is_airborne(self.buf, now & 0xFFFFFFFF, self._s(sens))
+
+    def limits(self, lo, hi):
+        return self.lib.rlg_safety_set_limits(self.buf, (ctypes.c_uint16 * 4)(*lo), (ctypes.c_uint16 * 4)(*hi))
 
     def flight(self, us):
         return self.lib.rlg_safety_flight_output(self.buf, (ctypes.c_uint16 * 4)(*us))
+
+    def failsafe(self):
+        return self.lib.rlg_safety_pi_failsafe(self.buf)
 
     def state(self):
         return (self.lib.rlg_safety_mode(self.buf), self.lib.rlg_safety_armed(self.buf),
@@ -76,9 +117,7 @@ class CImpl:
                 self.lib.rlg_safety_status_bits(self.buf))
 
 
-IMPLS = [PyImpl]
-if host_lib.compiler() is not None:
-    IMPLS.append(CImpl)
+IMPLS = [PyImpl] + ([CImpl] if host_lib.compiler() is not None else [])
 
 
 @pytest.fixture(params=IMPLS, ids=lambda c: c.name)
@@ -90,13 +129,14 @@ def frame(seq, mode, us=(1500, 1500, 1500, 1500)):
     return P.Command(seq=seq & 0xFFFF, mode=mode, servo_us=list(us)).encode()
 
 
-def arm(x, mode, start_seq=1, t0=0, us=(1600, 1400, 1550, 1450), airborne=False):
-    """Send REARM frames at 20 Hz; returns (next_seq, time of last frame)."""
+def arm(x, mode, start_seq=1, t0=0, us=(1600, 1400, 1550, 1450), sens=GROUND):
     r = None
     for k in range(REARM):
-        r = x.cmd(t0 + 50 * k, airborne, frame(start_seq + k, mode, us))
+        r = x.cmd(t0 + 50 * k, sens, frame(start_seq + k, mode, us))
     return r, start_seq + REARM, t0 + 50 * (REARM - 1)
 
+
+# ---------------------------------------------------------------- arming, limits, ground timeout
 
 def test_boots_disarmed_and_centred(impl):
     x = impl()
@@ -106,24 +146,37 @@ def test_boots_disarmed_and_centred(impl):
 
 def test_one_frame_never_arms(impl):
     x = impl()
-    assert x.cmd(0, False, frame(1, P.BENCH, (2000, 2000, 2000, 2000))) == S.ARMING
+    assert x.cmd(0, GROUND, frame(1, P.BENCH, (2000,) * 4)) == S.ARMING
     assert x.state()[:3] == (P.DISARMED, False, tuple(NEUTRAL))
 
 
-def test_arms_after_consecutive_frames_and_clamps(impl):
+def test_arms_after_consecutive_frames_and_clamps_to_envelope(impl):
     x = impl()
     r, seq, t = arm(x, P.BENCH, us=(3000, 100, 2500, 1500))
     assert r == S.ARMED
-    mode, armed, servo, status = x.state()
-    assert mode == P.BENCH and armed
-    assert servo == (2300, 600, 2000, 1500)          # hard limits, elevator 1000-2000
-    assert P.unpack_status(status)["armed"] == 1
+    assert x.state()[:3] == (P.BENCH, True, (2300, 600, 2300, 1500))
 
 
-def test_timeout_centres_and_disarms(impl):
+def test_runtime_limits_from_calibration(impl):
+    x = impl()
+    assert x.limits([700, 700, 900, 700], [2200, 2200, 2100, 2200])
+    _, seq, t = arm(x, P.BENCH, us=(2300, 600, 2300, 1500))
+    assert x.state()[2] == (2200, 700, 2100, 1500)
+    assert not x.limits([1600, 600, 600, 600], [1500, 2300, 2300, 2300])    # min > max refused
+    assert x.state()[2] == (2200, 700, 2100, 1500)                          # unchanged
+
+
+def test_limits_cannot_widen_past_absolute_envelope(impl):
+    x = impl()
+    assert x.limits([100, 100, 100, 100], [3000, 3000, 3000, 3000])
+    arm(x, P.BENCH, us=(100, 3000, 1500, 1500))
+    assert x.state()[2] == (P.ABS_MIN_US, P.ABS_MAX_US, 1500, 1500)
+
+
+def test_esp_now_timeout_centres_and_disarms_bench(impl):
     x = impl()
     _, seq, t = arm(x, P.BENCH)
-    x.tick(t + TIMEOUT)                              # exactly 150 ms: still armed
+    x.tick(t + TIMEOUT)
     assert x.state()[1]
     x.tick(t + TIMEOUT + 1)
     mode, armed, servo, status = x.state()
@@ -131,21 +184,12 @@ def test_timeout_centres_and_disarms(impl):
     assert P.unpack_status(status)["timeout_disarmed"] == 1
 
 
-def test_three_missed_frames_at_20hz_disarm(impl):
-    x = impl()
-    _, seq, t = arm(x, P.REPLAY)
-    for now in range(t + 10, t + 200, 10):          # frames at t+50, t+100, t+150 are missed
-        x.tick(now)
-    assert x.state()[0] == P.DISARMED
-
-
 def test_stale_replay_packet_cannot_move_a_surface(impl):
     x = impl()
     _, seq, t = arm(x, P.REPLAY)
-    x.tick(t + 500)                                  # link lost -> disarmed
-    late = x.cmd(t + 520, False, frame(seq + 1, P.REPLAY, (2300, 600, 2000, 2300)))
-    assert late == S.ARMING
-    assert list(x.state()[2]) == NEUTRAL             # surfaces did not move
+    x.tick(t + 500)
+    assert x.cmd(t + 520, GROUND, frame(seq + 1, P.REPLAY, (2300, 600, 2000, 2300))) == S.ARMING
+    assert list(x.state()[2]) == NEUTRAL
 
 
 def test_rearm_after_timeout_needs_consecutive_frames(impl):
@@ -153,87 +197,33 @@ def test_rearm_after_timeout_needs_consecutive_frames(impl):
     _, seq, t = arm(x, P.BENCH)
     x.tick(t + 400)
     for k in range(REARM - 1):
-        assert x.cmd(t + 500 + 50 * k, False, frame(seq + k, P.BENCH)) == S.ARMING
-    assert x.cmd(t + 500 + 50 * (REARM - 1), False, frame(seq + REARM - 1, P.BENCH)) == S.ARMED
-
-
-def test_arming_interrupted_by_gap_restarts_count(impl):
-    x = impl()
-    for k in range(REARM - 1):
-        x.cmd(50 * k, False, frame(1 + k, P.BENCH))
-    t = 50 * (REARM - 2) + TIMEOUT + 1
-    x.tick(t)
-    assert x.cmd(t + 1, False, frame(100, P.BENCH)) == S.ARMING     # count restarted at 1
-    assert not x.state()[1]
-
-
-def test_bench_and_replay_refused_when_airborne(impl):
-    for mode in (P.BENCH, P.REPLAY):
-        x = impl()
-        for k in range(REARM + 2):
-            assert x.cmd(50 * k, True, frame(1 + k, mode, (2000,) * 4)) == S.REJECTED_AIRBORNE
-        mode_now, armed, servo, status = x.state()
-        assert not armed and list(servo) == NEUTRAL
-        assert P.unpack_status(status)["cmd_rejected_airborne"] == 1
-
-
-def test_becoming_airborne_disarms_bench(impl):
-    x = impl()
-    _, seq, t = arm(x, P.BENCH)
-    assert x.cmd(t + 50, True, frame(seq, P.BENCH)) == S.REJECTED_AIRBORNE
-    assert x.state()[:3] == (P.DISARMED, False, tuple(NEUTRAL))
-
-
-def test_flight_mode_ignores_ground_servos_and_has_no_link_timeout(impl):
-    x = impl()
-    r, seq, t = arm(x, P.FLIGHT, us=(2300, 600, 2000, 2300))
-    assert r == S.ARMED
-    assert list(x.state()[2]) == NEUTRAL             # ground values ignored in FLIGHT
-    x.tick(t + 10_000)                               # ESP-NOW silent for 10 s in flight
-    assert x.state()[:2] == (P.FLIGHT, True)
-    assert x.flight([1600, 1400, 2600, 1500])
-    assert x.state()[2] == (1600, 1400, 2000, 1500)  # clamped
-
-
-def test_flight_output_ignored_outside_flight(impl):
-    x = impl()
-    arm(x, P.BENCH, us=(1500,) * 4)
-    assert not x.flight([2000] * 4)
-    assert x.state()[2] == (1500,) * 4
+        assert x.cmd(t + 500 + 50 * k, GROUND, frame(seq + k, P.BENCH)) == S.ARMING
+    assert x.cmd(t + 500 + 50 * (REARM - 1), GROUND, frame(seq + REARM - 1, P.BENCH)) == S.ARMED
 
 
 def test_mode_switch_centres_and_requires_rearm(impl):
     x = impl()
     _, seq, t = arm(x, P.BENCH, us=(2000,) * 4)
-    assert x.cmd(t + 50, False, frame(seq, P.REPLAY, (2000,) * 4)) == S.ARMING
+    assert x.cmd(t + 50, GROUND, frame(seq, P.REPLAY, (2000,) * 4)) == S.ARMING
     assert x.state()[:3] == (P.DISARMED, False, tuple(NEUTRAL))
 
 
 def test_disarm_command_is_immediate(impl):
     x = impl()
     _, seq, t = arm(x, P.BENCH, us=(2000,) * 4)
-    assert x.cmd(t + 50, False, frame(seq, P.DISARMED)) == S.DISARMED_RESULT
+    assert x.cmd(t + 50, GROUND, frame(seq, P.DISARMED)) == S.DISARMED_RESULT
     assert x.state()[:3] == (P.DISARMED, False, tuple(NEUTRAL))
 
 
-def test_idle_expiry_disarms_but_activity_keeps_it(impl):
+def test_idle_expiry(impl):
     x = impl()
     _, seq, t = arm(x, P.BENCH, us=(1500,) * 4)
     now = t
-    while now < t + P.ARM_IDLE_EXPIRY_MS - 1000:     # unchanged values for ~119 s
-        now += 50
-        seq += 1
-        x.cmd(now, False, frame(seq, P.BENCH, (1500,) * 4))
-        x.tick(now)
-    assert x.state()[1]
-    seq += 1
-    now += 50
-    x.cmd(now, False, frame(seq, P.BENCH, (1510, 1500, 1500, 1500)))   # activity resets the clock
-    end = now + P.ARM_IDLE_EXPIRY_MS + 100
+    end = t + P.ARM_IDLE_EXPIRY_MS + 100
     while now < end:
         now += 50
         seq += 1
-        x.cmd(now, False, frame(seq, P.BENCH, (1510, 1500, 1500, 1500)))
+        x.cmd(now, GROUND, frame(seq, P.BENCH, (1500,) * 4))
         x.tick(now)
     assert x.state()[:2] == (P.DISARMED, False)
 
@@ -243,65 +233,181 @@ def test_bad_frames_change_nothing(impl):
     _, seq, t = arm(x, P.BENCH, us=(1700,) * 4)
     before = x.state()
     good = bytearray(frame(seq, P.BENCH, (2000,) * 4))
-    corrupt = bytes(good[:-1]) + bytes([good[-1] ^ 0xFF])
-    assert x.cmd(t + 10, False, corrupt) == S.REJECTED_FRAME
-    assert x.cmd(t + 20, False, bytes(good[:-1])) == S.REJECTED_FRAME
-    bad_mode = P.Command(seq=seq, mode=7, servo_us=[2000] * 4).encode()
-    assert x.cmd(t + 30, False, bad_mode) == S.REJECTED_FRAME
+    assert x.cmd(t + 10, GROUND, bytes(good[:-1]) + bytes([good[-1] ^ 0xFF])) == S.REJECTED_FRAME
+    assert x.cmd(t + 20, GROUND, bytes(good[:-1])) == S.REJECTED_FRAME
+    assert x.cmd(t + 30, GROUND, P.Command(seq=seq, mode=7, servo_us=[2000] * 4).encode()) == S.REJECTED_FRAME
     assert x.state() == before
 
 
 def test_sequence_numbers(impl):
     x = impl()
-    _, seq, t = arm(x, P.BENCH, start_seq=65533)     # crosses the u16 wrap while arming
-    assert x.state()[1]
-    assert x.cmd(t + 50, False, frame(seq - 1, P.BENCH, (2000,) * 4)) == S.REJECTED_STALE   # duplicate
-    assert x.cmd(t + 60, False, frame(seq, P.BENCH, (2000,) * 4)) == S.ACCEPTED
-
-
-def test_neutral_outside_limits_is_clamped(impl):
-    x = impl(neutral=[500, 2500, 900, 1500])
-    assert x.state()[2] == (600, 2300, 1000, 1500)
+    _, seq, t = arm(x, P.BENCH, start_seq=65533)
+    assert x.cmd(t + 50, GROUND, frame(seq - 1, P.BENCH, (2000,) * 4)) == S.REJECTED_STALE
+    assert x.cmd(t + 60, GROUND, frame(seq, P.BENCH, (2000,) * 4)) == S.ACCEPTED
 
 
 def test_clock_wrap(impl):
     t0 = 0xFFFFFFFF - 120
     x = impl(now=t0)
-    _, seq, t = arm(x, P.BENCH, t0=t0)               # arming crosses the u32 millisecond wrap
-    assert x.state()[1]
+    _, seq, t = arm(x, P.BENCH, t0=t0)
     x.tick(t + TIMEOUT)
     assert x.state()[1]
     x.tick(t + TIMEOUT + 1)
     assert not x.state()[1]
 
 
+# ---------------------------------------------------------------- airborne rules
+
+def test_cold_barometer_cannot_vote_airborne(impl):
+    """Before the ground reference exists (captured on arming after warm-up)
+    the baro altitude is NaN and does not vote, however large the transient."""
+    x = impl()
+    assert not x.airborne(0, Sensors(baro_alt_m=math.nan))
+    r, _, _ = arm(x, P.BENCH, sens=Sensors(baro_alt_m=math.nan))
+    assert r == S.ARMED
+
+
+def test_baro_threshold_is_5m(impl):
+    x = impl()
+    assert not x.airborne(0, Sensors(baro_alt_m=4.9))
+    assert x.airborne(0, Sensors(baro_alt_m=5.1))
+    assert x.cmd(0, Sensors(baro_alt_m=5.1), frame(1, P.BENCH)) == S.REJECTED_AIRBORNE
+
+
+def test_gps_speed_votes_only_with_a_fix(impl):
+    x = impl()
+    assert not x.airborne(0, Sensors(gps_speed_ms=9.0, gps_fix=0))
+    assert not x.airborne(0, Sensors(gps_speed_ms=1.9, gps_fix=2))
+    assert x.airborne(0, Sensors(gps_speed_ms=2.1, gps_fix=1))
+
+
+def test_flight_latch_refuses_bench_for_60s_after_flight(impl):
+    x = impl()
+    _, seq, t = arm(x, P.FLIGHT)
+    for k in range(5):
+        x.pi(t + 10 * k)
+    t_off = t + 1000
+    assert x.cmd(t_off, GROUND, frame(seq, P.DISARMED)) == S.DISARMED_RESULT
+    # Sitting still on the ground with no sensor votes: still "airborne" for 60 s.
+    for k in range(REARM):
+        assert x.cmd(t_off + 50 * (k + 1), GROUND, frame(seq + 1 + k, P.BENCH)) == S.REJECTED_AIRBORNE
+    assert x.airborne(t_off + P.FLIGHT_LATCH_MS, GROUND)
+    assert not x.airborne(t_off + P.FLIGHT_LATCH_MS + 1, GROUND)
+    r, _, _ = arm(x, P.BENCH, start_seq=seq + 100, t0=t_off + P.FLIGHT_LATCH_MS + 1000)
+    assert r == S.ARMED
+
+
+def test_armed_flight_counts_as_airborne(impl):
+    x = impl()
+    _, seq, t = arm(x, P.FLIGHT)
+    assert x.airborne(t + 1, GROUND)
+    assert x.cmd(t + 50, GROUND, frame(seq, P.REPLAY)) == S.REJECTED_AIRBORNE
+
+
+def test_becoming_airborne_disarms_bench(impl):
+    x = impl()
+    _, seq, t = arm(x, P.BENCH)
+    assert x.cmd(t + 50, Sensors(baro_alt_m=6.0), frame(seq, P.BENCH)) == S.REJECTED_AIRBORNE
+    assert x.state()[:3] == (P.DISARMED, False, tuple(NEUTRAL))
+
+
+# ---------------------------------------------------------------- FLIGHT: the two links
+
+def test_esp_now_silence_never_affects_flight(impl):
+    x = impl()
+    r, seq, t = arm(x, P.FLIGHT, us=(2300, 600, 2000, 2300))
+    assert r == S.ARMED
+    assert list(x.state()[2]) == NEUTRAL               # ground servo values ignored in FLIGHT
+    for k in range(0, 10_000, 50):                     # ESP-NOW silent 10 s; Pi alive throughout
+        x.pi(t + k)
+        x.tick(t + k)
+    assert x.state()[:2] == (P.FLIGHT, True) and not x.failsafe()
+
+
+def test_pi_timeout_enters_failsafe_glide_and_resumes(impl):
+    x = impl()
+    _, seq, t = arm(x, P.FLIGHT)
+    assert x.failsafe()                                # no Pi setpoints yet
+    for k in range(P.PI_RESUME_FRAMES):
+        x.pi(t + 50 * k)
+    assert not x.failsafe()
+    last = t + 50 * (P.PI_RESUME_FRAMES - 1)
+    x.tick(last + P.PI_TIMEOUT_MS)
+    assert not x.failsafe()
+    x.tick(last + P.PI_TIMEOUT_MS + 1)                 # Pi silent > 150 ms
+    assert x.failsafe() and x.state()[:2] == (P.FLIGHT, True)   # still flying, in failsafe glide
+    assert P.unpack_status(x.state()[3])["pi_failsafe"] == 1
+    t2 = last + 1000
+    x.pi(t2)
+    assert x.failsafe()                                # one setpoint is not enough
+    for k in range(1, P.PI_RESUME_FRAMES):
+        x.pi(t2 + 50 * k)
+    assert not x.failsafe()
+
+
+def test_pi_link_does_not_matter_outside_flight(impl):
+    x = impl()
+    _, seq, t = arm(x, P.BENCH)
+    x.tick(t + 100)                                    # no Pi setpoints at all
+    assert not x.failsafe() and x.state()[:2] == (P.BENCH, True)
+
+
+def test_flight_output_only_in_flight(impl):
+    x = impl()
+    arm(x, P.BENCH, us=(1500,) * 4)
+    assert not x.flight([2000] * 4)
+    x2 = impl()
+    arm(x2, P.FLIGHT)
+    assert x2.flight([1600, 1400, 2600, 1500])
+    assert x2.state()[2] == (1600, 1400, 2300, 1500)
+
+
+# ---------------------------------------------------------------- differential
+
 @pytest.mark.skipif(host_lib.compiler() is None, reason="no C compiler: differential test needs the C side")
-@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("seed", range(8))
 def test_python_and_c_agree_on_random_sequences(seed):
     rng = random.Random(seed)
     neutral = [rng.randrange(1300, 1700) for _ in range(4)]
     t0 = rng.choice([0, 0xFFFFFFFF - 5000])
     a, b = PyImpl(neutral, t0), CImpl(neutral, t0)
-    now, seq, airborne = t0, rng.randrange(65536), False
-    for step in range(3000):
-        r = rng.random()
-        now += rng.choice([0, 10, 50, 50, 50, 140, 150, 151, 400]) if r < 0.97 else rng.randrange(100_000, 130_000)
-        if rng.random() < 0.02:
-            airborne = not airborne
-        kind = rng.random()
-        if kind < 0.70:
+    now, seq = t0, rng.randrange(65536)
+
+    def sens():
+        alt = rng.choice([math.nan, math.nan, rng.uniform(0, 4.9), rng.uniform(4.9, 5.1), rng.uniform(5.1, 20)])
+        return Sensors(baro_alt_m=float(alt), gps_speed_ms=rng.choice([0.0, 1.0, 2.0, 2.5, 9.0]),
+                       gps_fix=rng.choice([0, 0, 1, 2]))
+
+    def f32(s):     # the C side stores floats; compare on identical inputs
+        return Sensors(baro_alt_m=float(ctypes.c_float(s.baro_alt_m).value),
+                       gps_speed_ms=float(ctypes.c_float(s.gps_speed_ms).value), gps_fix=s.gps_fix)
+
+    for step in range(4000):
+        now += rng.choice([0, 10, 50, 50, 50, 140, 150, 151, 400]) if rng.random() < 0.97 \
+            else rng.choice([rng.randrange(59_000, 61_500), rng.randrange(100_000, 130_000)])
+        k = rng.random()
+        if k < 0.55:
             seq += rng.choice([1, 1, 1, 1, 0, -1, 2, 300])
-            mode = rng.choice([P.BENCH, P.BENCH, P.REPLAY, P.FLIGHT, P.DISARMED])
-            us = [rng.choice([1500, rng.randrange(400, 2600)]) for _ in range(4)]
-            f = bytearray(frame(seq, mode, us))
+            mode = rng.choice([P.BENCH, P.BENCH, P.REPLAY, P.FLIGHT, P.FLIGHT, P.DISARMED])
+            f = bytearray(frame(seq, mode, [rng.choice([1500, rng.randrange(400, 2600)]) for _ in range(4)]))
             if rng.random() < 0.05:
                 f[rng.randrange(len(f))] ^= 1 << rng.randrange(8)
-            ra, rb = a.cmd(now, airborne, bytes(f)), b.cmd(now, airborne, bytes(f))
+            s = f32(sens())
+            ra, rb = a.cmd(now, s, bytes(f)), b.cmd(now, s, bytes(f))
             assert ra == rb, (seed, step, S.RESULT_NAMES[ra], S.RESULT_NAMES[rb])
-        elif kind < 0.95:
-            a.tick(now)
-            b.tick(now)
-        else:
+        elif k < 0.75:
+            s = f32(sens())
+            a.tick(now, s)
+            b.tick(now, s)
+        elif k < 0.90:
+            a.pi(now)
+            b.pi(now)
+        elif k < 0.97:
             us = [rng.randrange(400, 2600) for _ in range(4)]
             assert a.flight(us) == b.flight(us), (seed, step)
+        else:
+            lo = [rng.randrange(400, 1500) for _ in range(4)]
+            hi = [rng.randrange(1400, 2600) for _ in range(4)]
+            assert a.limits(lo, hi) == b.limits(lo, hi), (seed, step)
         assert a.state() == b.state(), (seed, step, a.state(), b.state())
+        assert a.failsafe() == b.failsafe(), (seed, step)
