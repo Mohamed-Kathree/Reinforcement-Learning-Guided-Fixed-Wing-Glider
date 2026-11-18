@@ -301,9 +301,7 @@ def main(argv: list[str]) -> int:
         # newline="" keeps CRLF visible; compare ignoring line endings, since a
         # Windows checkout (core.autocrlf) rewrites them without changing content.
         current = open(path, encoding="utf-8", newline="").read() if os.path.exists(path) else None
-        if current is None or current.replace("
-", "
-") != text:
+        if current is None or current.replace("\r\n", "\n") != text:
             stale.append(os.path.relpath(path, ROOT))
             if not check:
                 os.makedirs(os.path.dirname(path), exist_ok=True)
