@@ -1,8 +1,8 @@
 import { useState } from "react";
 import StackedBarChart from "./StackedBarChart";
 import type { BaselineRunResult } from "../types";
+import { API_BASE } from "../config";
 
-const API_BASE = "http://localhost:8000";
 
 interface BaselinePanelProps {
   onSelectEpisode: (episodeId: string) => void;

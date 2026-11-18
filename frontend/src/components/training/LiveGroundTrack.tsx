@@ -16,8 +16,8 @@
 import { useEffect, useRef, useState } from "react";
 import ExportButtons from "../ExportButtons";
 import type { LiveEpisode } from "../../types";
+import { API_BASE } from "../../config";
 
-const API_BASE = "http://localhost:8000";
 const POLL_MS = 3000;
 const SIZE = 220;
 

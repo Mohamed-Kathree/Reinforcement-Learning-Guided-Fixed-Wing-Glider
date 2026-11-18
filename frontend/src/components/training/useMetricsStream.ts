@@ -21,8 +21,9 @@
 import { useEffect, useRef, useState } from "react";
 import { downsample, type Point } from "./lttb";
 import type { TrainingMetric } from "../../types";
+import { WS_BASE } from "../../config";
 
-const WS_BASE = "ws://localhost:8000/ws/training";
+const WS_TRAINING = `${WS_BASE}/ws/training`;
 const DECIMATE_INTERVAL_MS = 250; // 4 Hz
 const DISPLAY_POINT_BUDGET = 1500;
 
@@ -94,7 +95,7 @@ export function useMetricsStream(runIds: string[]) {
 
     for (const runId of wanted) {
       if (buffers.has(runId)) continue;
-      const url = runId === LIVE_RUN_ID ? WS_BASE : `${WS_BASE}?run=${encodeURIComponent(runId)}`;
+      const url = runId === LIVE_RUN_ID ? WS_TRAINING : `${WS_TRAINING}?run=${encodeURIComponent(runId)}`;
       const ws = new WebSocket(url);
       const entry: RunBuffers = { raw: [], ws, lastProcessedLen: -1 };
       buffers.set(runId, entry);

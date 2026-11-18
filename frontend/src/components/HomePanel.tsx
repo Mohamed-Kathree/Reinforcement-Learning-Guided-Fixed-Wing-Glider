@@ -16,8 +16,8 @@ import type { Tab } from "../useHashRoute";
 import { controllerShortLabel } from "../controllers";
 import { CONTROLLER_NAME, GATE, STAGES, formatP, pct } from "../data/validation";
 import { IconAlert, IconArrowRight, IconCheck, IconInfo } from "../icons";
+import { API_BASE } from "../config";
 
-const API_BASE = "http://localhost:8000";
 const RECENT_SCAN_LIMIT = 20;
 
 function pickBest(trajectories: Trajectory[]): Trajectory | null {
@@ -187,7 +187,7 @@ export default function HomePanel({ onNavigate }: { onNavigate: (tab: Tab) => vo
             <div className="arch-layer-head">
               <span className="arch-rate">20 Hz</span>
               <strong>Guidance: Run 4 policy or baseline</strong>
-              <span className="arch-target">Raspberry Pi 5 (target)</span>
+              <span className="arch-target">Raspberry Pi 4B</span>
             </div>
             <p>
               PPO policy (Stable-Baselines3, 128 × 128 MLP) on 8 stacked frames of a 12-value observation, or

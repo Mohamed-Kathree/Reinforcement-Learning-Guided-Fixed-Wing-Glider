@@ -6,11 +6,15 @@ import ReplayPanel from "./components/ReplayPanel";
 import BaselinePanel from "./components/BaselinePanel";
 import TrainingPanel from "./components/TrainingPanel";
 import AnalysisPanel from "./components/AnalysisPanel";
+import ResearchPanel from "./components/ResearchPanel";
+import FlightTestPanel from "./components/FlightTestPanel";
 import {
-  IconActivity, IconBarChart, IconCheck, IconGlider, IconHome, IconMoon, IconPlay, IconScatter, IconSun,
+  IconActivity, IconBarChart, IconBook, IconCheck, IconGlider, IconHome, IconMoon, IconPlay, IconScatter, IconSun,
+  IconClipboard,
 } from "./icons";
 import { useHashRoute, type Tab } from "./useHashRoute";
 import { CONTROLLER_NAME, GATE } from "./data/validation";
+import { API_BASE } from "./config";
 
 interface NavItem {
   id: Tab;
@@ -26,6 +30,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { id: "home", label: "Overview", icon: IconHome },
       { id: "validation", label: "Validation", icon: IconCheck },
+      { id: "research", label: "Research", icon: IconBook },
     ],
   },
   {
@@ -36,15 +41,18 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
-    label: "Research",
+    label: "Data",
     items: [
       { id: "training", label: "Training", icon: IconActivity },
       { id: "analysis", label: "Analysis", icon: IconScatter },
     ],
   },
+  {
+    label: "Aircraft",
+    items: [{ id: "flighttest", label: "Flight Test", icon: IconClipboard }],
+  },
 ];
 
-const API_BASE = "http://localhost:8000";
 const THEME_KEY = "rl-glider-theme";
 
 type Theme = "light" | "dark";
@@ -58,7 +66,7 @@ function readTheme(): Theme {
 }
 
 function App() {
-  const { tab, episodeId: selectedEpisodeId, navigate } = useHashRoute();
+  const { tab, episodeId: selectedEpisodeId, episodeIdB, navigate } = useHashRoute();
   const activeGroup = NAV_GROUPS.find((g) => g.items.some((i) => i.id === tab));
   const activeNav = activeGroup?.items.find((i) => i.id === tab);
 
@@ -179,7 +187,13 @@ function App() {
             <HomePanel onNavigate={navigate} />
           </div>
           <div className={tab === "validation" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
-            <ValidationPanel />
+            <ValidationPanel onOpenFlights={(a, b) => navigate("replay", a, b)} />
+          </div>
+          <div className={tab === "research" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
+            <ResearchPanel />
+          </div>
+          <div className={tab === "flighttest" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
+            <FlightTestPanel />
           </div>
           <div className={tab === "baseline" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
             <BaselinePanel onSelectEpisode={handleSelectEpisode} />
@@ -191,7 +205,7 @@ function App() {
             <AnalysisPanel onSelectEpisode={handleSelectEpisode} />
           </div>
           <div className={tab === "replay" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
-            <ReplayPanel episodeId={selectedEpisodeId} />
+            <ReplayPanel episodeId={selectedEpisodeId} episodeIdB={episodeIdB} />
           </div>
         </div>
       </main>

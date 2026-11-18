@@ -8,8 +8,8 @@
 import { useEffect, useState } from "react";
 import type { TrainingRunMeta } from "../../types";
 import { LIVE_RUN_ID } from "./useMetricsStream";
+import { API_BASE } from "../../config";
 
-const API_BASE = "http://localhost:8000";
 
 interface RunBrowserProps {
   selectedRunIds: string[]; // includes LIVE_RUN_ID when the live run is selected

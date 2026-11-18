@@ -91,3 +91,43 @@ def test_unknown_controller_rejected():
     from backend import recorder
     with pytest.raises(ValueError):
         recorder.record_episode(controller="v22", stage=0, seed=1)
+
+
+@pytest.mark.skipif(not os.path.exists(RAW), reason="raw benchmark file not present")
+def test_research_json_is_regenerated_output(tmp_path, monkeypatch):
+    import analysis.export_dashboard_data as ex
+    monkeypatch.setattr(ex, "OUT", str(tmp_path / "validation.json"))
+    ex.main()
+    assert _load(str(tmp_path / "research.json")) == _load(DATA.replace("validation.json", "research.json")), \
+        "research.json is stale: run analysis/export_dashboard_data.py"
+
+
+@pytest.mark.skipif(not os.path.exists(CKPT), reason="run 4 checkpoint not present")
+def test_benchmark_replay_reproduces_the_benchmark(tmp_path, monkeypatch):
+    """benchmark=True flies the stored benchmark launch exactly (outcome and miss
+    distance), uses the deterministic id, reuses the stored file, and gated
+    recordings carry the gate's wind estimate per frame."""
+    from backend import config, recorder
+    monkeypatch.setattr(config, "EPISODES_DIR", tmp_path)
+    data = _load(DATA)
+    for stage in (0, 3):
+        f = data["stages"][stage]["flights"][0]
+        t = recorder.record_episode(controller="gated", stage=stage, seed=f["seed"], benchmark=True)
+        assert t.episode_id == f"gated-s{stage}-seed{f['seed']}-bench"
+        assert t.meta.outcome == f["outcome"]
+        assert abs(t.meta.final_dist_home - f["miss_m"]) < 0.06
+        assert all(fr.wind_est is not None for fr in t.frames[:-1]) and t.frames[-1].wind_est is None
+        b = recorder.record_episode(controller="baseline", stage=stage, seed=f["seed"], benchmark=True)
+        assert b.meta.outcome == f["baseline_outcome"]
+        assert all(fr.wind_est is None for fr in b.frames)
+    n = len(list(tmp_path.glob("*.json")))
+    recorder.record_episode(controller="gated", stage=3, seed=data["stages"][3]["flights"][0]["seed"], benchmark=True)
+    assert len(list(tmp_path.glob("*.json"))) == n, "a stored benchmark recording must be reused"
+
+
+def test_benchmark_replay_rejects_overrides_and_missing_seed():
+    from backend import recorder
+    with pytest.raises(ValueError):
+        recorder.record_episode(controller="gated", stage=0, benchmark=True)
+    with pytest.raises(ValueError):
+        recorder.record_episode(controller="gated", stage=0, seed=1, wind_speed=2.0, benchmark=True)

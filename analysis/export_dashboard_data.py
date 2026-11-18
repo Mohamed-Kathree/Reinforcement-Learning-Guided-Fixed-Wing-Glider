@@ -105,6 +105,13 @@ def main():
             "handover_time_median_s": hand_t[len(hand_t) // 2] if hand_t else None,
             "crash_timing": crash_timing,
             "feasibility": {"reachable": fs["reachable"], "landed_by_any_controller": fs["any_controller_success"]},
+            # Every benchmark flight, so the dashboard can open any of them in
+            # Flight Replay (backend recorder, benchmark=True, reproduces them).
+            "flights": [{"seed": e["seed"], "outcome": e["outcome"],
+                         "miss_m": round(e["miss_distance_m"], 1),
+                         "handover_s": e["gate"]["handover_time_s"],
+                         "baseline_outcome": base_eps[e["seed"]]}
+                        for e in w["episodes"]],
         })
 
     out = {
@@ -129,6 +136,102 @@ def main():
     for s in stages:
         print(s["stage"], s["gated"], s["baseline"], s["paired_success"]["p"], s["paired_crash"])
     print(f"wrote {os.path.relpath(OUT, ROOT)}")
+
+    research = build_research(feas, stages)
+    research_out = os.path.join(os.path.dirname(OUT), "research.json")
+    with open(research_out, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(research, f, indent=1)
+        f.write("\n")
+    print(f"wrote {os.path.relpath(research_out, ROOT)}")
+
+
+# Runs since the V22 reference, in order. Benchmarks are the committed
+# results/benchmark_*.json files (100 paired seeds, stages 0-3); findings
+# summarise docs/SPEC_V20_decisions.md.
+RUNS = [
+    {"id": "v22", "name": "V22", "change": "Reference configuration (commit ed65989), seed 0.",
+     "verdict": "reference",
+     "finding": "Best calm-air policy before V24; falls to 0% calm-air success by 20M steps.",
+     "checkpoints": [("best, 15M", "benchmark_v22_best_15M.json"), ("final, 20M", "benchmark_v22_final_20M.json")]},
+    {"id": "v23r1", "name": "V23 run 1", "change": "GAE λ 0.995 with glide-cone shaping and other changes bundled.",
+     "verdict": "negative",
+     "finding": "Worse than V22 at every stage. Bundling made the cause impossible to attribute.",
+     "checkpoints": [("best, 6.75M", "benchmark_v23run1_best_6.75M.json"), ("final, 20M", "benchmark_v23run1_final_20M.json")]},
+    {"id": "v23r2", "name": "V23 run 2", "change": "As run 1 without cone shaping.",
+     "verdict": "negative",
+     "finding": "Still worse than V22, so shaping was not the cause.",
+     "checkpoints": [("best, 10M", "benchmark_v23run2_best_10M.json"), ("final, 20M", "benchmark_v23run2_final_20M.json")]},
+    {"id": "run3", "name": "V24 run 3", "change": "V22 configuration with GAE λ 0.995 only.",
+     "verdict": "negative",
+     "finding": "Never left stage 0. The critic could not fit near-Monte-Carlo targets (explained variance 0.07–0.59 against V22's 0.84–0.93), so λ 0.995 is what broke runs 1–2.",
+     "checkpoints": [("best, 1.75M", "benchmark_v24run3_best_1.75M.json"), ("stopped, 8.6M", "benchmark_v24run3_8.6M.json")]},
+    {"id": "run4", "name": "V24 run 4", "change": "V22 configuration unchanged, training seed 1.",
+     "verdict": "selected",
+     "finding": "Reproduces V22 (63% against 59% calm-air success). Its best model is the policy inside the selected gated controller.",
+     "checkpoints": [("best, 15.5M", "benchmark_v24run4_best_15.5M.json"), ("20M", "benchmark_v24run4_20M.json"),
+                     ("final, 24.5M", "benchmark_v24run4_final_24.5M.json")]},
+    {"id": "run5", "name": "V24 run 5", "change": "Run 4 best continued 10M steps on a fixed stage mix (20/20/30/30%).",
+     "verdict": "mixed",
+     "finding": "Stage 3 crashes fell from 54% to 37%, but it learned to avoid crashing rather than to get home, and calm-air success fell from 63% to 15%.",
+     "checkpoints": [("best, 1.75M", "benchmark_v24run5_best_1.75M.json"), ("5M", "benchmark_v24run5_5M.json"),
+                     ("final, 10M", "benchmark_v24run5_final_10M.json")]},
+]
+
+FINDINGS = [
+    {"title": "Raising GAE λ broke the critic",
+     "body": "λ 0.995 was meant to carry the landing outcome back to early decisions. The value network could not fit the resulting near-Monte-Carlo targets, and every run with it failed. Tested on its own in run 3."},
+    {"title": "Calm-air skill is forgotten in harder conditions",
+     "body": "Under every curriculum tried, calm-air success collapses once training moves to windier stages: V22 59% to 0%, run 4 63% to 1%, run 5 63% to 15%. The best checkpoint is always early; final checkpoints are much worse."},
+    {"title": "More training steps did not help",
+     "body": "Run 4 spent 9.4M steps at stage 2 at 2–7% training success against a 15% promotion bar, and never reached stage 3. The bars sit at the best any controller has achieved."},
+    {"title": "The task is limited by gusts, not energy",
+     "body": "Home is within gliding reach on 397 of 400 benchmark launches, usually with 7–9 times the energy needed. With no thrust or airbrakes the glider must shed that surplus precisely in one attempt, and gusts decide most stage-3 outcomes."},
+]
+
+
+def build_research(feas, stages):
+    def rates(path):
+        d = json.load(open(os.path.join(ROOT, "results", path)))["stages"]
+        return [{"success": round(d[str(s)]["policy"]["buckets"]["success"]["rate"], 4),
+                 "crash": round(d[str(s)]["policy"]["buckets"]["crash"]["rate"], 4)} for s in range(4)]
+
+    runs = [{**{k: v for k, v in r.items() if k != "checkpoints"},
+             "checkpoints": [{"label": lab, "source": f"results/{f}", "stages": rates(f)}
+                             for lab, f in r["checkpoints"]]} for r in RUNS]
+    baseline = [{"success": s["baseline"]["success"], "crash": s["baseline"]["crash"]} for s in stages]
+
+    rows = feas["rows"]
+    gust_bins = [(0.0, 0.5), (0.5, 1.0), (1.0, 1.5), (1.5, 2.0)]
+    wind_bins = [(-10.0, -4.0), (-4.0, -1.5), (-1.5, 1.5), (1.5, 4.0), (4.0, 10.0)]
+
+    def binned(st, key, bins):
+        rs = [r for r in rows if r["stage"] == st]
+        out = []
+        for i, (lo, hi) in enumerate(bins):
+            last = i == len(bins) - 1
+            inside = [r for r in rs if lo <= (r[key] or 0.0) < hi or (last and (r[key] or 0.0) == hi)]
+            out.append({"lo": lo, "hi": hi, "n": len(inside),
+                        "landed": sum(bool(r["any_controller_success"]) for r in inside)})
+        return out
+
+    feasibility = []
+    for st in range(4):
+        sm = feas["summary"][str(st)]
+        feasibility.append({
+            "stage": st,
+            "n": sm["n"],
+            "reachable": sm["reachable"],
+            "landed_by_any_controller": int(sm["any_controller_success"]),
+            "gated_success": round(stages[st]["gated"]["success"] * 100),
+            "baseline_success": round(stages[st]["baseline"]["success"] * 100),
+            "energy_margin_median": round(sm["margin_median"], 2),
+            "energy_margin_p10": round(sm["margin_p10"], 2),
+            "by_gust": binned(st, "gust_sigma", gust_bins),
+            "by_along_wind": binned(st, "w_along", wind_bins),
+        })
+    return {"generated_by": "analysis/export_dashboard_data.py",
+            "sources": ["results/benchmark_*.json", "results/feasibility_v24.json", "docs/SPEC_V20_decisions.md"],
+            "baseline": baseline, "runs": runs, "findings": FINDINGS, "feasibility": feasibility}
 
 
 if __name__ == "__main__":

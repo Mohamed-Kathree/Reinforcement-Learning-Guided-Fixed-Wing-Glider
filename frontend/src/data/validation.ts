@@ -41,6 +41,18 @@ export interface StageResult {
     before_window_opened: number;
   };
   feasibility: { reachable: number; landed_by_any_controller: number };
+  flights: BenchmarkFlight[];
+}
+
+export type FlightOutcome = "success" | "soft_landing" | "crash" | "timeout";
+
+/** One benchmark launch: what the gated controller and the baseline did on it. */
+export interface BenchmarkFlight {
+  seed: number;
+  outcome: FlightOutcome;
+  miss_m: number;
+  handover_s: number | null;
+  baseline_outcome: FlightOutcome;
 }
 
 export interface ValidationData {
@@ -114,3 +126,14 @@ export function pp(a: number, b: number): string {
 }
 
 export const SIGNIFICANT_STAGES = STAGES.filter((s) => successVerdict(s) === "significant").map((s) => s.stage);
+
+/** The benchmark record behind a benchmark replay id
+ *  ("<controller>-s<stage>-seed<seed>-bench", backend/recorder.py), if it is one. */
+export function lookupBenchmark(episodeId: string):
+  { controller: "gated" | "baseline"; stage: number; flight: BenchmarkFlight } | null {
+  const m = /^(gated|baseline)-s(\d)-seed(\d+)-bench$/.exec(episodeId);
+  if (!m) return null;
+  const stage = Number(m[2]);
+  const flight = STAGES[stage]?.flights.find((f) => f.seed === Number(m[3]));
+  return flight ? { controller: m[1] as "gated" | "baseline", stage, flight } : null;
+}

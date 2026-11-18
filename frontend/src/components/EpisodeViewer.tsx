@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import FlightScene from "./FlightScene";
+import GateTraceChart from "./GateTraceChart";
+import { lookupBenchmark } from "../data/validation";
 import InstrumentCluster from "./InstrumentCluster";
 import AnnunciatorRow from "./AnnunciatorRow";
 import { kinematicsAt } from "../kinematics";
 import type { Controller, Trajectory } from "../types";
 import { CONTROLLER_OPTIONS, DEFAULT_CONTROLLER, controllerLabel, controllerShortLabel } from "../controllers";
+import { API_BASE } from "../config";
 
-const API_BASE = "http://localhost:8000";
 
 interface EpisodeViewerProps {
   initialEpisodeId?: string | null;
@@ -270,6 +272,8 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
             </div>
           )}
 
+          <BenchmarkCheck trajectory={trajectory} />
+
           <div className="replay-layout">
             <div className="replay-visual">
               <div className="scrubber-row">
@@ -297,6 +301,20 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
                   rHome={trajectory.meta.R_home}
                 />
               </div>
+
+              {trajectory.meta.gate && trajectory.frames.some((f) => f.wind_est != null) && (
+                <div className="surface gate-trace-card">
+                  <GateTraceChart
+                    frames={trajectory.frames}
+                    currentIndex={frameIndex}
+                    gate={trajectory.meta.gate}
+                    onSeek={(i) => {
+                      setPlaying(false);
+                      setFrameIndex(i);
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="replay-side">
@@ -364,6 +382,30 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+const OUTCOME_LABEL: Record<string, string> = {
+  success: "success", soft_landing: "soft landing", crash: "crash", timeout: "timeout",
+};
+
+/** For benchmark replays: does this recording reproduce the benchmark result? */
+function BenchmarkCheck({ trajectory }: { trajectory: Trajectory }) {
+  const b = lookupBenchmark(trajectory.episode_id);
+  if (!b) return null;
+  const expected = b.controller === "gated" ? b.flight.outcome : b.flight.baseline_outcome;
+  const outcomeOk = trajectory.meta.outcome === expected;
+  const missOk = b.controller !== "gated" || Math.abs(trajectory.meta.final_dist_home - b.flight.miss_m) < 0.15;
+  const ok = outcomeOk && missOk;
+  return (
+    <div className={`bench-check ${ok ? "bench-check-ok" : "bench-check-bad"}`} role="note">
+      <strong>Benchmark flight</strong>
+      <span>
+        Stage {b.stage}, seed {b.flight.seed}. Benchmark result: {OUTCOME_LABEL[expected]}
+        {b.controller === "gated" ? `, ${b.flight.miss_m.toFixed(1)} m` : ""}.{" "}
+        {ok ? "This replay reproduces it." : "This replay does NOT match the benchmark; treat it with caution."}
+      </span>
     </div>
   );
 }

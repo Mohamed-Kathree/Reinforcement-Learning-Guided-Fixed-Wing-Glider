@@ -129,6 +129,7 @@ def record_episode(
     dropout_prob: float | None = None,
     alt0_m: float | None = None,
     launch_offset_m: float | None = None,
+    benchmark: bool = False,
 ) -> Trajectory:
     """Run one episode and record its full TRUE-state trajectory to disk.
 
@@ -146,6 +147,11 @@ def record_episode(
         seed       : episode RNG seed; drawn randomly if None.
 
         wind_speed, gust_intensity, sensor_noise, dropout_prob, alt0_m,
+        benchmark  : record the flight exactly as the 100-seed benchmark flew it
+                     (stage preset, no overrides) under a deterministic id
+                     "<controller>-s<stage>-seed<seed>-bench", and return the
+                     stored recording if one already exists. Requires a seed.
+
         launch_offset_m : optional per-episode overrides of the chosen
                      stage's preset, for flying a custom scenario instead
                      of a fixed curriculum difficulty. wind_speed/
@@ -181,6 +187,17 @@ def record_episode(
 
     from env.curriculum import STAGES
     from env.glider_env import GliderEnv
+
+    if benchmark:
+        if seed is None:
+            raise ValueError("a benchmark recording needs the benchmark seed")
+        if any(v is not None for v in (wind_speed, gust_intensity, sensor_noise, dropout_prob,
+                                       alt0_m, launch_offset_m)):
+            raise ValueError("a benchmark recording uses the stage preset; drop the overrides")
+        bench_id = f"{controller}-s{stage}-seed{seed}-bench"
+        existing = config.EPISODES_DIR / f"{bench_id}.json"
+        if existing.is_file():
+            return Trajectory.model_validate_json(existing.read_text())
 
     if seed is None:
         seed = int(np.random.default_rng().integers(0, 2**31))
@@ -289,8 +306,13 @@ def record_episode(
     if controller == "gated":
         from .schemas import GateRecord
         gate_record = GateRecord(**rl_actor.episode_record())
+        # trace[k] is the estimate from the observation that produced frame k
+        # (frame 0 = reset, frame k = after step k); the terminal frame has none.
+        for k, w in enumerate(rl_actor.gate.trace[:len(frames)]):
+            frames[k].wind_est = float(w)
 
-    episode_id = f"{controller}-s{stage}-{uuid.uuid4().hex[:8]}"
+    episode_id = (f"{controller}-s{stage}-seed{seed}-bench" if benchmark
+                  else f"{controller}-s{stage}-{uuid.uuid4().hex[:8]}")
     trajectory = Trajectory(
         episode_id=episode_id,
         meta=TrajectoryMeta(

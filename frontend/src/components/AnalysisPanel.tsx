@@ -15,8 +15,8 @@ import { useEffect, useState } from "react";
 import TouchdownScatter from "./TouchdownScatter";
 import FailureGallery from "./FailureGallery";
 import type { EpisodeRecordSummary } from "../types";
+import { API_BASE } from "../config";
 
-const API_BASE = "http://localhost:8000";
 
 interface AnalysisPanelProps {
   onSelectEpisode: (episodeId: string) => void;

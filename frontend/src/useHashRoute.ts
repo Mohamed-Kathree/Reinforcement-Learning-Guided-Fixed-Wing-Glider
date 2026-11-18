@@ -1,28 +1,31 @@
 // useHashRoute.ts
 // ================
-// V16 Phase D §D5 -- fixes D6 (no URL routing; view and selected episode
-// lived only in React state, so refresh lost everything and nothing was
-// linkable). Hand-rolled hash router, not a library: this app has exactly
-// six fixed tabs plus one optional episode-id param, which is much less
-// machinery than a real router package provides for. `#/replay/ep-0042`
-// survives a refresh and is shareable, per the spec.
+// Hand-rolled hash router: fixed tabs plus optional episode ids for Flight
+// Replay. `#/replay/<id>` opens one flight; `#/replay/<idA>/<idB>` opens two
+// side by side (used for paired benchmark flights). Survives refresh and is
+// shareable.
 import { useCallback, useEffect, useState } from "react";
 
-export type Tab = "home" | "validation" | "baseline" | "training" | "analysis" | "replay";
+export type Tab = "home" | "validation" | "research" | "replay" | "baseline" | "training" | "analysis" | "flighttest";
 
-const VALID_TABS: Tab[] = ["home", "validation", "baseline", "training", "analysis", "replay"];
+const VALID_TABS: Tab[] = ["home", "validation", "research", "replay", "baseline", "training", "analysis", "flighttest"];
 
 interface RouteState {
   tab: Tab;
   episodeId: string | null;
+  episodeIdB: string | null;
 }
 
 function parseHash(): RouteState {
-  const raw = window.location.hash.replace(/^#\/?/, ""); // strip a leading "#" or "#/"
-  const [tabPart, episodePart] = raw.split("/");
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  const [tabPart, a, b] = raw.split("/");
   const tab = (VALID_TABS as string[]).includes(tabPart) ? (tabPart as Tab) : "home";
-  const episodeId = tab === "replay" && episodePart ? decodeURIComponent(episodePart) : null;
-  return { tab, episodeId };
+  const isReplay = tab === "replay";
+  return {
+    tab,
+    episodeId: isReplay && a ? decodeURIComponent(a) : null,
+    episodeIdB: isReplay && b ? decodeURIComponent(b) : null,
+  };
 }
 
 export function useHashRoute() {
@@ -36,16 +39,19 @@ export function useHashRoute() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  const navigate = useCallback((tab: Tab, episodeId?: string | null) => {
-    const nextHash = tab === "replay" && episodeId ? `#/replay/${encodeURIComponent(episodeId)}` : `#/${tab}`;
+  const navigate = useCallback((tab: Tab, episodeId?: string | null, episodeIdB?: string | null) => {
+    let nextHash = `#/${tab}`;
+    if (tab === "replay" && episodeId) {
+      nextHash += `/${encodeURIComponent(episodeId)}`;
+      if (episodeIdB) nextHash += `/${encodeURIComponent(episodeIdB)}`;
+    }
     if (window.location.hash === nextHash) {
-      // Same hash (e.g. re-clicking the already-active tab) -- "hashchange"
-      // won't fire on its own, so sync state directly instead.
-      setRoute({ tab, episodeId: episodeId ?? null });
+      setRoute({ tab, episodeId: episodeId ?? null, episodeIdB: episodeIdB ?? null });
     } else {
       window.location.hash = nextHash;
     }
+    window.scrollTo({ top: 0 });
   }, []);
 
-  return { tab: route.tab, episodeId: route.episodeId, navigate };
+  return { tab: route.tab, episodeId: route.episodeId, episodeIdB: route.episodeIdB, navigate };
 }

@@ -112,6 +112,8 @@ export interface Frame {
   alpha_deg: number;
   roll_deg: number;
   airspeed: number;
+  // On-board wind-estimate magnitude the gate saw (m/s); "gated" recordings only.
+  wind_est?: number | null;
 }
 
 export interface Trajectory {

@@ -141,6 +141,9 @@ class Frame(BaseModel):
     alpha_deg: float = 0.0
     roll_deg: float = 0.0
     airspeed: float = 0.0
+    # On-board wind-estimate magnitude (m/s) the gate saw at this frame;
+    # "gated" recordings only, None otherwise and on the terminal frame.
+    wind_est: Optional[float] = None
 
 
 class Trajectory(BaseModel):

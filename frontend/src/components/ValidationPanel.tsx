@@ -9,6 +9,7 @@ import { runTests } from "../api";
 import type { TestRunResult } from "../types";
 import GroupedBarChart, { ChartLegend, type Group, type Series } from "./validation/GroupedBarChart";
 import { Callout, Meter, SectionHead, VerdictBadge } from "./validation/parts";
+import BenchmarkFlights from "./validation/BenchmarkFlights";
 import { IconAlert, IconCheck, IconXCircle } from "../icons";
 import {
   ALPHA, CONTROLLER_NAME, GATE, SIGNIFICANT_STAGES, STAGES, VALIDATION,
@@ -20,13 +21,13 @@ const s0 = S[0];
 const s3 = S[3];
 
 const COMPARE_SERIES: Series[] = [
-  { key: "gated", label: "Run 4 – Gated", color: "var(--series-selected)", selected: true },
+  { key: "gated", label: "Run 4 – Gated", color: "var(--series-selected)", selected: true, badge: "Selected" },
   { key: "baseline", label: "Baseline", color: "var(--series-baseline)" },
   { key: "v22_gated", label: "V22 – Gated", color: "var(--series-v22)" },
 ];
 
 const ALONE_SERIES: Series[] = [
-  { key: "gated", label: "Run 4 – Gated", color: "var(--series-selected)", selected: true },
+  { key: "gated", label: "Run 4 – Gated", color: "var(--series-selected)", selected: true, badge: "Selected" },
   { key: "run4_alone", label: "Run 4 alone (no gate)", color: "var(--series-alone)" },
 ];
 
@@ -60,7 +61,7 @@ function interpret(s: StageResult): string {
   }
 }
 
-export default function ValidationPanel() {
+export default function ValidationPanel({ onOpenFlights }: { onOpenFlights: (idA: string, idB: string) => void }) {
   return (
     <div className="validation-dashboard">
       <header className="page-header">
@@ -77,6 +78,13 @@ export default function ValidationPanel() {
       <Performance />
       <Significance />
       <WindStages />
+      <section className="section" aria-labelledby="flights-h">
+        <SectionHead id="flights-h" kicker="Evidence" title="Every benchmark flight">
+          Each tile is one launch. Open any of them to watch the gated controller and the baseline fly
+          that exact launch side by side.
+        </SectionHead>
+        <BenchmarkFlights onOpen={onOpenFlights} />
+      </section>
       <GateMechanism />
       <Conclusions />
       <SimulatorChecks />

@@ -4,8 +4,8 @@
 // this is a showcase dashboard, not a production client.
 
 import type { TestRunResult } from "./types";
+import { API_BASE } from "./config";
 
-const API_BASE = "http://localhost:8000";
 
 async function postJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { method: "POST" });

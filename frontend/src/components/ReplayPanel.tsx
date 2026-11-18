@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
 import EpisodeViewer from "./EpisodeViewer";
+import { API_BASE } from "../config";
 
-const API_BASE = "http://localhost:8000";
 
 interface ReplayPanelProps {
   episodeId?: string | null;
+  episodeIdB?: string | null;   // set: open both side by side (paired benchmark flights)
 }
 
-export default function ReplayPanel({ episodeId }: ReplayPanelProps) {
-  const [compareMode, setCompareMode] = useState(false);
+export default function ReplayPanel({ episodeId, episodeIdB }: ReplayPanelProps) {
+  const [compareMode, setCompareMode] = useState(Boolean(episodeIdB));
+  useEffect(() => {
+    if (episodeIdB) setCompareMode(true);
+  }, [episodeIdB]);
   const [hasRlEpisode, setHasRlEpisode] = useState(false);
 
   useEffect(() => {
@@ -44,7 +48,7 @@ export default function ReplayPanel({ episodeId }: ReplayPanelProps) {
       {compareMode ? (
         <div className="compare-grid">
           <EpisodeViewer initialEpisodeId={episodeId} label="A" />
-          <EpisodeViewer label="B" />
+          <EpisodeViewer initialEpisodeId={episodeIdB} label="B" />
         </div>
       ) : (
         <EpisodeViewer initialEpisodeId={episodeId} />

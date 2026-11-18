@@ -1,0 +1,682 @@
+{
+ "generated_by": "analysis/export_dashboard_data.py",
+ "sources": [
+  "results/benchmark_*.json",
+  "results/feasibility_v24.json",
+  "docs/SPEC_V20_decisions.md"
+ ],
+ "baseline": [
+  {
+   "success": 0.27,
+   "crash": 0.0
+  },
+  {
+   "success": 0.25,
+   "crash": 0.0
+  },
+  {
+   "success": 0.11,
+   "crash": 0.06
+  },
+  {
+   "success": 0.08,
+   "crash": 0.39
+  }
+ ],
+ "runs": [
+  {
+   "id": "v22",
+   "name": "V22",
+   "change": "Reference configuration (commit ed65989), seed 0.",
+   "verdict": "reference",
+   "finding": "Best calm-air policy before V24; falls to 0% calm-air success by 20M steps.",
+   "checkpoints": [
+    {
+     "label": "best, 15M",
+     "source": "results/benchmark_v22_best_15M.json",
+     "stages": [
+      {
+       "success": 0.59,
+       "crash": 0.0
+      },
+      {
+       "success": 0.16,
+       "crash": 0.02
+      },
+      {
+       "success": 0.02,
+       "crash": 0.1
+      },
+      {
+       "success": 0.0,
+       "crash": 0.41
+      }
+     ]
+    },
+    {
+     "label": "final, 20M",
+     "source": "results/benchmark_v22_final_20M.json",
+     "stages": [
+      {
+       "success": 0.0,
+       "crash": 0.0
+      },
+      {
+       "success": 0.0,
+       "crash": 0.01
+      },
+      {
+       "success": 0.03,
+       "crash": 0.06
+      },
+      {
+       "success": 0.0,
+       "crash": 0.3
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "v23r1",
+   "name": "V23 run 1",
+   "change": "GAE \u03bb 0.995 with glide-cone shaping and other changes bundled.",
+   "verdict": "negative",
+   "finding": "Worse than V22 at every stage. Bundling made the cause impossible to attribute.",
+   "checkpoints": [
+    {
+     "label": "best, 6.75M",
+     "source": "results/benchmark_v23run1_best_6.75M.json",
+     "stages": [
+      {
+       "success": 0.35,
+       "crash": 0.0
+      },
+      {
+       "success": 0.06,
+       "crash": 0.05
+      },
+      {
+       "success": 0.03,
+       "crash": 0.11
+      },
+      {
+       "success": 0.0,
+       "crash": 0.46
+      }
+     ]
+    },
+    {
+     "label": "final, 20M",
+     "source": "results/benchmark_v23run1_final_20M.json",
+     "stages": [
+      {
+       "success": 0.02,
+       "crash": 0.0
+      },
+      {
+       "success": 0.02,
+       "crash": 0.06
+      },
+      {
+       "success": 0.04,
+       "crash": 0.23
+      },
+      {
+       "success": 0.03,
+       "crash": 0.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "v23r2",
+   "name": "V23 run 2",
+   "change": "As run 1 without cone shaping.",
+   "verdict": "negative",
+   "finding": "Still worse than V22, so shaping was not the cause.",
+   "checkpoints": [
+    {
+     "label": "best, 10M",
+     "source": "results/benchmark_v23run2_best_10M.json",
+     "stages": [
+      {
+       "success": 0.27,
+       "crash": 0.02
+      },
+      {
+       "success": 0.08,
+       "crash": 0.14
+      },
+      {
+       "success": 0.05,
+       "crash": 0.27
+      },
+      {
+       "success": 0.02,
+       "crash": 0.59
+      }
+     ]
+    },
+    {
+     "label": "final, 20M",
+     "source": "results/benchmark_v23run2_final_20M.json",
+     "stages": [
+      {
+       "success": 0.13,
+       "crash": 0.0
+      },
+      {
+       "success": 0.08,
+       "crash": 0.08
+      },
+      {
+       "success": 0.02,
+       "crash": 0.24
+      },
+      {
+       "success": 0.0,
+       "crash": 0.61
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "run3",
+   "name": "V24 run 3",
+   "change": "V22 configuration with GAE \u03bb 0.995 only.",
+   "verdict": "negative",
+   "finding": "Never left stage 0. The critic could not fit near-Monte-Carlo targets (explained variance 0.07\u20130.59 against V22's 0.84\u20130.93), so \u03bb 0.995 is what broke runs 1\u20132.",
+   "checkpoints": [
+    {
+     "label": "best, 1.75M",
+     "source": "results/benchmark_v24run3_best_1.75M.json",
+     "stages": [
+      {
+       "success": 0.07,
+       "crash": 0.0
+      },
+      {
+       "success": 0.0,
+       "crash": 0.06
+      },
+      {
+       "success": 0.01,
+       "crash": 0.19
+      },
+      {
+       "success": 0.0,
+       "crash": 0.48
+      }
+     ]
+    },
+    {
+     "label": "stopped, 8.6M",
+     "source": "results/benchmark_v24run3_8.6M.json",
+     "stages": [
+      {
+       "success": 0.09,
+       "crash": 0.0
+      },
+      {
+       "success": 0.03,
+       "crash": 0.06
+      },
+      {
+       "success": 0.0,
+       "crash": 0.24
+      },
+      {
+       "success": 0.0,
+       "crash": 0.52
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "run4",
+   "name": "V24 run 4",
+   "change": "V22 configuration unchanged, training seed 1.",
+   "verdict": "selected",
+   "finding": "Reproduces V22 (63% against 59% calm-air success). Its best model is the policy inside the selected gated controller.",
+   "checkpoints": [
+    {
+     "label": "best, 15.5M",
+     "source": "results/benchmark_v24run4_best_15.5M.json",
+     "stages": [
+      {
+       "success": 0.63,
+       "crash": 0.0
+      },
+      {
+       "success": 0.25,
+       "crash": 0.06
+      },
+      {
+       "success": 0.08,
+       "crash": 0.27
+      },
+      {
+       "success": 0.01,
+       "crash": 0.54
+      }
+     ]
+    },
+    {
+     "label": "20M",
+     "source": "results/benchmark_v24run4_20M.json",
+     "stages": [
+      {
+       "success": 0.17,
+       "crash": 0.0
+      },
+      {
+       "success": 0.11,
+       "crash": 0.05
+      },
+      {
+       "success": 0.07,
+       "crash": 0.17
+      },
+      {
+       "success": 0.0,
+       "crash": 0.48
+      }
+     ]
+    },
+    {
+     "label": "final, 24.5M",
+     "source": "results/benchmark_v24run4_final_24.5M.json",
+     "stages": [
+      {
+       "success": 0.01,
+       "crash": 0.0
+      },
+      {
+       "success": 0.1,
+       "crash": 0.02
+      },
+      {
+       "success": 0.06,
+       "crash": 0.08
+      },
+      {
+       "success": 0.02,
+       "crash": 0.43
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "run5",
+   "name": "V24 run 5",
+   "change": "Run 4 best continued 10M steps on a fixed stage mix (20/20/30/30%).",
+   "verdict": "mixed",
+   "finding": "Stage 3 crashes fell from 54% to 37%, but it learned to avoid crashing rather than to get home, and calm-air success fell from 63% to 15%.",
+   "checkpoints": [
+    {
+     "label": "best, 1.75M",
+     "source": "results/benchmark_v24run5_best_1.75M.json",
+     "stages": [
+      {
+       "success": 0.63,
+       "crash": 0.0
+      },
+      {
+       "success": 0.2,
+       "crash": 0.1
+      },
+      {
+       "success": 0.08,
+       "crash": 0.19
+      },
+      {
+       "success": 0.0,
+       "crash": 0.52
+      }
+     ]
+    },
+    {
+     "label": "5M",
+     "source": "results/benchmark_v24run5_5M.json",
+     "stages": [
+      {
+       "success": 0.43,
+       "crash": 0.0
+      },
+      {
+       "success": 0.17,
+       "crash": 0.01
+      },
+      {
+       "success": 0.06,
+       "crash": 0.15
+      },
+      {
+       "success": 0.0,
+       "crash": 0.46
+      }
+     ]
+    },
+    {
+     "label": "final, 10M",
+     "source": "results/benchmark_v24run5_final_10M.json",
+     "stages": [
+      {
+       "success": 0.15,
+       "crash": 0.0
+      },
+      {
+       "success": 0.11,
+       "crash": 0.0
+      },
+      {
+       "success": 0.02,
+       "crash": 0.11
+      },
+      {
+       "success": 0.01,
+       "crash": 0.37
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "findings": [
+  {
+   "title": "Raising GAE \u03bb broke the critic",
+   "body": "\u03bb 0.995 was meant to carry the landing outcome back to early decisions. The value network could not fit the resulting near-Monte-Carlo targets, and every run with it failed. Tested on its own in run 3."
+  },
+  {
+   "title": "Calm-air skill is forgotten in harder conditions",
+   "body": "Under every curriculum tried, calm-air success collapses once training moves to windier stages: V22 59% to 0%, run 4 63% to 1%, run 5 63% to 15%. The best checkpoint is always early; final checkpoints are much worse."
+  },
+  {
+   "title": "More training steps did not help",
+   "body": "Run 4 spent 9.4M steps at stage 2 at 2\u20137% training success against a 15% promotion bar, and never reached stage 3. The bars sit at the best any controller has achieved."
+  },
+  {
+   "title": "The task is limited by gusts, not energy",
+   "body": "Home is within gliding reach on 397 of 400 benchmark launches, usually with 7\u20139 times the energy needed. With no thrust or airbrakes the glider must shed that surplus precisely in one attempt, and gusts decide most stage-3 outcomes."
+  }
+ ],
+ "feasibility": [
+  {
+   "stage": 0,
+   "n": 100,
+   "reachable": 100,
+   "landed_by_any_controller": 100,
+   "gated_success": 58,
+   "baseline_success": 27,
+   "energy_margin_median": 8.55,
+   "energy_margin_p10": 6.35,
+   "by_gust": [
+    {
+     "lo": 0.0,
+     "hi": 0.5,
+     "n": 100,
+     "landed": 100
+    },
+    {
+     "lo": 0.5,
+     "hi": 1.0,
+     "n": 0,
+     "landed": 0
+    },
+    {
+     "lo": 1.0,
+     "hi": 1.5,
+     "n": 0,
+     "landed": 0
+    },
+    {
+     "lo": 1.5,
+     "hi": 2.0,
+     "n": 0,
+     "landed": 0
+    }
+   ],
+   "by_along_wind": [
+    {
+     "lo": -10.0,
+     "hi": -4.0,
+     "n": 0,
+     "landed": 0
+    },
+    {
+     "lo": -4.0,
+     "hi": -1.5,
+     "n": 0,
+     "landed": 0
+    },
+    {
+     "lo": -1.5,
+     "hi": 1.5,
+     "n": 100,
+     "landed": 100
+    },
+    {
+     "lo": 1.5,
+     "hi": 4.0,
+     "n": 0,
+     "landed": 0
+    },
+    {
+     "lo": 4.0,
+     "hi": 10.0,
+     "n": 0,
+     "landed": 0
+    }
+   ]
+  },
+  {
+   "stage": 1,
+   "n": 100,
+   "reachable": 100,
+   "landed_by_any_controller": 80,
+   "gated_success": 35,
+   "baseline_success": 25,
+   "energy_margin_median": 9.04,
+   "energy_margin_p10": 4.85,
+   "by_gust": [
+    {
+     "lo": 0.0,
+     "hi": 0.5,
+     "n": 100,
+     "landed": 80
+    },
+    {
+     "lo": 0.5,
+     "hi": 1.0,
+     "n": 0,
+     "landed": 0
+    },
+    {
+     "lo": 1.0,
+     "hi": 1.5,
+     "n": 0,
+     "landed": 0
+    },
+    {
+     "lo": 1.5,
+     "hi": 2.0,
+     "n": 0,
+     "landed": 0
+    }
+   ],
+   "by_along_wind": [
+    {
+     "lo": -10.0,
+     "hi": -4.0,
+     "n": 0,
+     "landed": 0
+    },
+    {
+     "lo": -4.0,
+     "hi": -1.5,
+     "n": 11,
+     "landed": 6
+    },
+    {
+     "lo": -1.5,
+     "hi": 1.5,
+     "n": 78,
+     "landed": 66
+    },
+    {
+     "lo": 1.5,
+     "hi": 4.0,
+     "n": 11,
+     "landed": 8
+    },
+    {
+     "lo": 4.0,
+     "hi": 10.0,
+     "n": 0,
+     "landed": 0
+    }
+   ]
+  },
+  {
+   "stage": 2,
+   "n": 100,
+   "reachable": 100,
+   "landed_by_any_controller": 49,
+   "gated_success": 19,
+   "baseline_success": 11,
+   "energy_margin_median": 8.65,
+   "energy_margin_p10": 4.18,
+   "by_gust": [
+    {
+     "lo": 0.0,
+     "hi": 0.5,
+     "n": 48,
+     "landed": 26
+    },
+    {
+     "lo": 0.5,
+     "hi": 1.0,
+     "n": 52,
+     "landed": 23
+    },
+    {
+     "lo": 1.0,
+     "hi": 1.5,
+     "n": 0,
+     "landed": 0
+    },
+    {
+     "lo": 1.5,
+     "hi": 2.0,
+     "n": 0,
+     "landed": 0
+    }
+   ],
+   "by_along_wind": [
+    {
+     "lo": -10.0,
+     "hi": -4.0,
+     "n": 5,
+     "landed": 0
+    },
+    {
+     "lo": -4.0,
+     "hi": -1.5,
+     "n": 18,
+     "landed": 6
+    },
+    {
+     "lo": -1.5,
+     "hi": 1.5,
+     "n": 49,
+     "landed": 30
+    },
+    {
+     "lo": 1.5,
+     "hi": 4.0,
+     "n": 24,
+     "landed": 10
+    },
+    {
+     "lo": 4.0,
+     "hi": 10.0,
+     "n": 4,
+     "landed": 3
+    }
+   ]
+  },
+  {
+   "stage": 3,
+   "n": 100,
+   "reachable": 97,
+   "landed_by_any_controller": 18,
+   "gated_success": 7,
+   "baseline_success": 8,
+   "energy_margin_median": 7.62,
+   "energy_margin_p10": 2.91,
+   "by_gust": [
+    {
+     "lo": 0.0,
+     "hi": 0.5,
+     "n": 21,
+     "landed": 11
+    },
+    {
+     "lo": 0.5,
+     "hi": 1.0,
+     "n": 27,
+     "landed": 5
+    },
+    {
+     "lo": 1.0,
+     "hi": 1.5,
+     "n": 29,
+     "landed": 1
+    },
+    {
+     "lo": 1.5,
+     "hi": 2.0,
+     "n": 23,
+     "landed": 1
+    }
+   ],
+   "by_along_wind": [
+    {
+     "lo": -10.0,
+     "hi": -4.0,
+     "n": 12,
+     "landed": 2
+    },
+    {
+     "lo": -4.0,
+     "hi": -1.5,
+     "n": 17,
+     "landed": 2
+    },
+    {
+     "lo": -1.5,
+     "hi": 1.5,
+     "n": 37,
+     "landed": 9
+    },
+    {
+     "lo": 1.5,
+     "hi": 4.0,
+     "n": 20,
+     "landed": 4
+    },
+    {
+     "lo": 4.0,
+     "hi": 10.0,
+     "n": 14,
+     "landed": 1
+    }
+   ]
+  }
+ ]
+}

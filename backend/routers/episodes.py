@@ -36,6 +36,7 @@ def record(
     dropout_prob: Optional[float] = None,
     alt0_m: Optional[float] = None,
     launch_offset_m: Optional[float] = None,
+    benchmark: bool = False,
 ) -> Trajectory:
     try:
         return recorder.record_episode(
@@ -48,6 +49,7 @@ def record(
             dropout_prob=dropout_prob,
             alt0_m=alt0_m,
             launch_offset_m=launch_offset_m,
+            benchmark=benchmark,
         )
     except (NotImplementedError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))

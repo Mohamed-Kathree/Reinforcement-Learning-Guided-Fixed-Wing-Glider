@@ -15,8 +15,8 @@ import StatusBar from "./training/StatusBar";
 import LiveGroundTrack from "./training/LiveGroundTrack";
 import RunBrowser from "./training/RunBrowser";
 import AnnunciatorRow from "./AnnunciatorRow";
+import { API_BASE } from "../config";
 
-const API_BASE = "http://localhost:8000";
 
 export default function TrainingPanel() {
   const [status, setStatus] = useState<TrainingStatus | null>(null);

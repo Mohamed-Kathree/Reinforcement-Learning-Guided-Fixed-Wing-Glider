@@ -11,7 +11,8 @@ export interface Series {
   key: string;
   label: string;
   color: string;        // CSS colour, usually a var(--series-*)
-  selected?: boolean;   // drawn with value labels and a heavier outline
+  selected?: boolean;   // drawn with value labels
+  badge?: string;       // legend badge, e.g. "Selected"
 }
 
 export interface Group {
@@ -180,7 +181,7 @@ export function ChartLegend({ series }: { series: Series[] }) {
         <li key={s.key} className={s.selected ? "legend-selected" : undefined}>
           <span className="legend-swatch" style={{ background: s.color }} aria-hidden="true" />
           {s.label}
-          {s.selected && <span className="badge badge-accent">Selected</span>}
+          {s.badge && <span className="badge badge-accent">{s.badge}</span>}
         </li>
       ))}
     </ul>
