@@ -298,8 +298,12 @@ def main(argv: list[str]) -> int:
     check = "--check" in argv
     stale = []
     for path, text in outputs().items():
-        current = open(path, encoding="utf-8").read() if os.path.exists(path) else None
-        if current != text:
+        # newline="" keeps CRLF visible; compare ignoring line endings, since a
+        # Windows checkout (core.autocrlf) rewrites them without changing content.
+        current = open(path, encoding="utf-8", newline="").read() if os.path.exists(path) else None
+        if current is None or current.replace("
+", "
+") != text:
             stale.append(os.path.relpath(path, ROOT))
             if not check:
                 os.makedirs(os.path.dirname(path), exist_ok=True)
