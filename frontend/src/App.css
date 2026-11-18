@@ -2150,3 +2150,81 @@ tr.row-muted td { background: var(--surface-alt); }
 .compare-grid .replay-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items: start; }
 .compare-grid .episode-viewer .flight-scene { height: 420px; }
 .avionics-table td.cell-wrap { min-width: 9rem; max-width: 18rem; }
+
+/* ================================================================== */
+/* Flight-test panels                                                  */
+/* ================================================================== */
+
+.ft-link { display: flex; flex-direction: column; gap: var(--space-3); border-top: 3px solid var(--neutral-fill); }
+.ft-link-up { border-top-color: var(--success-fill); }
+.ft-link-warn { border-top-color: var(--warning-fill); }
+.ft-link-down { border-top-color: var(--danger-fill); }
+.ft-link-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.ft-link-head h3 { font-size: var(--text-md); font-weight: 600; }
+.ft-light { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--text-sm); font-weight: 600; }
+.ft-light-dot { width: 9px; height: 9px; border-radius: 50%; }
+.ft-light-up { color: var(--success); }
+.ft-light-up .ft-light-dot { background: var(--success-fill); }
+.ft-light-warn { color: var(--warning); }
+.ft-light-warn .ft-light-dot { background: var(--warning-fill); }
+.ft-light-down { color: var(--danger); }
+.ft-light-down .ft-light-dot { background: var(--danger-fill); }
+.ft-kv { display: grid; grid-template-columns: minmax(0, 1fr); margin: 0; }
+.ft-kv > div { display: flex; justify-content: space-between; gap: var(--space-3); padding: 0.4rem 0; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
+.ft-kv > div:last-child { border-bottom: none; }
+.ft-kv dt { color: var(--text-faint); }
+.ft-kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.ft-kv small, .ft-servo-value small, .ft-modeline small { color: var(--text-faint); font-size: var(--text-2xs); }
+.muted { color: var(--text-faint); }
+.ft-connect { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: flex-end; }
+.ft-connect .hint-text { flex-basis: 100%; margin: 0; }
+.ft-subhead { font-size: var(--text-xs); color: var(--text-faint); font-weight: 600; margin: var(--space-2) 0 0; }
+.ft-loglist { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.ft-loglist li { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+.ft-loglist li > div { display: flex; flex-direction: column; min-width: 0; }
+.ft-loglist strong { font-size: var(--text-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-loglist span { font-size: var(--text-xs); color: var(--text-faint); }
+.ft-stub { margin-top: var(--space-4); border-style: dashed; }
+.ft-stub-row { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-5); align-items: center; }
+.ft-stub-row input[type="range"] { width: 120px; }
+
+.ft-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
+.ft-tile { padding: var(--space-4); }
+.ft-tile-label { font-size: var(--text-xs); color: var(--text-faint); }
+.ft-tile-value { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 650; font-variant-numeric: tabular-nums; margin: 2px 0 var(--space-1); }
+.ft-tile-note { font-size: var(--text-xs); color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; line-height: 1.5; }
+.ft-rail { border-left: 4px solid var(--neutral-fill); }
+.ft-rail .ft-tile-value { font-size: var(--text-xl); }
+.ft-rail-ok { border-left-color: var(--success-fill); }
+.ft-rail-low { border-left-color: var(--warning-fill); background: color-mix(in srgb, var(--warning-fill) 6%, var(--surface)); }
+.ft-rail-brownout { border-left-color: var(--danger-fill); background: color-mix(in srgb, var(--danger-fill) 8%, var(--surface)); }
+.ft-rail-brownout .ft-tile-value { color: var(--danger); }
+.ft-rail-unknown .ft-tile-value { color: var(--text-faint); }
+.ft-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.ft-chart { padding: var(--space-3) var(--space-4); min-width: 0; }
+.ft-chart h4 { margin: 0 0 var(--space-2); font-size: var(--text-xs); color: var(--text-faint); font-weight: 600; }
+
+.ft-arm { display: flex; gap: var(--space-2); }
+.content button.btn-danger { background: var(--danger-fill); border-color: var(--danger-fill); color: #fff; }
+.content button.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger-fill) 85%, #000); }
+.ft-modeline { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); align-items: center; padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-sunken); font-size: var(--text-sm); color: var(--text-dim); }
+.ft-modeline strong { color: var(--text); }
+.ft-servos { padding: var(--space-2) var(--space-5); }
+.ft-servo { display: grid; grid-template-columns: 150px minmax(0, 1fr) 110px; gap: var(--space-4); align-items: center; padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
+.ft-servo-name { display: flex; flex-direction: column; }
+.ft-servo-name span { font-size: var(--text-xs); color: var(--text-faint); }
+.ft-servo-slider input { width: 100%; }
+.ft-servo-scale { display: flex; justify-content: space-between; font-size: var(--text-2xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.ft-servo-value { text-align: right; font-variant-numeric: tabular-nums; display: flex; flex-direction: column; }
+.ft-servo-value strong { font-size: var(--text-md); }
+.ft-servo-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; padding: var(--space-3) 0; }
+
+@media (max-width: 1000px) {
+  .ft-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ft-charts { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .ft-tiles { grid-template-columns: minmax(0, 1fr); }
+  .ft-servo { grid-template-columns: minmax(0, 1fr) 90px; }
+  .ft-servo-slider { grid-column: 1 / -1; grid-row: 2; }
+}

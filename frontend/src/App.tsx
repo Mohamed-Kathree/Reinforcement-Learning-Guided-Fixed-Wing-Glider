@@ -8,9 +8,10 @@ import TrainingPanel from "./components/TrainingPanel";
 import AnalysisPanel from "./components/AnalysisPanel";
 import ResearchPanel from "./components/ResearchPanel";
 import FlightTestPanel from "./components/FlightTestPanel";
+import { FlightLogsPage, GroundStationPage } from "./flighttest/pages";
 import {
   IconActivity, IconBarChart, IconBook, IconCheck, IconGlider, IconHome, IconMoon, IconPlay, IconScatter, IconSun,
-  IconClipboard,
+  IconClipboard, IconRadio, IconFile,
 } from "./icons";
 import { useHashRoute, type Tab } from "./useHashRoute";
 import { CONTROLLER_NAME, GATE } from "./data/validation";
@@ -49,7 +50,11 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: "Aircraft",
-    items: [{ id: "flighttest", label: "Flight Test", icon: IconClipboard }],
+    items: [
+      { id: "flighttest", label: "Readiness", icon: IconClipboard },
+      { id: "groundstation", label: "Ground Station", icon: IconRadio },
+      { id: "flightlogs", label: "Flight Logs", icon: IconFile },
+    ],
   },
 ];
 
@@ -194,6 +199,12 @@ function App() {
           </div>
           <div className={tab === "flighttest" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
             <FlightTestPanel />
+          </div>
+          <div className={tab === "groundstation" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
+            <GroundStationPage />
+          </div>
+          <div className={tab === "flightlogs" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
+            <FlightLogsPage onNavigate={(t, a) => navigate(t, a)} />
           </div>
           <div className={tab === "baseline" ? "tab-pane" : "tab-pane tab-pane-hidden"}>
             <BaselinePanel onSelectEpisode={handleSelectEpisode} />

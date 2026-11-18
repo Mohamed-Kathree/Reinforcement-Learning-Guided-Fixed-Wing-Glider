@@ -168,3 +168,22 @@ export function IconClipboard(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function IconRadio(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <path d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7" />
+      <path d="M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8" />
+    </svg>
+  );
+}
+
+export function IconFile(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 3.5h8l4 4V20a.5.5 0 0 1-.5.5h-11A.5.5 0 0 1 6 20Z" />
+      <path d="M14 3.5V8h4M9 12.5h6M9 16h6" />
+    </svg>
+  );
+}

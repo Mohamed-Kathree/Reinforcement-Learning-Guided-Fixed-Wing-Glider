@@ -4,7 +4,7 @@
 // a pre-flight checklist (remembered per browser), known sim-to-real gaps,
 // and the as-wired avionics with open hardware issues. The live flight-test
 // tools (connection, control-surface tester, telemetry, replay with servo
-// playback) are a separate, gated build phase and are not on this page yet.
+// playback) live on the Ground Station and Flight Logs pages (src/flighttest/).
 import { useEffect, useState } from "react";
 import { Callout, SectionHead } from "./validation/parts";
 import { AVIONICS, HARDWARE_ISSUES } from "../data/hardware";
@@ -91,8 +91,9 @@ export default function FlightTestPanel() {
       <Callout tone={blocking ? "danger" : "warning"} title="Not cleared for flight">
         {blocking > 0 && `${blocking} blocking hardware issue${blocking === 1 ? "" : "s"}, `}
         {HARDWARE_ISSUES.length - blocking} hardware item{HARDWARE_ISSUES.length - blocking === 1 ? "" : "s"} to check,{" "}
-        {total - complete} of {total} pre-flight checks open, and the flight-test tools (link status,
-        control-surface tester, live telemetry, replay with servo playback) are not built yet.
+        {total - complete} of {total} pre-flight checks open. The flight-test tools (Ground Station, Flight Logs)
+        are built and tested against a simulated stub glider, but none of them has run against the real
+        aircraft, and the firmware side is host-tested only.
       </Callout>
 
       <section className="section" aria-labelledby="limits-h" style={{ marginTop: "var(--space-6)" }}>

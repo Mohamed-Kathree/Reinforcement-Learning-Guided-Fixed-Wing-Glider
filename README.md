@@ -130,7 +130,7 @@ backend/             FastAPI server for the dashboard (records flights, runs che
 frontend/            React + Vite dashboard
 flighttest/          Flight-test ground code: packet schema and codegen, safety reference, calibration (see flighttest/README.md)
 firmware/            ESP32 protocol and safety C code, generated header (host-tested only; see firmware/README.md)
-tests/               Pytest suite (324 tests)
+tests/               Pytest suite (351 tests)
 docs/                Decisions record and diagnostic summaries
 deployment/          Archived V14 deployment model (legacy)
 checkpoints_*/       Model checkpoints per run (not all tracked)
@@ -183,7 +183,9 @@ cd frontend && npm run dev                         # frontend, http://localhost:
 | Baseline | Fresh baseline benchmark on random launches |
 | Training | Live and archived training runs |
 | Analysis | Touchdown scatter and failure gallery across recorded flights |
-| Flight Test | Go/no-go wind limits from the results, pre-flight checklist, sim-to-real gaps, avionics as wired and open hardware issues |
+| Readiness | Go/no-go wind limits from the results, pre-flight checklist, sim-to-real gaps, avionics as wired and open hardware items |
+| Ground Station | Flight-test link status (ground station and Pi, separately), live 5 Hz telemetry with rail voltage, and the control-surface tester (explicit arming, calibration editing). Runs against a stub glider until hardware is connected |
+| Flight Logs | Replay full-rate Pi logs in the shared 3D view, optionally driving the real servos (REPLAY mode, 20 Hz cap, hold or centre on pause) |
 
 Light appearance by default; dark via the header toggle. The backend accepts requests from any
 local port; point the dashboard at another backend with `VITE_API_BASE` (e.g. in
@@ -309,7 +311,7 @@ Weights: `training/configs/base.yaml` (`reward:`), implementation: `env/reward.p
 ## Testing
 
 ```bash
-pytest tests -q          # 324 tests, about 5 minutes
+pytest tests -q          # 351 tests, about 5 minutes
 ```
 
 Includes physics and sensor tests, V22 restore and reward-reference tests, gate tests (the gate

@@ -6,9 +6,11 @@
 // shareable.
 import { useCallback, useEffect, useState } from "react";
 
-export type Tab = "home" | "validation" | "research" | "replay" | "baseline" | "training" | "analysis" | "flighttest";
+export type Tab = "home" | "validation" | "research" | "replay" | "baseline" | "training" | "analysis" | "flighttest"
+  | "groundstation" | "flightlogs";
 
-const VALID_TABS: Tab[] = ["home", "validation", "research", "replay", "baseline", "training", "analysis", "flighttest"];
+const VALID_TABS: Tab[] = ["home", "validation", "research", "replay", "baseline", "training", "analysis", "flighttest",
+  "groundstation", "flightlogs"];
 
 interface RouteState {
   tab: Tab;
