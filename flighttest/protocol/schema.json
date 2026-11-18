@@ -1,0 +1,93 @@
+{
+  "_comment": [
+    "Single source of truth for the glider <-> ground packets and servo channels.",
+    "Edit this file, then run: python -m flighttest.protocol.codegen",
+    "It regenerates flighttest/protocol/packets.py, firmware/protocol/rlg_protocol.h and",
+    "flighttest/protocol/test_vectors.json. tests/test_flighttest_protocol.py fails if they are stale.",
+    "Wire format: little-endian, packed, no padding. ESP32 (Xtensa) is little-endian."
+  ],
+  "version": 1,
+  "sync": 165,
+  "crc8": {
+    "poly": 7,
+    "init": 0,
+    "covers": "every byte from 'type' to the last payload byte (sync and the crc byte itself excluded)",
+    "check_value_123456789": 244
+  },
+  "modes": [
+    { "name": "DISARMED", "value": 0, "doc": "Surfaces centred. Default after boot, timeout or rejection." },
+    { "name": "FLIGHT", "value": 1, "doc": "Policy/baseline flies via the Pi UART. Ground servo values ignored." },
+    { "name": "BENCH", "value": 2, "doc": "Ground control-surface tester drives the servos. Refused when airborne." },
+    { "name": "REPLAY", "value": 3, "doc": "Ground replay drives the servos in sync with a log. Refused when airborne." }
+  ],
+  "servos": [
+    { "index": 0, "name": "aileron_l", "gpio": 13, "type": "MG90S", "min_us": 600, "max_us": 2300 },
+    { "index": 1, "name": "aileron_r", "gpio": 14, "type": "MG90S", "min_us": 600, "max_us": 2300 },
+    { "index": 2, "name": "elevator", "gpio": 25, "type": "MG996R", "min_us": 1000, "max_us": 2000,
+      "_note": "Brief says MG996R, wiring diagram says MG90S. 1000-2000 us is safe for both; widen only once confirmed." },
+    { "index": 3, "name": "rudder", "gpio": 27, "type": "MG90S", "min_us": 600, "max_us": 2300 }
+  ],
+  "status_bits": [
+    { "name": "mode", "lsb": 0, "width": 3, "doc": "Current mode (modes table)." },
+    { "name": "armed", "lsb": 3, "width": 1, "doc": "Servos follow commands in the current mode." },
+    { "name": "airborne", "lsb": 4, "width": 1, "doc": "Firmware believes it is flying (baro altitude or GPS speed)." },
+    { "name": "sonar_valid", "lsb": 5, "width": 1, "doc": "Sonar range is a real reading (also: sonar >= 0)." },
+    { "name": "gps_fix", "lsb": 6, "width": 2, "doc": "0 none, 1 2D, 2 3D." },
+    { "name": "gps_sats", "lsb": 8, "width": 5, "doc": "Satellites used, saturating at 31." },
+    { "name": "baro_ref_captured", "lsb": 13, "width": 1, "doc": "Ground pressure reference taken (on arm, after warm-up)." },
+    { "name": "baro_warm", "lsb": 14, "width": 1, "doc": "Barometer warm-up period has elapsed." },
+    { "name": "rail_v_valid", "lsb": 15, "width": 1, "doc": "rail_v is measured. 0 until a divider to an ADC1 pin exists." },
+    { "name": "timeout_disarmed", "lsb": 16, "width": 1, "doc": "Last disarm was a 150 ms command timeout." },
+    { "name": "cmd_rejected_airborne", "lsb": 17, "width": 1, "doc": "Last BENCH/REPLAY command was refused because airborne." }
+  ],
+  "packets": [
+    {
+      "name": "Telemetry",
+      "type": 1,
+      "direction": "glider -> ground, ESP-NOW, 5 Hz",
+      "max_bytes": 250,
+      "fields": [
+        { "name": "sync", "ctype": "u8" },
+        { "name": "type", "ctype": "u8" },
+        { "name": "seq", "ctype": "u16" },
+        { "name": "roll", "ctype": "f32", "unit": "rad" },
+        { "name": "pitch", "ctype": "f32", "unit": "rad" },
+        { "name": "yaw", "ctype": "f32", "unit": "rad" },
+        { "name": "p", "ctype": "f32", "unit": "rad/s" },
+        { "name": "q", "ctype": "f32", "unit": "rad/s" },
+        { "name": "r", "ctype": "f32", "unit": "rad/s" },
+        { "name": "alt_baro", "ctype": "f32", "unit": "m above launch reference" },
+        { "name": "sonar", "ctype": "f32", "unit": "m, -1 = invalid" },
+        { "name": "lat", "ctype": "f32", "unit": "deg (f32: ~0.4 m resolution here; GPS CEP is ~2.5 m)" },
+        { "name": "lon", "ctype": "f32", "unit": "deg" },
+        { "name": "vn", "ctype": "f32", "unit": "m/s" },
+        { "name": "ve", "ctype": "f32", "unit": "m/s" },
+        { "name": "rail_v", "ctype": "f32", "unit": "V, -1 = not measured" },
+        { "name": "status", "ctype": "u32", "unit": "bitfield, see status_bits" },
+        { "name": "crc8", "ctype": "u8" }
+      ]
+    },
+    {
+      "name": "Command",
+      "type": 2,
+      "direction": "ground -> glider, ESP-NOW, <= 20 Hz",
+      "max_bytes": 250,
+      "fields": [
+        { "name": "sync", "ctype": "u8" },
+        { "name": "type", "ctype": "u8" },
+        { "name": "seq", "ctype": "u16" },
+        { "name": "mode", "ctype": "u8" },
+        { "name": "servo_us", "ctype": "u16", "count": 4, "unit": "us, order = servos[].index" },
+        { "name": "crc8", "ctype": "u8" }
+      ]
+    }
+  ],
+  "safety": {
+    "command_timeout_ms": 150,
+    "rearm_consecutive_frames": 5,
+    "arm_idle_expiry_ms": 120000,
+    "airborne_alt_m": 3.0,
+    "airborne_ground_speed_ms": 2.0,
+    "_note": "Firmware-enforced limits (rlg_safety.c). Airborne thresholds are first guesses: set them from bench and field measurements."
+  }
+}

@@ -1,0 +1,20 @@
+{
+ "version": 1,
+ "_comment": "Read and written by the ground app (flighttest/calibration.py validates every save). Values marked measured=false are placeholders, not measurements.",
+ "servos": {
+  "aileron_l": {"neutral_us": 1500, "direction": 1, "measured": false, "measured_on": null},
+  "aileron_r": {"neutral_us": 1500, "direction": 1, "measured": false, "measured_on": null},
+  "elevator": {"neutral_us": 1500, "direction": 1, "measured": false, "measured_on": null},
+  "rudder": {"neutral_us": 1500, "direction": 1, "measured": false, "measured_on": null}
+ },
+ "imu": {
+  "_comment": "body = board_to_body @ board. Body frame: x forward, y right, z down. Must be a signed permutation with determinant +1. The current signs are stale and being re-derived.",
+  "board_to_body": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+  "verified": false,
+  "verified_on": null
+ },
+ "baro": {
+  "warmup_s": 120,
+  "_comment": "Ground pressure reference is captured on the arm command after warm-up, never at boot."
+ }
+}
