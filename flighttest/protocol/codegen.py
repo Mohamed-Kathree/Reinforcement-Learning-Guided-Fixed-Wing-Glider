@@ -258,7 +258,9 @@ def gen_c(schema: dict) -> str:
             L.append(f"_Static_assert(offsetof({tname}, {name}) == {off}, \"{p['name']}.{name} offset\");")
         L.append("")
     L += ["/* CRC8 over p[0..len-1]; call with &pkt.type and (size - 2). rlg_crc8.c */",
-          "uint8_t rlg_crc8(const uint8_t *p, size_t len);", "", "#endif /* RLG_PROTOCOL_H */", ""]
+          "#ifdef __cplusplus", "extern \"C\" {", "#endif",
+          "uint8_t rlg_crc8(const uint8_t *p, size_t len);",
+          "#ifdef __cplusplus", "}", "#endif", "", "#endif /* RLG_PROTOCOL_H */", ""]
     return "\n".join(L)
 
 

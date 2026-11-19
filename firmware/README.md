@@ -1,6 +1,39 @@
 # firmware/
 
-Shared protocol and safety code for the ESP32 flight controller.
+Shared protocol and safety code for the ESP32 flight controller, plus the sketches.
+
+| Folder | What it is |
+|---|---|
+| `flight/` | **Production flight firmware.** Phase 1 (inner loop, no Pi): compiles, host-tested, not yet run on hardware. Build, decisions and the bench test plan: [flight/README.md](flight/README.md). |
+| `bench/` | The bench test menu (from `Hardware/PCB_test_code/Flight_Controller`), kept as the hardware regression suite. IMU signs and formulas corrected on 19 Nov 2026. |
+| `ground_station/` | The ESP-NOW ↔ USB bridge (from `Hardware/PCB_test_code`). It forwards USB **one byte per packet**, which needs fixing before binary commands go over the air. |
+| `protocol/` | Shared protocol and safety code (below). Copied into `flight/src/protocol/` by `python -m flighttest.firmware_sync`. |
+| `tools/` | `glider_viz.py` (corrected frame), `attitude_ref.py` (Python reference filter), `compare_attitude.py` (firmware vs visualiser measurement). |
+
+## Phase 2 (Pi policy interface): contract mismatches to resolve first
+
+The trained policy's contract is defined by `env/glider_env.py`. These are the
+differences between that contract and the Pi link described in the flight brief:
+
+1. **The policy does not output attitude setpoints.** Its action is
+   [bank angle ±45°, airspeed command 9.5–16 m/s]. The simulator turns the speed command
+   into a pitch target using **true airspeed**: `−KV_PITCH·(V_cmd − V_actual)`. The
+   aircraft has no pitot tube. Either the Pi computes the pitch target without that term
+   (and the simulator is retrained the same way), or a ground-speed-based estimate is
+   modelled in the simulator first.
+2. **The policy has no rudder output.** In the simulator, the rudder is the inner loop's
+   `−KR·p` turn coordination. A rudder field from the Pi would be unused, or would differ
+   from training.
+3. **GPS rate.** The simulator's GPS runs at 5 Hz; the NEO-6M defaults to 1 Hz. It can be
+   set to 5 Hz with UBX CFG-RATE.
+4. **Vertical speed.** obs[8] is GPS vertical velocity. NMEA GGA and RMC do not carry it.
+   The options are UBX NAV-VELNED, a value derived from the barometer (which then needs
+   modelling in the simulator), or GPS altitude differences.
+5. **The telemetry packet** (`rlg_telemetry_t`) has no vertical speed, ground speed or
+   course field. The Pi link's telemetry packet must carry everything the 12-element
+   observation needs.
+
+## protocol/
 
 > **Status: host-tested only. None of this has run on an ESP32.**
 > `tests/test_flighttest_protocol.py` and `tests/test_flighttest_safety.py` compile these
@@ -24,6 +57,11 @@ Shared protocol and safety code for the ESP32 flight controller.
 | Pi UART (setpoints) | FLIGHT | 150 ms | failsafe glide; 5 fresh setpoints in a row end it |
 
 ## Integration seams (to do on hardware, one at a time)
+
+`flight/` now implements seams 1, 2, 4, 5, 7 and 8, all unverified on hardware. Seam 3
+(the Pi UART) is Phase 2. Seam 6 uses a header generated from the calibration file at
+build time (`flight/src/generated/calibration_gen.h`) instead of NVS. The rail reading
+uses `analogReadMilliVolts()`, which applies the eFuse ADC calibration.
 
 1. **Add these files to the ESP32 project** (ESP-IDF or Arduino). Both compile with gcc;
    `_Static_assert` needs C11.

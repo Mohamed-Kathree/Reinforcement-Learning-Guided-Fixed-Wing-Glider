@@ -92,6 +92,10 @@ typedef struct {
     uint16_t pi_consecutive;
 } rlg_safety_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void rlg_safety_init(rlg_safety_t *st, const uint16_t neutral_us[RLG_NUM_SERVOS], uint32_t now_ms);
 /* Per-servo travel limits from the calibration file. Returns false (and changes
  * nothing) if any min > max; values are clamped to the absolute envelope. */
@@ -113,5 +117,9 @@ size_t rlg_safety_sizeof(void);
 uint8_t rlg_safety_mode(const rlg_safety_t *st);
 bool rlg_safety_armed(const rlg_safety_t *st);
 uint16_t rlg_safety_servo(const rlg_safety_t *st, int i);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* RLG_SAFETY_H */

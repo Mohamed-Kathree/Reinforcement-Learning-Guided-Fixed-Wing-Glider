@@ -57,6 +57,8 @@ def test_single_sign_flip_is_rejected_as_left_handed():
     ("servos.elevator.sweep_min_us", 2250),      # sweep_min above sweep_max
     ("servos.rudder.type", "SG90"),              # unknown type
     ("servos.rudder.direction", 0),
+    ("servos.rudder.us_full_deflection", 20),
+    ("servos.rudder.us_full_deflection", 900),     # 1500 + 900 leaves the 2300 limit
     ("servos.rudder.neutral_us", 1500.5),
     ("baro.warmup_s", -1),
     ("rail.adc_gpio", 35),                       # sonar echo pin

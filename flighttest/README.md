@@ -32,6 +32,7 @@ retrieved over WiFi on the ground. The stream is for monitoring; the SD log is t
 | `protocol/test_vectors.json` | Generated sample packets and CRCs |
 | `safety.py` | Python reference of `firmware/protocol/rlg_safety.c` (used by the stub glider) |
 | `calibration.py`, `config/calibration.json` | Stored servo neutrals and directions, IMU transform (det +1 enforced), baro warm-up |
+| `firmware_sync.py` | `python -m flighttest.firmware_sync [--check]`: copies `firmware/protocol/` into the flight sketch and generates `firmware/flight/src/generated/calibration_gen.h` from `calibration.json` (servo `direction` is relative to the simulator's positive deflection; `us_full_deflection` = µs at the simulator's maximum deflection). Re-run and re-flash after every calibration change |
 | `stub_glider.py` | STUB aircraft + ground radio on the real byte protocol: firmware safety, lossy 5 Hz telemetry, baro warm-up/drift, GPS fix, rail voltage "not measured" |
 | `links.py` | `StubLink`; `SerialLink` (HARDWARE SEAM, untested; assumes a transparent ESP-NOW/USB bridge) |
 | `ground.py` | `GroundStation`: link stats (rate, loss from sequence gaps, CRC drops, age), telemetry history, command sender (explicit arming, 20 Hz cap, UI-idle expiry, DISARMED burst) |

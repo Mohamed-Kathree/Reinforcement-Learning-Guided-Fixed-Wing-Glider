@@ -53,6 +53,11 @@ def _servo_problems(name: str, sv: dict) -> list[str]:
         out.append(f"{name}: limits {vals[0]}-{vals[-1]} us exceed the {t} envelope {lo_t}-{hi_t} us")
     if vals != sorted(vals):
         out.append(f"{name}: need min_us <= sweep_min_us <= neutral_us <= sweep_max_us <= max_us, got {vals}")
+    full = sv.get("us_full_deflection")
+    if not isinstance(full, int) or isinstance(full, bool) or not 50 <= full <= 900:
+        out.append(f"{name}.us_full_deflection must be an integer 50-900 us, got {full!r}")
+    elif vals == sorted(vals) and not (vals[0] <= vals[2] - full and vals[2] + full <= vals[-1]):
+        out.append(f"{name}: neutral +/- us_full_deflection ({vals[2]} +/- {full}) leaves the travel limits")
     if sv.get("direction") not in (1, -1):
         out.append(f"{name}.direction must be +1 or -1, got {sv.get('direction')!r}")
     return out
@@ -130,6 +135,15 @@ def neutral_us(cal: dict) -> list[int]:
 def limits(cal: dict) -> tuple[list[int], list[int]]:
     """(min_us, max_us) travel limits in Command.servo_us order."""
     return _per_servo(cal, "min_us"), _per_servo(cal, "max_us")
+
+
+def full_deflection_us(cal: dict) -> list[int]:
+    """Microseconds from neutral for the simulator's full deflection, per servo."""
+    return _per_servo(cal, "us_full_deflection")
+
+
+def directions(cal: dict) -> list[int]:
+    return _per_servo(cal, "direction")
 
 
 def sweep(cal: dict) -> tuple[list[int], list[int]]:
