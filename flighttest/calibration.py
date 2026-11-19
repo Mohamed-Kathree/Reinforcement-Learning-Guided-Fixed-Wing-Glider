@@ -177,6 +177,29 @@ def check_imu_readings(level_az_g: float, nose_up_pitch: float, right_wing_down_
     return {"checks": checks, "all_pass": all(c["pass"] for c in checks.values())}
 
 
+# Simulator surface limits (rad), as firmware/flight/src/core/inner_loop.h IL_*_MAX.
+SURFACE_MAX_RAD = {"aileron": math.radians(25.0), "elevator": math.radians(20.0), "rudder": math.radians(25.0)}
+# Which simulator surface command drives each servo (both ailerons take the aileron command).
+SERVO_SURFACE = {"aileron_l": "aileron", "aileron_r": "aileron", "elevator": "elevator", "rudder": "rudder"}
+
+
+def deflection_to_us(cal: dict, aileron: float, elevator: float, rudder: float) -> list[int]:
+    """Surface deflections (rad, simulator sign convention) -> servo pulses, exactly as
+    the flight firmware does it (inner_loop.c rlg_deflection_to_us): neutral +
+    direction * clip(defl / max, -1, 1) * us_full_deflection, clamped to the travel
+    limits, rounded. Order = SERVO_NAMES. Checked against the C code in tests."""
+    defl = {"aileron": aileron, "elevator": elevator, "rudder": rudder}
+    out = []
+    for name in SERVO_NAMES:
+        sv = cal["servos"][name]
+        surf = SERVO_SURFACE[name]
+        frac = max(-1.0, min(1.0, defl[surf] / SURFACE_MAX_RAD[surf]))
+        us = sv["neutral_us"] + sv["direction"] * frac * sv["us_full_deflection"]
+        us = max(sv["min_us"], min(sv["max_us"], us))
+        out.append(int(math.floor(us + 0.5)) if us >= 0 else int(math.ceil(us - 0.5)))
+    return out
+
+
 def with_updates(cal: dict, **changes) -> dict:
     """Copy with dotted-path updates, e.g. with_updates(cal, **{'servos.rudder.neutral_us': 1490})."""
     out = deepcopy(cal)

@@ -151,14 +151,29 @@ class GroundStation:
         self._pending_disarm = 0
         return self.session_info(now_ms)
 
-    def set_servos(self, us: list[int], now_ms: int) -> list[int]:
+    def set_servos(self, us: list[int], now_ms: int, envelope: bool = False) -> list[int]:
+        """envelope=False clamps to the calibration's travel limits (normal use).
+        envelope=True (calibration wizard, BENCH only) clamps to each servo type's
+        full range instead, so the wizard can find the real end stops; the flight
+        computer still clamps to the limits it holds."""
         if self.session is None:
             raise RuntimeError("not armed: arm a BENCH or REPLAY session first")
         if len(us) != len(P.SERVOS):
             raise ValueError(f"need {len(P.SERVOS)} servo values")
-        self.session["servo_us"] = self._clamp(us)
+        if envelope:
+            if self.session["mode"] != P.BENCH:
+                raise RuntimeError("the full servo range is only available in a BENCH session")
+            env = [P.SERVO_TYPES[self.cal["servos"][n]["type"]] for n in C.SERVO_NAMES]
+            self.session["servo_us"] = [max(lo, min(hi, int(v))) for v, (lo, hi) in zip(us, env)]
+        else:
+            self.session["servo_us"] = self._clamp(us)
         self.session["last_ui_ms"] = now_ms
         return self.session["servo_us"]
+
+    def set_surfaces(self, aileron: float, elevator: float, rudder: float, now_ms: int) -> list[int]:
+        """Surface deflections (rad, simulator convention) -> servos through the saved
+        calibration, the same mapping as the firmware (calibration.deflection_to_us)."""
+        return self.set_servos(C.deflection_to_us(self.cal, aileron, elevator, rudder), now_ms)
 
     def keepalive(self, now_ms: int) -> None:
         if self.session is not None:

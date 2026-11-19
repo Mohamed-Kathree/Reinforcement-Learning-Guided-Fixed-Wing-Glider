@@ -131,6 +131,11 @@ def connect(transport: str = "stub", port: Optional[str] = None, baud: int = 576
                                        limits=calibration.limits(r.cal))
             r.ground.connect(StubLink(r.stub_glider))
         elif transport == "serial":
+            if port == "auto":
+                port = _find_ground_station(baud)
+                if port is None:
+                    raise HTTPException(404, "no ground station found: is it plugged in, and is the "
+                                             "flight computer on? (a port counts once it carries valid telemetry)")
             if not port:
                 raise HTTPException(400, "serial needs a port, e.g. COM5 or /dev/ttyUSB0")
             try:
@@ -142,6 +147,33 @@ def connect(transport: str = "stub", port: Optional[str] = None, baud: int = 576
         else:
             raise HTTPException(400, "transport must be 'stub' or 'serial'")
         return r.ground.snapshot(_now_ms())["ground"]
+
+
+def _find_ground_station(baud: int) -> Optional[str]:
+    """The first serial port that carries valid frames (Telemetry/Info) within 2.5 s.
+    Ports busy in another program are skipped."""
+    from flighttest.links import list_serial_ports
+    from flighttest.protocol import packets as P
+    try:
+        import serial
+    except ImportError:
+        return None
+    for p in list_serial_ports().get("ports", []):
+        try:
+            s = serial.Serial()
+            s.port, s.baudrate, s.timeout = p["device"], baud, 0.1
+            s.dtr = s.rts = False                     # do not reset the board
+            s.open()
+        except Exception:
+            continue
+        try:
+            parser, t0 = P.StreamParser(), time.time()
+            while time.time() - t0 < 2.5:
+                if any(isinstance(x, (P.Telemetry, P.Info)) for x in parser.feed(s.read(512))):
+                    return p["device"]
+        finally:
+            s.close()
+    return None
 
 
 @router.post("/api/ft/disconnect")
@@ -191,11 +223,25 @@ def disarm() -> dict:
 
 
 @router.post("/api/ft/servos")
-def servos(servo_us: list[int] = Body(..., embed=True)) -> dict:
+def servos(servo_us: list[int] = Body(..., embed=True), envelope: bool = Body(False, embed=True)) -> dict:
     r = rt()
     with r.lock:
         try:
-            return {"servo_us": r.ground.set_servos(servo_us, _now_ms())}
+            return {"servo_us": r.ground.set_servos(servo_us, _now_ms(), envelope=envelope)}
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+
+
+@router.post("/api/ft/surfaces")
+def surfaces(aileron: float = Body(...), elevator: float = Body(...), rudder: float = Body(...)) -> dict:
+    """Surface deflections (rad, simulator convention) mapped through the saved
+    calibration exactly as the flight firmware maps them (replay on the aircraft)."""
+    r = rt()
+    with r.lock:
+        try:
+            return {"servo_us": r.ground.set_surfaces(aileron, elevator, rudder, _now_ms())}
         except RuntimeError as exc:
             raise HTTPException(409, str(exc))
         except ValueError as exc:

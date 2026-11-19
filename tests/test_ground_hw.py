@@ -145,3 +145,63 @@ def test_calibration_id_matches_firmware_header():
     if raw.decode("utf-8") != json.dumps(C.load(), indent=1) + "\n":
         pytest.skip("calibration.json was not written by calibration.save(); ids are computed from that form")
     assert calibration_id(C.load()) == int(h[:8], 16)
+
+
+# ---------------------------------------------------------------- dashboard UX (20 Nov 2026)
+
+def test_deflection_to_us_matches_firmware():
+    """calibration.deflection_to_us (replay on the aircraft) == inner_loop.c rlg_deflection_to_us."""
+    import math
+    import random
+    sys.path.insert(0, os.path.join(ROOT, "tests"))
+    import test_flight_firmware as TF
+    L = TF.lib()
+    rng = random.Random(4)
+    for _ in range(300):
+        cal = C.load()
+        for n in C.SERVO_NAMES:
+            sv = cal["servos"][n]
+            sv["neutral_us"] = rng.randint(1300, 1700)
+            sv["direction"] = rng.choice([1, -1])
+            sv["us_full_deflection"] = rng.randint(100, 500)
+            sv["min_us"] = rng.randint(600, sv["neutral_us"] - 50)
+            sv["max_us"] = rng.randint(sv["neutral_us"] + 50, 2300)
+        a, e, r = (rng.uniform(-0.6, 0.6) for _ in range(3))
+        got = C.deflection_to_us(cal, a, e, r)
+        for i, n in enumerate(C.SERVO_NAMES):
+            sv = cal["servos"][n]
+            surf = C.SERVO_SURFACE[n]
+            d = {"aileron": a, "elevator": e, "rudder": r}[surf]
+            ref = L.rlg_deflection_to_us(d, C.SURFACE_MAX_RAD[surf], sv["neutral_us"], sv["direction"],
+                                         sv["us_full_deflection"], sv["min_us"], sv["max_us"])
+            assert abs(got[i] - ref) <= 1, (n, got[i], ref)    # float32 vs float64 rounding at .5
+
+
+def test_surfaces_through_the_stub_glider():
+    from flighttest.links import StubLink
+    from flighttest.stub_glider import StubGlider
+    cal = C.load()
+    g = StubGlider(C.neutral_us(cal), now_ms=0, seed=1, limits=C.limits(cal))
+    gs = GroundStation(StubLink(g), cal=cal)
+    with pytest.raises(RuntimeError):
+        gs.set_surfaces(0.1, 0.0, 0.0, 0)                  # not armed
+    gs.arm(P.REPLAY, 0)
+    us = gs.set_surfaces(0.2, -0.1, 0.0, 0)
+    assert us == C.deflection_to_us(cal, 0.2, -0.1, 0.0)
+    for t in range(0, 600, 50):
+        gs.step(t)
+    assert gs.latest["mode"] == "REPLAY"
+
+
+def test_envelope_servos_only_in_bench():
+    link = FakeLink()
+    cal = C.load()
+    cal["servos"]["rudder"].update(min_us=1200, sweep_min_us=1200, max_us=1800, sweep_max_us=1800, us_full_deflection=200)
+    gs = GroundStation(link, cal=cal)
+    gs.arm(P.BENCH, 0)
+    assert gs.set_servos([1500, 1500, 1500, 2200], 0)[3] == 1800            # calibration limits
+    assert gs.set_servos([1500, 1500, 1500, 2200], 0, envelope=True)[3] == 2200
+    assert gs.set_servos([1500, 1500, 1500, 2600], 0, envelope=True)[3] == 2300   # MG90S envelope
+    gs.arm(P.REPLAY, 0)
+    with pytest.raises(RuntimeError):
+        gs.set_servos([1500] * 4, 0, envelope=True)

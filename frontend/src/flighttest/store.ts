@@ -189,6 +189,7 @@ async function act<T>(fn: () => Promise<T>): Promise<T | null> {
 
 // ---- servo throttle: at most one POST per 50 ms, always sending the latest values
 let pendingServos: number[] | null = null;
+let pendingEnvelope = false;
 let servoTimer: ReturnType<typeof setTimeout> | null = null;
 let lastServoSend = 0;
 
@@ -198,13 +199,38 @@ function flushServos() {
   const us = pendingServos;
   pendingServos = null;
   lastServoSend = performance.now();
-  api("POST", "/api/ft/servos", { servo_us: us }).catch((e) => set({ error: e instanceof Error ? e.message : String(e) }));
+  api("POST", "/api/ft/servos", { servo_us: us, envelope: pendingEnvelope })
+    .catch((e) => set({ error: e instanceof Error ? e.message : String(e) }));
+}
+
+// ---- surface (replay-on-aircraft) throttle: same 50 ms trailing pattern
+let pendingSurf: [number, number, number] | null = null;
+let surfTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSurfSend = 0;
+
+function flushSurfaces() {
+  surfTimer = null;
+  if (!pendingSurf) return;
+  const [aileron, elevator, rudder] = pendingSurf;
+  pendingSurf = null;
+  lastSurfSend = performance.now();
+  api("POST", "/api/ft/surfaces", { aileron, elevator, rudder })
+    .catch((e) => set({ error: e instanceof Error ? e.message : String(e) }));
 }
 
 export const ft = {
   connect: (transport: "stub" | "serial", port?: string) =>
     act(() => api("POST", `/api/ft/connect?transport=${transport}${port ? `&port=${encodeURIComponent(port)}` : ""}`)),
   disconnect: () => act(() => api("POST", "/api/ft/disconnect")),
+  // Probes every serial port for a ground station carrying valid telemetry (needs the flight computer on).
+  connectAuto: () => act(() => api("POST", "/api/ft/connect?transport=serial&port=auto")),
+  // Simulator surface deflections (rad) -> servos through the saved calibration (replay on the aircraft).
+  surfaces: (aileron: number, elevator: number, rudder: number) => {
+    pendingSurf = [aileron, elevator, rudder];
+    if (surfTimer) return;
+    const wait = Math.max(0, 50 - (performance.now() - lastSurfSend));
+    surfTimer = setTimeout(flushSurfaces, wait);
+  },
   ports: () => api<{ available: boolean; reason: string | null; ports: { device: string; description: string }[] }>(
     "GET", "/api/ft/ports"),
   arm: (mode: "bench" | "replay") => act(() => api("POST", `/api/ft/arm?mode=${mode}`)),
@@ -213,7 +239,10 @@ export const ft = {
     return act(() => api("POST", "/api/ft/disarm"));
   },
   keepalive: () => act(() => api("POST", "/api/ft/keepalive")),
-  setServos: (us: number[]) => {
+  // envelope: calibration wizard only (BENCH): clamp to the servo type's full range,
+  // not the current calibration's limits, so the real end stops can be found.
+  setServos: (us: number[], envelope = false) => {
+    pendingEnvelope = envelope;
     pendingServos = us.map((v) => Math.round(v));
     if (servoTimer) return;
     const wait = Math.max(0, 50 - (performance.now() - lastServoSend));
@@ -240,6 +269,7 @@ export const ft = {
 export interface ServoCal {
   type: string; neutral_us: number; direction: 1 | -1; min_us: number; max_us: number;
   sweep_min_us: number; sweep_max_us: number; measured: boolean; measured_on: string | null;
+  us_full_deflection: number;
 }
 
 export interface Calibration {

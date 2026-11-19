@@ -147,6 +147,8 @@ export default function ServoPanel() {
         </div>
       </div>
 
+      <details style={{ marginTop: "var(--space-4)" }}>
+      <summary><strong>Advanced: edit the calibration values directly</strong> (the calibration wizard above is the normal way)</summary>
       <h3 className="sub-head">Calibration (stored in flighttest/config/calibration.json)</h3>
       {calError && <p className="error-text">{calError}</p>}
       {draft && (
@@ -197,10 +199,11 @@ export default function ServoPanel() {
         <button className="btn-primary" disabled={!dirty} onClick={saveCal}>Save calibration</button>
         <button disabled={!dirty} onClick={() => setDraft(structuredClone(cal))}>Discard changes</button>
         <span className="hint-text" style={{ margin: 0 }}>
-          Saved values are validated (neutral inside the sweep, limits inside the servo type). Pushing them to the
-          ESP32's flash is not implemented yet.
+          Saved values are validated (neutral inside the sweep, limits inside the servo type). Saving does not change
+          the aircraft: use <strong>Send to aircraft</strong> in the Flight computer panel.
         </span>
       </div>
+      </details>
     </section>
   );
 }

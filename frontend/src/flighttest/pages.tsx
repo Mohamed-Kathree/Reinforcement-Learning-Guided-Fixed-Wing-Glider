@@ -2,6 +2,7 @@
 import type { Tab } from "../useHashRoute";
 import { IconAlert } from "../icons";
 import AircraftPanel from "./AircraftPanel";
+import CalibrationWizard from "./CalibrationWizard";
 import ConnectionPanel from "./ConnectionPanel";
 import LogReplayPanel from "./LogReplayPanel";
 import ServoPanel from "./ServoPanel";
@@ -56,6 +57,7 @@ export function GroundStationPage() {
       <BackendBanner />
       <ConnectionPanel />
       <AircraftPanel />
+      <CalibrationWizard />
       <TelemetryPanel />
       <ServoPanel />
     </section>
