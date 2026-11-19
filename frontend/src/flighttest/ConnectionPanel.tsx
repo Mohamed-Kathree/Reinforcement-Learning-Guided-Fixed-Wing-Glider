@@ -43,6 +43,7 @@ export default function ConnectionPanel() {
   const [transport, setTransport] = useState<"stub" | "serial">("stub");
   const [ports, setPorts] = useState<{ device: string; description: string }[]>([]);
   const [portsNote, setPortsNote] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
   const [port, setPort] = useState("");
   const [piUrl, setPiUrl] = useState("");
   const [fetching, setFetching] = useState<string | null>(null);
@@ -83,6 +84,14 @@ export default function ConnectionPanel() {
             <button onClick={() => ft.disconnect()}>Disconnect</button>
           ) : (
             <div className="ft-connect">
+              <button className="btn-primary" disabled={searching}
+                onClick={async () => { setSearching(true); await ft.connectAuto(); setSearching(false); }}>
+                {searching ? "Searching the USB ports…" : "Connect to the aircraft"}
+              </button>
+              <p className="hint-text" style={{ width: "100%" }}>
+                Finds the ground station by itself. The aircraft must be switched on (it looks for live telemetry).
+                Or choose manually:
+              </p>
               <label className="toolbar-field">
                 Transport
                 <select value={transport} onChange={(e) => setTransport(e.target.value as "stub" | "serial")}>
@@ -98,14 +107,11 @@ export default function ConnectionPanel() {
                   </select>
                 </label>
               )}
-              <button className="btn-primary" disabled={transport === "serial" && !port}
+              <button disabled={transport === "serial" && !port}
                 onClick={() => ft.connect(transport, transport === "serial" ? port : undefined)}>
                 Connect
               </button>
               {transport === "serial" && portsNote && <p className="hint-text">{portsNote}</p>}
-              {transport === "serial" && (
-                <p className="hint-text">Untested against hardware: assumes the ground ESP32 passes ESP-NOW frames to USB unchanged.</p>
-              )}
             </div>
           )}
         </div>

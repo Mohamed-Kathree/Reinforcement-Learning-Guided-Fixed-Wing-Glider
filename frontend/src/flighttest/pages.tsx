@@ -6,6 +6,7 @@ import CalibrationWizard from "./CalibrationWizard";
 import ConnectionPanel from "./ConnectionPanel";
 import LogReplayPanel from "./LogReplayPanel";
 import ServoPanel from "./ServoPanel";
+import SetupChecklist from "./SetupChecklist";
 import TelemetryPanel from "./TelemetryPanel";
 import { ft, useFlightTest } from "./store";
 
@@ -49,12 +50,13 @@ export function GroundStationPage() {
         <div>
           <h1>Ground Station</h1>
           <p className="page-subtitle">
-            Link status, live telemetry and the control-surface tester for the real aircraft. Runs against a simulated
-            stub glider until hardware is connected; the stub is labelled wherever it appears.
+            Connect to the aircraft, check it is ready, calibrate the control surfaces and watch live telemetry. A
+            simulated stub glider stands in when no hardware is connected; it is labelled wherever it appears.
           </p>
         </div>
       </div>
       <BackendBanner />
+      <SetupChecklist />
       <ConnectionPanel />
       <AircraftPanel />
       <CalibrationWizard />
