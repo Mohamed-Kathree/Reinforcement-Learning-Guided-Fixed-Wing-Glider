@@ -114,10 +114,18 @@ read-only to the dashboard over Wi-Fi, on the ground only.
 - Runner: heartbeats before the apex, control from AUTONOMOUS, stale telemetry
   → heartbeat, and the log written and readable by `flighttest.logs.parse`.
 
+## Verified on the hardware (20 Nov 2026)
+
+- Installed on the Pi (glider.local, Debian 13, Python 3.13, numpy 2.2.4 from apt) with
+  `install.sh`. The UART was already configured (`enable_uart=1`, Bluetooth off, no serial
+  console). The service starts by itself at boot.
+- Link: PiTelemetry at 50 Hz with 0 gaps; PiSetpoint received by the ESP32 with 0 bad / 0 gaps.
+- Controller step (policy + gate): 0.61 ms.
+- Full chain on the bench: AUTONOMOUS → the policy's setpoints flown by the ESP32 → gate
+  handover to the baseline at 8.0 s → log written (2010 records, 344 controller steps).
+
 ## Not yet verified (needs hardware)
 
-- The UART link on the Pi (`/dev/serial0` mapping, timing under load).
-- 20 Hz timing on the Pi 4B. The forward pass is a 96→128→128→2 MLP in numpy, which
-  should be well under 1 ms, but this needs measuring.
+- Behaviour with a real GPS fix and home (only tested indoors without a fix).
 - Launch and apex detection thresholds on real throws.
 - Yaw alignment and GPS UBX configuration on the real NEO-6M.

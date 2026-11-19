@@ -334,3 +334,16 @@ run `python -m flighttest.firmware_sync`, rebuild and re-flash, then repeat test
 | P7 | Apex detection | on real throws: `apex_cause`, `t_apex − t_launch`, baro peak vs apex time from the log |
 | P8 | Calibration push | Send to aircraft → `cal ... applied and saved to NVS`, dashboard confirms; reboot keeps it |
 | P9 | Radio text quality after the ground-station fix | garbled characters per minute in the console (was a few per line) |
+
+### Phase 2 results on hardware (20 Nov 2026)
+
+| # | Result |
+|---|---|
+| P1 | Boot: UBX 5.0 Hz confirmed (56 solutions in 12 s); IMU ±8 g / ±1000 dps, data-ready 230 Hz; loop 228 Hz, compute 172 µs. |
+| P2 | Frame re-check at the new full scale: level az −1.080 g; nose up ax +0.303 g (pitch +16.7°); right wing down ay −0.314 g (roll +16.9°); yaw right +94° for ~90°. Pass. |
+| P3 | Not done (no fix indoors; needs outdoors). |
+| P4 | Pi link: ESP32 → Pi 50 Hz, 0 gaps; Pi → ESP32 20 Hz, 0 bad / 0 gaps (2517 setpoints in one run). Pi runner starts by itself at boot. Controller step 0.61 ms on the Pi 4B. |
+| P5 | Not done explicitly (Pi timeout -> failsafe). |
+| P6 | Launch detector: hand shoves of the bare board reached 2.4 g; a 2.7 g shove triggered LAUNCH (cause acceleration); apex by baro 1.3 s later. A real throw should exceed 2.5 g clearly; check that handling never does (status `maxg`). |
+| Chain | Bench, battery, servos connected, through the ground station: arm → `launch` (forced) → AUTONOMOUS at the 3 s apex timeout → the Pi's policy setpoints flown (bank −10…+7°), gate handed over to the baseline at 8.0 s (indoors the wind estimate is meaningless) → disarm. The Pi wrote a 2010-record .rlglog. |
+| P9 | Ground link after the 57600 + preamble fix: 5.0 Hz telemetry, 0–1 lost per 100, ~3 CRC failures per 10 s (a failed frame's bytes then show as junk in the console text). |
