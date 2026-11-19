@@ -25,7 +25,10 @@ from flighttest import calibration as C  # noqa: E402
 def test_committed_file_matches_the_hardware_answers():
     cal = C.load()
     assert C.validate(cal) == []
-    assert cal["imu"]["verified"] is False and cal["rail"]["calibrated"] is False
+    # 19 Nov: IMU frame verified on hardware and signed off (identity: raw frame = body frame).
+    assert cal["imu"]["verified"] is True and cal["imu"]["verified_on"] == "2026-11-19"
+    assert cal["imu"]["board_to_body"] == [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    assert cal["rail"]["calibrated"] is False
     for name, sv in cal["servos"].items():           # 18 Nov: all four servos are MG90S
         assert sv["type"] == "MG90S" and (sv["min_us"], sv["max_us"]) == (600, 2300)
         assert (sv["sweep_min_us"], sv["sweep_max_us"]) == (700, 2200) and not sv["measured"]
