@@ -191,6 +191,9 @@ radio.
   moved to the **MCPWM** peripheral (`hw_servo.h`). Armed FLIGHT then measured (USB,
   servo leads disconnected): loop 228 Hz, dt max 5.9 ms, compute 194 µs mean, servo
   writes 5–15 µs, no timeouts or missed samples.
+  Confirmed on battery with the servos connected, armed over the radio: 228 Hz, dt max
+  6.1 ms, compute 195 µs mean, servo writes 4–14 µs, no timeouts or missed samples;
+  disarm returned all four to 1500 µs.
 - Frame checks on battery, over the radio: level az −1.074 g; nose up ax +0.260 g
   (pitch +13.4°); right wing down ay −0.304 g (roll +16.7°); yaw right +88° for about
   90°. All four pass.
