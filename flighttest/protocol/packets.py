@@ -8,7 +8,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass, field
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SYNC = 0xA5
 CRC_POLY = 0x07
 CRC_INIT = 0x00
@@ -19,6 +19,13 @@ FLIGHT = 1  # Policy/baseline flies via the Pi UART. Ground servo values ignored
 BENCH = 2  # Ground control-surface tester drives the servos. Refused when airborne.
 REPLAY = 3  # Ground replay drives the servos in sync with a log. Refused when airborne.
 MODE_NAMES = {0: "DISARMED", 1: "FLIGHT", 2: "BENCH", 3: "REPLAY"}
+
+# Flight phases (status bits 'phase'; ESP32 flight firmware)
+PHASE_DISARMED = 0  # Not armed in FLIGHT.
+PHASE_ARMED = 1  # FLIGHT armed, home and baro reference captured, waiting for the launch. Flies the failsafe glide setpoints (wings level, -2 deg).
+PHASE_LAUNCH = 2  # Launch detected (acceleration). Zoom climb: wings held level, elevator neutral, no pitch command. Ends at the detected apex (or immediately, if handoff_at_apex is off).
+PHASE_AUTONOMOUS = 3  # The Pi's setpoints are flown (bank angle + speed command); failsafe glide whenever the Pi link is stale (pi_failsafe).
+PHASE_NAMES = {0: "DISARMED", 1: "ARMED", 2: "LAUNCH", 3: "AUTONOMOUS"}
 
 # Servo channels (index = position in Command.servo_us)
 SERVOS = [
@@ -58,6 +65,12 @@ STATUS_BITS = {
     "timeout_disarmed": (16, 1),
     "cmd_rejected_airborne": (17, 1),
     "pi_failsafe": (18, 1),
+    "phase": (19, 2),
+    "yaw_aligned": (21, 1),
+    "home_set": (22, 1),
+    "gps_ubx": (23, 1),
+    "pi_link": (24, 1),
+    "cal_nvs": (25, 1),
 }
 
 
@@ -189,7 +202,258 @@ class Command:
         return cls(**kw)
 
 
-PACKET_TYPES = {Telemetry.TYPE: Telemetry, Command.TYPE: Command}
+@dataclass
+class PiTelemetry:
+    """ESP32 -> Pi, UART 115200, 50 Hz. 83 bytes."""
+    TYPE = 3
+    FMT = "<BBHIffffffffiiiifffBBHHIHHB"
+    SIZE = 83
+    seq: int = 0
+    t_ms: int = 0
+    roll: float = 0.0
+    pitch: float = 0.0
+    yaw: float = 0.0
+    p: float = 0.0
+    q: float = 0.0
+    r: float = 0.0
+    baro_alt: float = 0.0
+    sonar: float = 0.0
+    lat: int = 0
+    lon: int = 0
+    home_lat: int = 0
+    home_lon: int = 0
+    vn: float = 0.0
+    ve: float = 0.0
+    vd: float = 0.0
+    gps_fix: int = 0
+    gps_sats: int = 0
+    gps_age_ms: int = 0
+    gps_count: int = 0
+    status: int = 0
+    pi_rx_gaps: int = 0
+    pi_rx_bad: int = 0
+
+    def encode(self) -> bytes:
+        body = struct.pack(self.FMT[:-1], SYNC, self.TYPE, self.seq, self.t_ms, self.roll, self.pitch, self.yaw, self.p, self.q, self.r, self.baro_alt, self.sonar, self.lat, self.lon, self.home_lat, self.home_lon, self.vn, self.ve, self.vd, self.gps_fix, self.gps_sats, self.gps_age_ms, self.gps_count, self.status, self.pi_rx_gaps, self.pi_rx_bad)
+        return body + bytes([crc8(body[1:])])
+
+    @classmethod
+    def decode(cls, data: bytes) -> "PiTelemetry":
+        """Raises ValueError on wrong length, sync, type or CRC."""
+        if len(data) != cls.SIZE:
+            raise ValueError(f"length {len(data)} != {cls.SIZE}")
+        if data[0] != SYNC or data[1] != cls.TYPE:
+            raise ValueError("bad sync or type")
+        if crc8(data[1:-1]) != data[-1]:
+            raise ValueError("bad crc")
+        v = struct.unpack(cls.FMT, data)
+        i = 2
+        kw = {}
+        kw["seq"] = v[i]
+        i += 1
+        kw["t_ms"] = v[i]
+        i += 1
+        kw["roll"] = v[i]
+        i += 1
+        kw["pitch"] = v[i]
+        i += 1
+        kw["yaw"] = v[i]
+        i += 1
+        kw["p"] = v[i]
+        i += 1
+        kw["q"] = v[i]
+        i += 1
+        kw["r"] = v[i]
+        i += 1
+        kw["baro_alt"] = v[i]
+        i += 1
+        kw["sonar"] = v[i]
+        i += 1
+        kw["lat"] = v[i]
+        i += 1
+        kw["lon"] = v[i]
+        i += 1
+        kw["home_lat"] = v[i]
+        i += 1
+        kw["home_lon"] = v[i]
+        i += 1
+        kw["vn"] = v[i]
+        i += 1
+        kw["ve"] = v[i]
+        i += 1
+        kw["vd"] = v[i]
+        i += 1
+        kw["gps_fix"] = v[i]
+        i += 1
+        kw["gps_sats"] = v[i]
+        i += 1
+        kw["gps_age_ms"] = v[i]
+        i += 1
+        kw["gps_count"] = v[i]
+        i += 1
+        kw["status"] = v[i]
+        i += 1
+        kw["pi_rx_gaps"] = v[i]
+        i += 1
+        kw["pi_rx_bad"] = v[i]
+        i += 1
+        return cls(**kw)
+
+
+@dataclass
+class PiSetpoint:
+    """Pi -> ESP32, UART 115200, 20 Hz. 16 bytes."""
+    TYPE = 4
+    FMT = "<BBHBffHB"
+    SIZE = 16
+    seq: int = 0
+    controller: int = 0
+    roll_sp: float = 0.0
+    speed_cmd: float = 0.0
+    tlm_gaps: int = 0
+
+    def encode(self) -> bytes:
+        body = struct.pack(self.FMT[:-1], SYNC, self.TYPE, self.seq, self.controller, self.roll_sp, self.speed_cmd, self.tlm_gaps)
+        return body + bytes([crc8(body[1:])])
+
+    @classmethod
+    def decode(cls, data: bytes) -> "PiSetpoint":
+        """Raises ValueError on wrong length, sync, type or CRC."""
+        if len(data) != cls.SIZE:
+            raise ValueError(f"length {len(data)} != {cls.SIZE}")
+        if data[0] != SYNC or data[1] != cls.TYPE:
+            raise ValueError("bad sync or type")
+        if crc8(data[1:-1]) != data[-1]:
+            raise ValueError("bad crc")
+        v = struct.unpack(cls.FMT, data)
+        i = 2
+        kw = {}
+        kw["seq"] = v[i]
+        i += 1
+        kw["controller"] = v[i]
+        i += 1
+        kw["roll_sp"] = v[i]
+        i += 1
+        kw["speed_cmd"] = v[i]
+        i += 1
+        kw["tlm_gaps"] = v[i]
+        i += 1
+        return cls(**kw)
+
+
+@dataclass
+class CalibrationSet:
+    """ground -> ESP32, ESP-NOW; accepted only when DISARMED and not airborne; stored in NVS. 43 bytes."""
+    TYPE = 5
+    FMT = "<BBHIBB4H4H4H4HB"
+    SIZE = 43
+    seq: int = 0
+    cal_id: int = 0
+    flags: int = 0
+    dir_neg: int = 0
+    neutral_us: list = field(default_factory=lambda: [0] * 4)
+    full_us: list = field(default_factory=lambda: [0] * 4)
+    min_us: list = field(default_factory=lambda: [0] * 4)
+    max_us: list = field(default_factory=lambda: [0] * 4)
+
+    def encode(self) -> bytes:
+        body = struct.pack(self.FMT[:-1], SYNC, self.TYPE, self.seq, self.cal_id, self.flags, self.dir_neg, *self.neutral_us, *self.full_us, *self.min_us, *self.max_us)
+        return body + bytes([crc8(body[1:])])
+
+    @classmethod
+    def decode(cls, data: bytes) -> "CalibrationSet":
+        """Raises ValueError on wrong length, sync, type or CRC."""
+        if len(data) != cls.SIZE:
+            raise ValueError(f"length {len(data)} != {cls.SIZE}")
+        if data[0] != SYNC or data[1] != cls.TYPE:
+            raise ValueError("bad sync or type")
+        if crc8(data[1:-1]) != data[-1]:
+            raise ValueError("bad crc")
+        v = struct.unpack(cls.FMT, data)
+        i = 2
+        kw = {}
+        kw["seq"] = v[i]
+        i += 1
+        kw["cal_id"] = v[i]
+        i += 1
+        kw["flags"] = v[i]
+        i += 1
+        kw["dir_neg"] = v[i]
+        i += 1
+        kw["neutral_us"] = list(v[i:i + 4])
+        i += 4
+        kw["full_us"] = list(v[i:i + 4])
+        i += 4
+        kw["min_us"] = list(v[i:i + 4])
+        i += 4
+        kw["max_us"] = list(v[i:i + 4])
+        i += 4
+        return cls(**kw)
+
+
+@dataclass
+class Info:
+    """ESP32 -> ground, ESP-NOW, 1 Hz. 29 bytes."""
+    TYPE = 6
+    FMT = "<BBHIBBHHHHBBffB"
+    SIZE = 29
+    seq: int = 0
+    cal_id: int = 0
+    cal_flags: int = 0
+    schema: int = 0
+    loop_hz: int = 0
+    pi_rx_gaps: int = 0
+    pi_rx_bad: int = 0
+    pi_tlm_gaps: int = 0
+    gps_rate_dhz: int = 0
+    launch_cause: int = 0
+    pitch_sp: float = 0.0
+    roll_sp: float = 0.0
+
+    def encode(self) -> bytes:
+        body = struct.pack(self.FMT[:-1], SYNC, self.TYPE, self.seq, self.cal_id, self.cal_flags, self.schema, self.loop_hz, self.pi_rx_gaps, self.pi_rx_bad, self.pi_tlm_gaps, self.gps_rate_dhz, self.launch_cause, self.pitch_sp, self.roll_sp)
+        return body + bytes([crc8(body[1:])])
+
+    @classmethod
+    def decode(cls, data: bytes) -> "Info":
+        """Raises ValueError on wrong length, sync, type or CRC."""
+        if len(data) != cls.SIZE:
+            raise ValueError(f"length {len(data)} != {cls.SIZE}")
+        if data[0] != SYNC or data[1] != cls.TYPE:
+            raise ValueError("bad sync or type")
+        if crc8(data[1:-1]) != data[-1]:
+            raise ValueError("bad crc")
+        v = struct.unpack(cls.FMT, data)
+        i = 2
+        kw = {}
+        kw["seq"] = v[i]
+        i += 1
+        kw["cal_id"] = v[i]
+        i += 1
+        kw["cal_flags"] = v[i]
+        i += 1
+        kw["schema"] = v[i]
+        i += 1
+        kw["loop_hz"] = v[i]
+        i += 1
+        kw["pi_rx_gaps"] = v[i]
+        i += 1
+        kw["pi_rx_bad"] = v[i]
+        i += 1
+        kw["pi_tlm_gaps"] = v[i]
+        i += 1
+        kw["gps_rate_dhz"] = v[i]
+        i += 1
+        kw["launch_cause"] = v[i]
+        i += 1
+        kw["pitch_sp"] = v[i]
+        i += 1
+        kw["roll_sp"] = v[i]
+        i += 1
+        return cls(**kw)
+
+
+PACKET_TYPES = {Telemetry.TYPE: Telemetry, Command.TYPE: Command, PiTelemetry.TYPE: PiTelemetry, PiSetpoint.TYPE: PiSetpoint, CalibrationSet.TYPE: CalibrationSet, Info.TYPE: Info}
 
 
 class StreamParser:

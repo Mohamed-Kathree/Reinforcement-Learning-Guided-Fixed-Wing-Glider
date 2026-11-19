@@ -4,9 +4,10 @@
     "Edit this file, then run: python -m flighttest.protocol.codegen",
     "It regenerates flighttest/protocol/packets.py, firmware/protocol/rlg_protocol.h and",
     "flighttest/protocol/test_vectors.json. tests/test_flighttest_protocol.py fails if they are stale.",
-    "Wire format: little-endian, packed, no padding. ESP32 (Xtensa) is little-endian. v2 (18 Nov 2026): rail_v -> rail_adc_v, per-servo limits moved to the calibration file, pi_failsafe status bit."
+    "Wire format: little-endian, packed, no padding. ESP32 (Xtensa) is little-endian. v2 (18 Nov 2026): rail_v -> rail_adc_v, per-servo limits moved to the calibration file, pi_failsafe status bit.",
+    "v3 (19 Nov 2026): Pi UART link packets PiTelemetry (ESP32 -> Pi) and PiSetpoint (Pi -> ESP32), CalibrationSet (ground -> ESP32, stored in NVS), Info (ESP32 -> ground, 1 Hz), flight phases. Telemetry (ground) layout unchanged; the new state uses spare status bits."
   ],
-  "version": 2,
+  "version": 3,
   "sync": 165,
   "crc8": {
     "poly": 7,
@@ -130,6 +131,42 @@
       "lsb": 18,
       "width": 1,
       "doc": "FLIGHT: no Pi setpoint for 150 ms; ESP32 flying failsafe glide."
+    },
+    {
+      "name": "phase",
+      "lsb": 19,
+      "width": 2,
+      "doc": "Flight phase (phases table)."
+    },
+    {
+      "name": "yaw_aligned",
+      "lsb": 21,
+      "width": 1,
+      "doc": "Yaw has been aligned to the GPS course after launch (otherwise it is gyro-integrated from 0 at boot)."
+    },
+    {
+      "name": "home_set",
+      "lsb": 22,
+      "width": 1,
+      "doc": "Home (GPS position at FLIGHT arm) captured."
+    },
+    {
+      "name": "gps_ubx",
+      "lsb": 23,
+      "width": 1,
+      "doc": "GPS running in UBX mode (5 Hz, vertical velocity). 0 = NMEA fallback (1 Hz, no vertical velocity)."
+    },
+    {
+      "name": "pi_link",
+      "lsb": 24,
+      "width": 1,
+      "doc": "A valid Pi setpoint arrived within the Pi timeout."
+    },
+    {
+      "name": "cal_nvs",
+      "lsb": 25,
+      "width": 1,
+      "doc": "Servo calibration loaded from NVS (pushed over the radio); 0 = compiled-in header."
     }
   ],
   "packets": [
@@ -260,6 +297,328 @@
           "ctype": "u8"
         }
       ]
+    },
+    {
+      "name": "PiTelemetry",
+      "type": 3,
+      "direction": "ESP32 -> Pi, UART 115200, 50 Hz",
+      "max_bytes": 250,
+      "fields": [
+        {
+          "name": "sync",
+          "ctype": "u8"
+        },
+        {
+          "name": "type",
+          "ctype": "u8"
+        },
+        {
+          "name": "seq",
+          "ctype": "u16"
+        },
+        {
+          "name": "t_ms",
+          "ctype": "u32",
+          "unit": "ms since ESP32 boot"
+        },
+        {
+          "name": "roll",
+          "ctype": "f32",
+          "unit": "rad"
+        },
+        {
+          "name": "pitch",
+          "ctype": "f32",
+          "unit": "rad"
+        },
+        {
+          "name": "yaw",
+          "ctype": "f32",
+          "unit": "rad, (-pi, pi]; see status yaw_aligned"
+        },
+        {
+          "name": "p",
+          "ctype": "f32",
+          "unit": "rad/s"
+        },
+        {
+          "name": "q",
+          "ctype": "f32",
+          "unit": "rad/s"
+        },
+        {
+          "name": "r",
+          "ctype": "f32",
+          "unit": "rad/s"
+        },
+        {
+          "name": "baro_alt",
+          "ctype": "f32",
+          "unit": "m above the FLIGHT-arm reference; NaN before it is captured"
+        },
+        {
+          "name": "sonar",
+          "ctype": "f32",
+          "unit": "m, -1 = invalid (no echo within 4.5 m)"
+        },
+        {
+          "name": "lat",
+          "ctype": "i32",
+          "unit": "1e-7 deg"
+        },
+        {
+          "name": "lon",
+          "ctype": "i32",
+          "unit": "1e-7 deg"
+        },
+        {
+          "name": "home_lat",
+          "ctype": "i32",
+          "unit": "1e-7 deg, captured at FLIGHT arm"
+        },
+        {
+          "name": "home_lon",
+          "ctype": "i32",
+          "unit": "1e-7 deg"
+        },
+        {
+          "name": "vn",
+          "ctype": "f32",
+          "unit": "m/s"
+        },
+        {
+          "name": "ve",
+          "ctype": "f32",
+          "unit": "m/s"
+        },
+        {
+          "name": "vd",
+          "ctype": "f32",
+          "unit": "m/s, positive down; NaN without UBX"
+        },
+        {
+          "name": "gps_fix",
+          "ctype": "u8",
+          "unit": "0 none, 1 2D, 2 3D"
+        },
+        {
+          "name": "gps_sats",
+          "ctype": "u8"
+        },
+        {
+          "name": "gps_age_ms",
+          "ctype": "u16",
+          "unit": "since the last new GPS solution, saturates at 65535"
+        },
+        {
+          "name": "gps_count",
+          "ctype": "u16",
+          "unit": "new GPS solutions since boot (wraps)"
+        },
+        {
+          "name": "status",
+          "ctype": "u32",
+          "unit": "bitfield, see status_bits"
+        },
+        {
+          "name": "pi_rx_gaps",
+          "ctype": "u16",
+          "unit": "sequence gaps the ESP32 has seen in PiSetpoint"
+        },
+        {
+          "name": "pi_rx_bad",
+          "ctype": "u16",
+          "unit": "PiSetpoint frames dropped (sync/CRC/length)"
+        },
+        {
+          "name": "crc8",
+          "ctype": "u8"
+        }
+      ]
+    },
+    {
+      "name": "PiSetpoint",
+      "type": 4,
+      "direction": "Pi -> ESP32, UART 115200, 20 Hz",
+      "max_bytes": 250,
+      "fields": [
+        {
+          "name": "sync",
+          "ctype": "u8"
+        },
+        {
+          "name": "type",
+          "ctype": "u8"
+        },
+        {
+          "name": "seq",
+          "ctype": "u16"
+        },
+        {
+          "name": "controller",
+          "ctype": "u8",
+          "unit": "0 idle/heartbeat, 1 policy, 2 baseline (informational)"
+        },
+        {
+          "name": "roll_sp",
+          "ctype": "f32",
+          "unit": "rad, bank angle setpoint (policy action[0] * 45 deg)"
+        },
+        {
+          "name": "speed_cmd",
+          "ctype": "f32",
+          "unit": "m/s, airspeed command (9.5-16); the ESP32 turns it into a pitch target with the simulator's trim schedule"
+        },
+        {
+          "name": "tlm_gaps",
+          "ctype": "u16",
+          "unit": "sequence gaps the Pi has seen in PiTelemetry"
+        },
+        {
+          "name": "crc8",
+          "ctype": "u8"
+        }
+      ]
+    },
+    {
+      "name": "CalibrationSet",
+      "type": 5,
+      "direction": "ground -> ESP32, ESP-NOW; accepted only when DISARMED and not airborne; stored in NVS",
+      "max_bytes": 250,
+      "fields": [
+        {
+          "name": "sync",
+          "ctype": "u8"
+        },
+        {
+          "name": "type",
+          "ctype": "u8"
+        },
+        {
+          "name": "seq",
+          "ctype": "u16"
+        },
+        {
+          "name": "cal_id",
+          "ctype": "u32",
+          "unit": "first 8 hex digits of the calibration file hash"
+        },
+        {
+          "name": "flags",
+          "ctype": "u8",
+          "unit": "bit0 servos measured, bit1 IMU verified"
+        },
+        {
+          "name": "dir_neg",
+          "ctype": "u8",
+          "unit": "bit i set = servo i direction -1"
+        },
+        {
+          "name": "neutral_us",
+          "ctype": "u16",
+          "count": 4,
+          "unit": "us"
+        },
+        {
+          "name": "full_us",
+          "ctype": "u16",
+          "count": 4,
+          "unit": "us from neutral at full deflection"
+        },
+        {
+          "name": "min_us",
+          "ctype": "u16",
+          "count": 4,
+          "unit": "us"
+        },
+        {
+          "name": "max_us",
+          "ctype": "u16",
+          "count": 4,
+          "unit": "us"
+        },
+        {
+          "name": "crc8",
+          "ctype": "u8"
+        }
+      ]
+    },
+    {
+      "name": "Info",
+      "type": 6,
+      "direction": "ESP32 -> ground, ESP-NOW, 1 Hz",
+      "max_bytes": 250,
+      "fields": [
+        {
+          "name": "sync",
+          "ctype": "u8"
+        },
+        {
+          "name": "type",
+          "ctype": "u8"
+        },
+        {
+          "name": "seq",
+          "ctype": "u16"
+        },
+        {
+          "name": "cal_id",
+          "ctype": "u32",
+          "unit": "calibration in use (compiled-in header or NVS)"
+        },
+        {
+          "name": "cal_flags",
+          "ctype": "u8",
+          "unit": "bit0 servos measured, bit1 IMU verified, bit2 loaded from NVS"
+        },
+        {
+          "name": "schema",
+          "ctype": "u8",
+          "unit": "protocol schema version"
+        },
+        {
+          "name": "loop_hz",
+          "ctype": "u16",
+          "unit": "control loop rate over the last second"
+        },
+        {
+          "name": "pi_rx_gaps",
+          "ctype": "u16"
+        },
+        {
+          "name": "pi_rx_bad",
+          "ctype": "u16"
+        },
+        {
+          "name": "pi_tlm_gaps",
+          "ctype": "u16",
+          "unit": "as reported by the Pi"
+        },
+        {
+          "name": "gps_rate_dhz",
+          "ctype": "u8",
+          "unit": "GPS solutions per 10 s over the last 10 s"
+        },
+        {
+          "name": "launch_cause",
+          "ctype": "u8",
+          "unit": "0 none, 1 accel; apex: 0 none, 1 baro descent, 2 timeout, 3 immediate (bit 4+)"
+        },
+        {
+          "name": "pitch_sp",
+          "ctype": "f32",
+          "unit": "rad, pitch setpoint being flown"
+        },
+        {
+          "name": "roll_sp",
+          "ctype": "f32",
+          "unit": "rad, roll setpoint being flown"
+        },
+        {
+          "name": "crc8",
+          "ctype": "u8"
+        }
+      ]
     }
   ],
   "safety": {
@@ -294,5 +653,27 @@
     "min": 600,
     "max": 2300,
     "_note": "Compiled-in outer envelope: the firmware never outputs outside it, whatever limits it is given. Per-servo limits come from flighttest/config/calibration.json (pushed to NVS)."
-  }
+  },
+  "phases": [
+    {
+      "name": "DISARMED",
+      "value": 0,
+      "doc": "Not armed in FLIGHT."
+    },
+    {
+      "name": "ARMED",
+      "value": 1,
+      "doc": "FLIGHT armed, home and baro reference captured, waiting for the launch. Flies the failsafe glide setpoints (wings level, -2 deg)."
+    },
+    {
+      "name": "LAUNCH",
+      "value": 2,
+      "doc": "Launch detected (acceleration). Zoom climb: wings held level, elevator neutral, no pitch command. Ends at the detected apex (or immediately, if handoff_at_apex is off)."
+    },
+    {
+      "name": "AUTONOMOUS",
+      "value": 3,
+      "doc": "The Pi's setpoints are flown (bank angle + speed command); failsafe glide whenever the Pi link is stale (pi_failsafe)."
+    }
+  ]
 }

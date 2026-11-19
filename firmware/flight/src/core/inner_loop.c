@@ -42,6 +42,15 @@ rlg_surfaces_t rlg_inner_loop(float roll, float pitch, float p, float q, float r
     return s;
 }
 
+float rlg_pitch_target(float speed_cmd_ms, float roll)
+{
+    float c = fabsf(cosf(roll));
+    float v = speed_cmd_ms > IL_V_CMD_MIN ? speed_cmd_ms : IL_V_CMD_MIN;
+    float r = IL_V_TRIM / v;
+    float t = IL_ALPHA_TRIM * r * r / (c > 0.5f ? c : 0.5f);
+    return clampf(t, IL_PITCH_SP_MIN, IL_PITCH_SP_MAX);
+}
+
 uint16_t rlg_deflection_to_us(float defl_rad, float max_rad, int neutral_us, int direction,
                               int full_us, int min_us, int max_us)
 {

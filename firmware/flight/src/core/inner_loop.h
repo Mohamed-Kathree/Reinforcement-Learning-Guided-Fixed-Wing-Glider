@@ -39,6 +39,10 @@ extern "C" {
 #define IL_PITCH_SP_MAX ( 0.20943951f)   /* +12 deg */
 #define IL_SHIELD_BANK  0.78539816f      /* 45 deg */
 #define IL_SHIELD_PITCH 0.34906585f      /* 20 deg, derated by 1/max(|cos roll|, 0.5) */
+/* Speed-command -> pitch-target trim schedule (AttitudeController.update) */
+#define IL_ALPHA_TRIM 0.043633231f       /* 2.5 deg */
+#define IL_V_TRIM     10.0f              /* m/s */
+#define IL_V_CMD_MIN  4.0f               /* the simulator's max(V_cmd, 4.0) */
 
 typedef struct {
     float aileron, elevator, rudder;     /* rad, simulator sign convention */
@@ -48,6 +52,14 @@ typedef struct {
 /* roll, pitch in rad; p, q, r in rad/s; setpoints in rad. */
 rlg_surfaces_t rlg_inner_loop(float roll, float pitch, float p, float q, float r,
                               float roll_sp, float pitch_sp);
+
+/* Pitch target (rad) for an airspeed command (m/s) at the current roll (rad):
+ * the simulator's trim schedule ALPHA_TRIM * (V_TRIM / V_cmd)^2 / max(|cos roll|, 0.5),
+ * clipped to [-8, +12] deg. The simulator also adds -KV_PITCH * (V_cmd - V_true);
+ * the aircraft has no airspeed sensor, so that term is OMITTED (decision
+ * 19 Nov 2026; its effect is measured in simulation, see firmware/flight/README.md).
+ * Equal to the simulator's target whenever V_true == V_cmd. */
+float rlg_pitch_target(float speed_cmd_ms, float roll);
 
 /* Surface deflection (rad) -> servo pulse (us): neutral + direction *
  * (defl / max_rad) * full_us, clamped to [min_us, max_us]. */

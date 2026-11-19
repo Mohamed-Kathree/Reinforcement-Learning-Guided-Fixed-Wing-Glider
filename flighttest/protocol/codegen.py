@@ -94,6 +94,11 @@ def gen_python(schema: dict) -> str:
     for m in schema["modes"]:
         L.append(f"{m['name']} = {m['value']}  # {m['doc']}")
     L.append("MODE_NAMES = {" + ", ".join(f"{m['value']}: \"{m['name']}\"" for m in schema["modes"]) + "}")
+    if schema.get("phases"):
+        L += ["", "# Flight phases (status bits 'phase'; ESP32 flight firmware)"]
+        for ph in schema["phases"]:
+            L.append(f"PHASE_{ph['name']} = {ph['value']}  # {ph['doc']}")
+        L.append("PHASE_NAMES = {" + ", ".join(f"{ph['value']}: \"{ph['name']}\"" for ph in schema["phases"]) + "}")
     L += ["", "# Servo channels (index = position in Command.servo_us)",
           "SERVOS = ["]
     for s in schema["servos"]:
@@ -226,7 +231,13 @@ def gen_c(schema: dict) -> str:
          "typedef enum {"]
     for m in schema["modes"]:
         L.append(f"    RLG_MODE_{m['name']} = {m['value']},  /* {m['doc']} */")
-    L += ["} rlg_mode_t;", "", f"#define RLG_NUM_SERVOS {len(schema['servos'])}"]
+    L += ["} rlg_mode_t;", ""]
+    if schema.get("phases"):
+        L.append("typedef enum {")
+        for ph in schema["phases"]:
+            L.append(f"    RLG_PHASE_{ph['name']} = {ph['value']},  /* {ph['doc']} */")
+        L += ["} rlg_phase_t;", ""]
+    L += [f"#define RLG_NUM_SERVOS {len(schema['servos'])}"]
     for s in schema["servos"]:
         L.append(f"#define RLG_SERVO_{s['name'].upper()} {s['index']}  /* GPIO{s['gpio']} */")
     L += ["", "/* Outer envelope only. Per-servo travel limits are runtime values from",

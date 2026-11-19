@@ -11,7 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define RLG_SCHEMA_VERSION 2
+#define RLG_SCHEMA_VERSION 3
 #define RLG_SYNC 0xA5u
 #define RLG_CRC_POLY 0x07u
 #define RLG_CRC_INIT 0x00u
@@ -22,6 +22,13 @@ typedef enum {
     RLG_MODE_BENCH = 2,  /* Ground control-surface tester drives the servos. Refused when airborne. */
     RLG_MODE_REPLAY = 3,  /* Ground replay drives the servos in sync with a log. Refused when airborne. */
 } rlg_mode_t;
+
+typedef enum {
+    RLG_PHASE_DISARMED = 0,  /* Not armed in FLIGHT. */
+    RLG_PHASE_ARMED = 1,  /* FLIGHT armed, home and baro reference captured, waiting for the launch. Flies the failsafe glide setpoints (wings level, -2 deg). */
+    RLG_PHASE_LAUNCH = 2,  /* Launch detected (acceleration). Zoom climb: wings held level, elevator neutral, no pitch command. Ends at the detected apex (or immediately, if handoff_at_apex is off). */
+    RLG_PHASE_AUTONOMOUS = 3,  /* The Pi's setpoints are flown (bank angle + speed command); failsafe glide whenever the Pi link is stale (pi_failsafe). */
+} rlg_phase_t;
 
 #define RLG_NUM_SERVOS 4
 #define RLG_SERVO_AILERON_L 0  /* GPIO13 */
@@ -70,6 +77,18 @@ static const uint8_t RLG_SERVO_GPIO[RLG_NUM_SERVOS] __attribute__((unused)) = {1
 #define RLG_STATUS_CMD_REJECTED_AIRBORNE_MASK 0x00020000u
 #define RLG_STATUS_PI_FAILSAFE_LSB 18u
 #define RLG_STATUS_PI_FAILSAFE_MASK 0x00040000u
+#define RLG_STATUS_PHASE_LSB 19u
+#define RLG_STATUS_PHASE_MASK 0x00180000u
+#define RLG_STATUS_YAW_ALIGNED_LSB 21u
+#define RLG_STATUS_YAW_ALIGNED_MASK 0x00200000u
+#define RLG_STATUS_HOME_SET_LSB 22u
+#define RLG_STATUS_HOME_SET_MASK 0x00400000u
+#define RLG_STATUS_GPS_UBX_LSB 23u
+#define RLG_STATUS_GPS_UBX_MASK 0x00800000u
+#define RLG_STATUS_PI_LINK_LSB 24u
+#define RLG_STATUS_PI_LINK_MASK 0x01000000u
+#define RLG_STATUS_CAL_NVS_LSB 25u
+#define RLG_STATUS_CAL_NVS_MASK 0x02000000u
 
 #define RLG_TYPE_TELEMETRY 1u  /* glider -> ground, ESP-NOW, 5 Hz */
 typedef struct __attribute__((packed)) {
@@ -130,6 +149,152 @@ _Static_assert(offsetof(rlg_command_t, seq) == 2, "Command.seq offset");
 _Static_assert(offsetof(rlg_command_t, mode) == 4, "Command.mode offset");
 _Static_assert(offsetof(rlg_command_t, servo_us) == 5, "Command.servo_us offset");
 _Static_assert(offsetof(rlg_command_t, crc8) == 13, "Command.crc8 offset");
+
+#define RLG_TYPE_PITELEMETRY 3u  /* ESP32 -> Pi, UART 115200, 50 Hz */
+typedef struct __attribute__((packed)) {
+    uint8_t sync;  /* offset 0 */
+    uint8_t type;  /* offset 1 */
+    uint16_t seq;  /* offset 2 */
+    uint32_t t_ms;  /* offset 4 */
+    float roll;  /* offset 8 */
+    float pitch;  /* offset 12 */
+    float yaw;  /* offset 16 */
+    float p;  /* offset 20 */
+    float q;  /* offset 24 */
+    float r;  /* offset 28 */
+    float baro_alt;  /* offset 32 */
+    float sonar;  /* offset 36 */
+    int32_t lat;  /* offset 40 */
+    int32_t lon;  /* offset 44 */
+    int32_t home_lat;  /* offset 48 */
+    int32_t home_lon;  /* offset 52 */
+    float vn;  /* offset 56 */
+    float ve;  /* offset 60 */
+    float vd;  /* offset 64 */
+    uint8_t gps_fix;  /* offset 68 */
+    uint8_t gps_sats;  /* offset 69 */
+    uint16_t gps_age_ms;  /* offset 70 */
+    uint16_t gps_count;  /* offset 72 */
+    uint32_t status;  /* offset 74 */
+    uint16_t pi_rx_gaps;  /* offset 78 */
+    uint16_t pi_rx_bad;  /* offset 80 */
+    uint8_t crc8;  /* offset 82 */
+} rlg_pitelemetry_t;
+#define RLG_PITELEMETRY_SIZE 83u
+_Static_assert(sizeof(rlg_pitelemetry_t) == 83, "PiTelemetry size");
+_Static_assert(offsetof(rlg_pitelemetry_t, sync) == 0, "PiTelemetry.sync offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, type) == 1, "PiTelemetry.type offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, seq) == 2, "PiTelemetry.seq offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, t_ms) == 4, "PiTelemetry.t_ms offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, roll) == 8, "PiTelemetry.roll offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, pitch) == 12, "PiTelemetry.pitch offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, yaw) == 16, "PiTelemetry.yaw offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, p) == 20, "PiTelemetry.p offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, q) == 24, "PiTelemetry.q offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, r) == 28, "PiTelemetry.r offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, baro_alt) == 32, "PiTelemetry.baro_alt offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, sonar) == 36, "PiTelemetry.sonar offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, lat) == 40, "PiTelemetry.lat offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, lon) == 44, "PiTelemetry.lon offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, home_lat) == 48, "PiTelemetry.home_lat offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, home_lon) == 52, "PiTelemetry.home_lon offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, vn) == 56, "PiTelemetry.vn offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, ve) == 60, "PiTelemetry.ve offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, vd) == 64, "PiTelemetry.vd offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, gps_fix) == 68, "PiTelemetry.gps_fix offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, gps_sats) == 69, "PiTelemetry.gps_sats offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, gps_age_ms) == 70, "PiTelemetry.gps_age_ms offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, gps_count) == 72, "PiTelemetry.gps_count offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, status) == 74, "PiTelemetry.status offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, pi_rx_gaps) == 78, "PiTelemetry.pi_rx_gaps offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, pi_rx_bad) == 80, "PiTelemetry.pi_rx_bad offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, crc8) == 82, "PiTelemetry.crc8 offset");
+
+#define RLG_TYPE_PISETPOINT 4u  /* Pi -> ESP32, UART 115200, 20 Hz */
+typedef struct __attribute__((packed)) {
+    uint8_t sync;  /* offset 0 */
+    uint8_t type;  /* offset 1 */
+    uint16_t seq;  /* offset 2 */
+    uint8_t controller;  /* offset 4 */
+    float roll_sp;  /* offset 5 */
+    float speed_cmd;  /* offset 9 */
+    uint16_t tlm_gaps;  /* offset 13 */
+    uint8_t crc8;  /* offset 15 */
+} rlg_pisetpoint_t;
+#define RLG_PISETPOINT_SIZE 16u
+_Static_assert(sizeof(rlg_pisetpoint_t) == 16, "PiSetpoint size");
+_Static_assert(offsetof(rlg_pisetpoint_t, sync) == 0, "PiSetpoint.sync offset");
+_Static_assert(offsetof(rlg_pisetpoint_t, type) == 1, "PiSetpoint.type offset");
+_Static_assert(offsetof(rlg_pisetpoint_t, seq) == 2, "PiSetpoint.seq offset");
+_Static_assert(offsetof(rlg_pisetpoint_t, controller) == 4, "PiSetpoint.controller offset");
+_Static_assert(offsetof(rlg_pisetpoint_t, roll_sp) == 5, "PiSetpoint.roll_sp offset");
+_Static_assert(offsetof(rlg_pisetpoint_t, speed_cmd) == 9, "PiSetpoint.speed_cmd offset");
+_Static_assert(offsetof(rlg_pisetpoint_t, tlm_gaps) == 13, "PiSetpoint.tlm_gaps offset");
+_Static_assert(offsetof(rlg_pisetpoint_t, crc8) == 15, "PiSetpoint.crc8 offset");
+
+#define RLG_TYPE_CALIBRATIONSET 5u  /* ground -> ESP32, ESP-NOW; accepted only when DISARMED and not airborne; stored in NVS */
+typedef struct __attribute__((packed)) {
+    uint8_t sync;  /* offset 0 */
+    uint8_t type;  /* offset 1 */
+    uint16_t seq;  /* offset 2 */
+    uint32_t cal_id;  /* offset 4 */
+    uint8_t flags;  /* offset 8 */
+    uint8_t dir_neg;  /* offset 9 */
+    uint16_t neutral_us[4];  /* offset 10 */
+    uint16_t full_us[4];  /* offset 18 */
+    uint16_t min_us[4];  /* offset 26 */
+    uint16_t max_us[4];  /* offset 34 */
+    uint8_t crc8;  /* offset 42 */
+} rlg_calibrationset_t;
+#define RLG_CALIBRATIONSET_SIZE 43u
+_Static_assert(sizeof(rlg_calibrationset_t) == 43, "CalibrationSet size");
+_Static_assert(offsetof(rlg_calibrationset_t, sync) == 0, "CalibrationSet.sync offset");
+_Static_assert(offsetof(rlg_calibrationset_t, type) == 1, "CalibrationSet.type offset");
+_Static_assert(offsetof(rlg_calibrationset_t, seq) == 2, "CalibrationSet.seq offset");
+_Static_assert(offsetof(rlg_calibrationset_t, cal_id) == 4, "CalibrationSet.cal_id offset");
+_Static_assert(offsetof(rlg_calibrationset_t, flags) == 8, "CalibrationSet.flags offset");
+_Static_assert(offsetof(rlg_calibrationset_t, dir_neg) == 9, "CalibrationSet.dir_neg offset");
+_Static_assert(offsetof(rlg_calibrationset_t, neutral_us) == 10, "CalibrationSet.neutral_us offset");
+_Static_assert(offsetof(rlg_calibrationset_t, full_us) == 18, "CalibrationSet.full_us offset");
+_Static_assert(offsetof(rlg_calibrationset_t, min_us) == 26, "CalibrationSet.min_us offset");
+_Static_assert(offsetof(rlg_calibrationset_t, max_us) == 34, "CalibrationSet.max_us offset");
+_Static_assert(offsetof(rlg_calibrationset_t, crc8) == 42, "CalibrationSet.crc8 offset");
+
+#define RLG_TYPE_INFO 6u  /* ESP32 -> ground, ESP-NOW, 1 Hz */
+typedef struct __attribute__((packed)) {
+    uint8_t sync;  /* offset 0 */
+    uint8_t type;  /* offset 1 */
+    uint16_t seq;  /* offset 2 */
+    uint32_t cal_id;  /* offset 4 */
+    uint8_t cal_flags;  /* offset 8 */
+    uint8_t schema;  /* offset 9 */
+    uint16_t loop_hz;  /* offset 10 */
+    uint16_t pi_rx_gaps;  /* offset 12 */
+    uint16_t pi_rx_bad;  /* offset 14 */
+    uint16_t pi_tlm_gaps;  /* offset 16 */
+    uint8_t gps_rate_dhz;  /* offset 18 */
+    uint8_t launch_cause;  /* offset 19 */
+    float pitch_sp;  /* offset 20 */
+    float roll_sp;  /* offset 24 */
+    uint8_t crc8;  /* offset 28 */
+} rlg_info_t;
+#define RLG_INFO_SIZE 29u
+_Static_assert(sizeof(rlg_info_t) == 29, "Info size");
+_Static_assert(offsetof(rlg_info_t, sync) == 0, "Info.sync offset");
+_Static_assert(offsetof(rlg_info_t, type) == 1, "Info.type offset");
+_Static_assert(offsetof(rlg_info_t, seq) == 2, "Info.seq offset");
+_Static_assert(offsetof(rlg_info_t, cal_id) == 4, "Info.cal_id offset");
+_Static_assert(offsetof(rlg_info_t, cal_flags) == 8, "Info.cal_flags offset");
+_Static_assert(offsetof(rlg_info_t, schema) == 9, "Info.schema offset");
+_Static_assert(offsetof(rlg_info_t, loop_hz) == 10, "Info.loop_hz offset");
+_Static_assert(offsetof(rlg_info_t, pi_rx_gaps) == 12, "Info.pi_rx_gaps offset");
+_Static_assert(offsetof(rlg_info_t, pi_rx_bad) == 14, "Info.pi_rx_bad offset");
+_Static_assert(offsetof(rlg_info_t, pi_tlm_gaps) == 16, "Info.pi_tlm_gaps offset");
+_Static_assert(offsetof(rlg_info_t, gps_rate_dhz) == 18, "Info.gps_rate_dhz offset");
+_Static_assert(offsetof(rlg_info_t, launch_cause) == 19, "Info.launch_cause offset");
+_Static_assert(offsetof(rlg_info_t, pitch_sp) == 20, "Info.pitch_sp offset");
+_Static_assert(offsetof(rlg_info_t, roll_sp) == 24, "Info.roll_sp offset");
+_Static_assert(offsetof(rlg_info_t, crc8) == 28, "Info.crc8 offset");
 
 /* CRC8 over p[0..len-1]; call with &pkt.type and (size - 2). rlg_crc8.c */
 #ifdef __cplusplus
