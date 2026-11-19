@@ -166,6 +166,28 @@ Record the number in every row, not just pass or fail. USB tests run with the ba
 **OFF**. Servo tests run on battery with USB **unplugged**, using the console over the
 radio.
 
+> **Never arm (FLIGHT, or anything else that moves a servo) with USB plugged in.**
+> USB 5 V back-feeds the board's VCC rail through the dev board's VIN diode, so the
+> servos are powered from the PC port even with the battery disconnected. On 19 Nov 2026,
+> arming FLIGHT on USB moved a servo, collapsed the supply, and left the ESP32 dead (no
+> response even to a hardware reset) until USB was unplugged. On USB, stay DISARMED;
+> the servos only go to neutral once at boot. A hardware fix (a diode or jumper in the
+> VCC→VIN path, or unplugging the servo leads on USB) is an open option.
+
+**First run, 19 Nov 2026 (USB, battery off, disarmed):**
+- WHO_AM_I 0xEA; data-ready 230 Hz on interrupt timing; MAC F8:B3:B7:30:33:40.
+- Loop 228 Hz, dt mean 4390 µs (min/max typically ±0.5 ms, worst seen 3066/5714 µs),
+  compute 165–174 µs mean, of which about 165 µs is the IMU SPI read. No timeouts or
+  missed samples.
+- Level, raw accel (+0.002, −0.022, −1.080) g, so az sign ✓. |a| reads 1.07–1.08 g: an
+  accelerometer scale/offset error to measure (six-position test), still inside the
+  0.85–1.15 gate. Gyro bias at rest (+1.0, −0.5, 0.0) °/s.
+- BMP280 ok; NMEA parsing ok (123 sentences, 0 bad checksums, no fix indoors); rail pin
+  0.142 V on USB (divider not fitted, reported invalid).
+- `ledcWrite()` blocks about 10 ms per servo, so servo output runs in its own 50 Hz task.
+- Armed FLIGHT with `srv off` ran normally: failsafe engaged, barometer reference
+  captured, surface commands correct in sign. With `srv on`, see the warning above.
+
 | # | Test | Record |
 |---|---|---|
 | 1 | Boot log | WHO_AM_I, measured data-ready Hz, timing mode, CAL hash |
