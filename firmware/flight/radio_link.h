@@ -19,6 +19,7 @@
 #pragma once
 #include <WiFi.h>
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include "config.h"
 #include "src/protocol/rlg_protocol.h"
 
@@ -85,7 +86,10 @@ class RadioLink : public Print {
     esp_now_register_recv_cb(onRecv);
     esp_now_register_send_cb(onSent);
     up = true;
-    Serial.printf("radio: up, my MAC %s\n", WiFi.macAddress().c_str());
+    uint8_t mac[6] = {0};
+    esp_wifi_get_mac(WIFI_IF_STA, mac);   // WiFi.macAddress() reads 00:00:.. here on core 3.x
+    Serial.printf("radio: up, my MAC %02X:%02X:%02X:%02X:%02X:%02X (expect F8:B3:B7:30:33:40)\n",
+                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   }
 
   // Print interface: USB immediately, radio one line per packet via the queue.

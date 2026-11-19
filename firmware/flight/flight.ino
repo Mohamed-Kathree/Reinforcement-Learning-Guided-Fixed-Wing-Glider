@@ -18,6 +18,7 @@
  */
 #include <Arduino.h>
 #include <ESP32Servo.h>
+#include <esp_task_wdt.h>
 #include "config.h"
 #include "hw_imu.h"
 #include "hw_sensors.h"
@@ -72,6 +73,7 @@ struct LoopStats {
   uint32_t n = 0, dtMin = UINT32_MAX, dtMax = 0, compMax = 0;
   uint64_t dtSum = 0, compSum = 0;
   uint32_t gated = 0, timeouts = 0, overruns = 0, shieldBank = 0, shieldPitch = 0;
+  uint32_t secImu = 0, secAtt = 0, secCtl = 0, secSrv = 0;   // max us per stage (status "sec=")
 };
 static LoopStats statsShared;
 
@@ -81,6 +83,10 @@ static void mergeStats(LoopStats& a, const LoopStats& b) {
   if (b.compMax > a.compMax) a.compMax = b.compMax;
   a.n += b.n; a.dtSum += b.dtSum; a.compSum += b.compSum; a.gated += b.gated;
   a.timeouts += b.timeouts; a.overruns += b.overruns; a.shieldBank += b.shieldBank; a.shieldPitch += b.shieldPitch;
+  if (b.secImu > a.secImu) a.secImu = b.secImu;
+  if (b.secAtt > a.secAtt) a.secAtt = b.secAtt;
+  if (b.secCtl > a.secCtl) a.secCtl = b.secCtl;
+  if (b.secSrv > a.secSrv) a.secSrv = b.secSrv;
 }
 
 struct StreamRec { uint32_t t_ms; int16_t raw[6]; float roll, pitch; uint8_t gate; };
@@ -89,6 +95,7 @@ struct StreamRec { uint32_t t_ms; int16_t raw[6]; float roll, pitch; uint8_t gat
 static volatile bool wantEuler = ATT_EULER_KINEMATICS;
 static volatile bool allowUncal = false;      // per boot, typed "uncal"
 static volatile bool streamOn = false, tlmOn = false;
+static volatile bool servoWrites = true;    // "srv off" stops PWM updates (diagnostic)
 
 // ---------------- control-loop-owned state ----------------
 static rlg_attitude_t att;
@@ -143,8 +150,36 @@ static void handleFrame(CmdFrame& f, uint32_t now_ms, const rlg_sensors_t& sens)
   if (res == RLG_CMD_ARMED && st.mode == RLG_MODE_FLIGHT && !airborneBefore) baroCaptureReq = true;
 }
 
-static void writeServos() {
-  for (int i = 0; i < RLG_NUM_SERVOS; i++) servos[i].writeMicroseconds(st.servo_us[i]);
+// Servo output. MEASURED 19 Nov 2026: ESP32Servo's writeMicroseconds() ->
+// ledcWrite() blocks ~10 ms per servo on this core (it waits for the 20 ms PWM
+// period boundary); four writes per cycle held the control loop to 25 Hz. So
+// servos are NOT written from the control loop: servoTask writes the latest
+// values at 50 Hz (a servo reads one pulse per 20 ms frame anyway), only the
+// ones that changed, and records how long the writes take ("sec=" 4th field).
+static void writeServoValues(const uint16_t us[RLG_NUM_SERVOS]) {
+  static uint16_t written[RLG_NUM_SERVOS] = {0};
+  for (int i = 0; i < RLG_NUM_SERVOS; i++)
+    if (us[i] >= RLG_ABS_MIN_US && us[i] != written[i]) { servos[i].writeMicroseconds(us[i]); written[i] = us[i]; }
+}
+
+void servoTask(void*) {
+  esp_task_wdt_add(nullptr);
+  TickType_t wake = xTaskGetTickCount();
+  uint16_t us[RLG_NUM_SERVOS];
+  for (;;) {
+    vTaskDelayUntil(&wake, pdMS_TO_TICKS(20));
+    esp_task_wdt_reset();
+    if (!servoWrites) continue;
+    portENTER_CRITICAL(&mux);
+    for (int i = 0; i < RLG_NUM_SERVOS; i++) us[i] = ctrlShared.us[i];
+    portEXIT_CRITICAL(&mux);
+    uint32_t t = micros();
+    writeServoValues(us);
+    t = micros() - t;
+    portENTER_CRITICAL(&mux);
+    if (t > statsShared.secSrv) statsShared.secSrv = t;
+    portEXIT_CRITICAL(&mux);
+  }
 }
 
 // ======================= setup =======================
@@ -173,7 +208,8 @@ void setup() {
     servos[i].setPeriodHertz(50);
     servos[i].attach(SERVO_PINS[i], RLG_ABS_MIN_US, RLG_ABS_MAX_US);
   }
-  writeServos();
+  writeServoValues(st.servo_us);   // neutral before anything else runs
+  for (int i = 0; i < RLG_NUM_SERVOS; i++) ctrlShared.us[i] = st.servo_us[i];   // servoTask starts from neutral, never 0
 
   imuOk = imuBegin(&Link);
   if (imuOk) {
@@ -208,9 +244,11 @@ void setup() {
   xTaskCreatePinnedToCore(sensorTask, "sensors", 4096, nullptr, 3, nullptr, 0);
   xTaskCreatePinnedToCore(radioTask, "radio", 4096, nullptr, 2, nullptr, 0);
   xTaskCreatePinnedToCore(consoleTask, "console", 6144, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(servoTask, "servos", 3072, nullptr, 5, nullptr, 1);   // below the control loop (10)
 
   ctrlTask = xTaskGetCurrentTaskHandle();
   vTaskPrioritySet(nullptr, 10);
+  esp_task_wdt_add(nullptr);   // a control loop stalled > 5 s is reported with a backtrace
 }
 
 // ======================= 200 Hz control loop (core 1) =======================
@@ -232,11 +270,13 @@ void loop() {
     vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(5));
     ts = micros();
   }
+  esp_task_wdt_reset();
   uint32_t t0 = micros();
   uint32_t now_ms = millis();
 
   // ---- attitude ----
   ImuRaw raw = imuOk ? imuSampleBody() : ImuRaw{0, 0, 0, 0, 0, 0};
+  uint32_t tImu = micros();
   float ax = raw.ax / IMU_ACC_LSB, ay = raw.ay / IMU_ACC_LSB, az = raw.az / IMU_ACC_LSB;
   float gx = raw.gx / IMU_GYRO_LSB, gy = raw.gy / IMU_GYRO_LSB, gz = raw.gz / IMU_GYRO_LSB;
   att.euler_kinematics = wantEuler;
@@ -244,6 +284,7 @@ void loop() {
   uint32_t dtUs = lastTs ? ts - lastTs : 0;
   lastTs = ts;
   if (imuOk) rlg_attitude_update(&att, ax, ay, az, gx, gy, gz, dt);
+  uint32_t tAtt = micros();
   float roll = att.roll.angle * DEG_TO_RAD, pitch = att.pitch.angle * DEG_TO_RAD;
   float p = gx * DEG_TO_RAD, q = gy * DEG_TO_RAD, r = gz * DEG_TO_RAD;
 
@@ -271,8 +312,11 @@ void loop() {
                                    CAL_FULL_US[i], CAL_MIN_US[i], CAL_MAX_US[i]);
     rlg_safety_flight_output(&st, us);
   }
-  writeServos();
-  uint32_t comp = micros() - t0;
+  uint32_t tCtl = micros();
+  uint32_t comp = tCtl - t0;            // servos are written by servoTask, not here
+  if (tImu - t0 > ls.secImu) ls.secImu = tImu - t0;
+  if (tAtt - tImu > ls.secAtt) ls.secAtt = tAtt - tImu;
+  if (tCtl - tAtt > ls.secCtl) ls.secCtl = tCtl - tAtt;
 
   // ---- measurements ----
   if (dtUs) {
@@ -377,12 +421,13 @@ static const char* resultName(int r) {
 static void printStatus(const CtrlSnap& c, const SensorSnap& s, const LoopStats& l) {
   float secs = l.n ? l.dtSum / 1e6f : 1.0f;
   Link.printf("S t=%lu %s%s%s rpy=%.1f,%.1f,%.1f(drift) |a|=%.2f %s | loop=%.0fHz dt=%lu/%lu/%luus comp=%lu/%luus "
-              "gated=%.0f%% tmo=%lu ovr=%lu shield=%lu/%lu | baro=%s son=%.2f gps=%u/%u%s rail=%s | us=%u,%u,%u,%u cmd=%s\n",
+              "sec=%lu/%lu/%lu/%lu gated=%.0f%% tmo=%lu ovr=%lu shield=%lu/%lu | baro=%s son=%.2f gps=%u/%u%s rail=%s | us=%u,%u,%u,%u cmd=%s\n",
               (unsigned long)(millis() / 1000), modeName(c.mode), c.armed ? "" : "(unarmed)",
               (c.armed && c.mode == RLG_MODE_FLIGHT) ? (c.failsafe ? " FAILSAFE" : " PI") : "",
               c.roll_deg, c.pitch_deg, c.yaw_deg, c.accel_g, c.accel_trusted ? "acc" : "GYRO-ONLY",
               l.n / secs, (unsigned long)(l.n ? l.dtMin : 0), (unsigned long)(l.n ? l.dtSum / l.n : 0),
               (unsigned long)l.dtMax, (unsigned long)(l.n ? l.compSum / l.n : 0), (unsigned long)l.compMax,
+              (unsigned long)l.secImu, (unsigned long)l.secAtt, (unsigned long)l.secCtl, (unsigned long)l.secSrv,
               l.n ? 100.0f * l.gated / l.n : 0.0f, (unsigned long)l.timeouts, (unsigned long)l.overruns,
               (unsigned long)l.shieldBank, (unsigned long)l.shieldPitch,
               s.baro_ref ? String(s.baro_alt, 2).c_str() : (s.baro_warm ? "noref" : "warming"),
@@ -450,6 +495,7 @@ static void runCommand(const char* cmd, Print& out) {
     out.println("stream  toggle USB stream for the visualiser (D,t,ax..gz raw body counts + E,t,roll,pitch,gate); '8' also starts it");
     out.println("kin     toggle Euler kinematics (off = integrate body rates exactly like glider_viz.py)");
     out.println("report  full measurement report");
+    out.println("srv on|off  enable/disable servo PWM updates (diagnostic)");
   } else if (!strcmp(cmd, "arm")) {
     for (int i = 0; i < (int)RLG_REARM_CONSECUTIVE_FRAMES; i++) queueConsoleFrame(RLG_MODE_FLIGHT);
     out.println("arm: 5 FLIGHT frames queued");
@@ -463,6 +509,8 @@ static void runCommand(const char* cmd, Print& out) {
     tlmOn = !tlmOn; out.printf("tlm: %s\n", tlmOn ? "on" : "off");
   } else if (!strcmp(cmd, "stream")) {
     streamOn = !streamOn; out.printf("stream: %s\n", streamOn ? "on" : "off");
+  } else if (!strcmp(cmd, "srv off") || !strcmp(cmd, "srv on")) {
+    servoWrites = !strcmp(cmd, "srv on"); out.printf("srv: writes %s\n", servoWrites ? "on" : "OFF");
   } else if (!strcmp(cmd, "kin")) {
     wantEuler = !wantEuler; out.printf("kin: %s\n", wantEuler ? "euler" : "body-rate (glider_viz.py)");
   } else if (!strcmp(cmd, "report")) {
@@ -475,11 +523,13 @@ static void runCommand(const char* cmd, Print& out) {
 }
 
 void consoleTask(void*) {
+  esp_task_wdt_add(nullptr);
   char line[48]; uint8_t len = 0;
   uint32_t lastStatus = 0, lastTlm = 0;
   TickType_t wake = xTaskGetTickCount();
   for (;;) {
     vTaskDelayUntil(&wake, pdMS_TO_TICKS(10));
+    esp_task_wdt_reset();
     uint32_t now = millis();
 
     while (Link.available()) {
