@@ -56,7 +56,7 @@ CAL_RESEND_MS = 1500
 CAL_MAX_SENDS = 3
 CAL_GIVE_UP_MS = 6000
 # Console commands the dashboard may send (firmware/flight/flight.ino runCommand).
-CONSOLE_WHITELIST = {"arm", "disarm", "report", "help", "tlm", "uncal", "calclear", "kin", "srv on", "srv off"}
+CONSOLE_WHITELIST = {"arm", "disarm", "report", "help", "tlm", "uncal", "launch", "calclear", "kin", "srv on", "srv off"}
 
 
 def calibration_id(cal: dict) -> int:

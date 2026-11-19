@@ -31,6 +31,17 @@ static void to_autonomous(rlg_flightphase_t *s, uint32_t now_ms, uint8_t cause)
     s->t_apex_ms = now_ms;
 }
 
+bool rlg_phase_force_launch(rlg_flightphase_t *s, uint32_t now_ms)
+{
+    if (s->phase != RLG_PHASE_ARMED) return false;
+    s->phase = RLG_PHASE_LAUNCH;
+    s->launch_cause = 2;
+    s->t_launch_ms = now_ms;
+    s->alt_init = false;
+    if (!s->cfg.handoff_at_apex) to_autonomous(s, now_ms, 3);
+    return true;
+}
+
 uint8_t rlg_phase_update(rlg_flightphase_t *s, uint32_t now_ms, bool flight_armed,
                          float accel_mag_g, float baro_alt_m)
 {
@@ -49,6 +60,7 @@ uint8_t rlg_phase_update(rlg_flightphase_t *s, uint32_t now_ms, bool flight_arme
         break;
 
     case RLG_PHASE_ARMED:
+        if (accel_mag_g > s->max_accel_g) s->max_accel_g = accel_mag_g;
         if (accel_mag_g > s->cfg.launch_accel_g) {
             if (accel_mag_g > s->peak_accel_g) s->peak_accel_g = accel_mag_g;
             if (!s->accel_hi) { s->accel_hi = true; s->accel_since_ms = now_ms; }

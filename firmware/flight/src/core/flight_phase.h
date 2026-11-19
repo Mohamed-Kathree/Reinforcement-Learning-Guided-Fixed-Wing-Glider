@@ -38,7 +38,7 @@ typedef struct {
     bool handoff_at_apex;      /* true */
 } rlg_phase_cfg_t;
 
-/* launch_cause: 0 none, 1 acceleration. apex_cause: 0 none, 1 baro descent,
+/* launch_cause: 0 none, 1 acceleration, 2 forced (bench). apex_cause: 0 none, 1 baro descent,
  * 2 timeout, 3 immediate (handoff_at_apex off). */
 typedef struct {
     rlg_phase_cfg_t cfg;
@@ -47,11 +47,14 @@ typedef struct {
     bool accel_hi, alt_init;
     float alt_f, alt_peak;
     uint8_t launch_cause, apex_cause;
-    float peak_accel_g;
+    float peak_accel_g;         /* peak |a| of the launch burst that triggered */
+    float max_accel_g;          /* max |a| seen since arming (diagnostic: what a throw reaches) */
 } rlg_flightphase_t;
 
 rlg_phase_cfg_t rlg_phase_default_cfg(void);
 void rlg_phase_init(rlg_flightphase_t *s, rlg_phase_cfg_t cfg);
+/* Bench override: ARMED -> LAUNCH now (launch_cause 2). Returns false unless ARMED. */
+bool rlg_phase_force_launch(rlg_flightphase_t *s, uint32_t now_ms);
 /* Call every control-loop step. baro_alt_m may be NAN (no reference / no
  * reading): then only the timeout can end LAUNCH. Returns the phase. */
 uint8_t rlg_phase_update(rlg_flightphase_t *s, uint32_t now_ms, bool flight_armed,

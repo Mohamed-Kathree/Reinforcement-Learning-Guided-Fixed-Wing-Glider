@@ -77,7 +77,7 @@ struct CtrlSnap {
   uint32_t status = 0;
   uint32_t att_samples = 0, att_gated = 0, att_dt_rej = 0;
   uint32_t t_launch = 0, t_apex = 0;
-  float peak_accel_g = 0;
+  float peak_accel_g = 0, max_accel_g = 0;
   float loop_hz = 0;
 };
 static CtrlSnap ctrlShared;
@@ -110,6 +110,7 @@ static volatile bool allowUncal = false;      // per boot: bench override (unmea
 static volatile bool streamOn = false, tlmOn = true;
 static volatile bool servoWrites = true;      // "srv off" stops PWM updates (diagnostic)
 static volatile bool calSaveReq = false;
+static volatile bool forceLaunchReq = false;   // console "launch" (bench override only)
 static rlg_calibrationset_t calToSave;
 static volatile int lastCalResult = -1;       // 0 applied, 1 refused armed/airborne, 2 invalid, 3 saved, 4 save failed
 
@@ -333,6 +334,7 @@ void loop() {
   rlg_safety_tick(&st, now_ms, &cs.safety);
 
   // ---- flight phase ----
+  if (forceLaunchReq) { forceLaunchReq = false; if (allowUncal) rlg_phase_force_launch(&ph, now_ms); }
   uint8_t phase = rlg_phase_update(&ph, now_ms, flightArmed(), att.accel_mag_g, cs.baro_alt);
   if (phase == RLG_PHASE_DISARMED) yawAligned = false;
   // Yaw: gyro-integrated from 0 at boot; aligned once to the GPS course after
@@ -411,7 +413,7 @@ void loop() {
   ctrlShared.mode = st.mode; ctrlShared.armed = st.armed;
   ctrlShared.failsafe = rlg_safety_pi_failsafe(&st); ctrlShared.airborne = st.airborne;
   ctrlShared.phase = phase; ctrlShared.launch_cause = ph.launch_cause; ctrlShared.apex_cause = ph.apex_cause;
-  ctrlShared.t_launch = ph.t_launch_ms; ctrlShared.t_apex = ph.t_apex_ms; ctrlShared.peak_accel_g = ph.peak_accel_g;
+  ctrlShared.t_launch = ph.t_launch_ms; ctrlShared.t_apex = ph.t_apex_ms; ctrlShared.peak_accel_g = ph.peak_accel_g; ctrlShared.max_accel_g = ph.max_accel_g;
   ctrlShared.yaw_aligned = yawAligned; ctrlShared.home_set = homeSet && flightArmed();
   ctrlShared.home_lat = homeLat; ctrlShared.home_lon = homeLon; ctrlShared.pi_link = piLink;
   ctrlShared.roll_sp = roll_sp; ctrlShared.pitch_sp = pitch_sp;
@@ -545,11 +547,11 @@ static const char* resultName(int r) {
 
 static void printStatus(const CtrlSnap& c, const SensorSnap& s, const LoopStats& l) {
   float secs = l.n ? l.dtSum / 1e6f : 1.0f;
-  Link.printf("S t=%lu %s%s%s %s rpy=%.1f,%.1f,%.1f%s |a|=%.2f %s | loop=%.0fHz dt=%lu/%lu/%luus comp=%lu/%luus "
+  Link.printf("S t=%lu %s%s%s %s maxg=%.1f rpy=%.1f,%.1f,%.1f%s |a|=%.2f %s | loop=%.0fHz dt=%lu/%lu/%luus comp=%lu/%luus "
               "sec=%lu/%lu/%lu/%lu gated=%.0f%% tmo=%lu ovr=%lu shield=%lu/%lu | sp=%.1f,%.1f pi=%s gaps=%lu bad=%lu"
               " | baro=%s son=%.2f gps=%u/%u%s%s %.1fHz rail=%s | us=%u,%u,%u,%u cmd=%s\n",
               (unsigned long)(millis() / 1000), modeName(c.mode), c.armed ? "" : "(unarmed)",
-              (c.armed && c.mode == RLG_MODE_FLIGHT) ? (c.failsafe ? " FAILSAFE" : " PI") : "", phaseName(c.phase),
+              (c.armed && c.mode == RLG_MODE_FLIGHT) ? (c.failsafe ? " FAILSAFE" : " PI") : "", phaseName(c.phase), c.max_accel_g,
               c.roll_deg, c.pitch_deg, c.yaw_deg, c.yaw_aligned ? "" : "(drift)", c.accel_g,
               c.accel_trusted ? "acc" : "GYRO-ONLY",
               l.n / secs, (unsigned long)(l.n ? l.dtMin : 0), (unsigned long)(l.n ? l.dtSum / l.n : 0),
@@ -580,9 +582,9 @@ static void printReport(const CtrlSnap& c, const SensorSnap& s) {
   Link.printf("R raw body a=(%+.3f,%+.3f,%+.3f)g g=(%+.1f,%+.1f,%+.1f)dps  "
               "[expect level az~-1, nose up ax>0, right wing down ay<0, yaw right gz>0]\n",
               c.ax, c.ay, c.az, c.gx, c.gy, c.gz);
-  Link.printf("R kalman samples=%lu gated=%lu dt_rejected=%lu | phase=%s launch_cause=%u apex_cause=%u t_launch=%lu t_apex=%lu peak=%.1fg yaw_aligned=%d\n",
+  Link.printf("R kalman samples=%lu gated=%lu dt_rejected=%lu | phase=%s launch_cause=%u apex_cause=%u t_launch=%lu t_apex=%lu peak=%.1fg max_since_arm=%.1fg yaw_aligned=%d\n",
               (unsigned long)c.att_samples, (unsigned long)c.att_gated, (unsigned long)c.att_dt_rej, phaseName(c.phase),
-              c.launch_cause, c.apex_cause, (unsigned long)c.t_launch, (unsigned long)c.t_apex, c.peak_accel_g, c.yaw_aligned);
+              c.launch_cause, c.apex_cause, (unsigned long)c.t_launch, (unsigned long)c.t_apex, c.peak_accel_g, c.max_accel_g, c.yaw_aligned);
   Link.printf("R baro pa=%.1f ref_pa=%.1f alt=%.2f warm=%d | sonar=%.3f | gps %s fix=%u sats=%u lat=%.7f lon=%.7f "
               "vn=%.2f ve=%.2f vd=%.2f count=%u rate=%.1fHz | home=%d %.7f,%.7f\n",
               s.baro_pa, s.baro_ref_pa, s.baro_alt, s.baro_warm, s.sonar_m, s.gps.ubx ? "UBX" : "NMEA", s.gps.fix,
@@ -647,6 +649,7 @@ static void runCommand(const char* cmd, Print& out) {
     out.println("kin     toggle Euler kinematics (off = integrate body rates exactly like glider_viz.py)");
     out.println("report  full measurement report");
     out.println("srv on|off  enable/disable servo PWM updates (diagnostic)");
+    out.println("launch  BENCH OVERRIDE (needs 'uncal'): force ARMED -> LAUNCH, as if thrown");
     out.println("calclear    erase the calibration pushed over the radio (back to compiled-in; reboot to apply)");
   } else if (!strcmp(cmd, "arm")) {
     for (int i = 0; i < (int)RLG_REARM_CONSECUTIVE_FRAMES; i++) queueConsoleFrame(RLG_MODE_FLIGHT);
@@ -654,6 +657,9 @@ static void runCommand(const char* cmd, Print& out) {
   } else if (!strcmp(cmd, "disarm")) {
     queueConsoleFrame(RLG_MODE_DISARMED);
     out.println("disarm: queued");
+  } else if (!strcmp(cmd, "launch")) {
+    if (!allowUncal) out.println("launch: refused, bench override only (type 'uncal' first)");
+    else { forceLaunchReq = true; out.println("launch: forcing ARMED -> LAUNCH (bench override)"); }
   } else if (!strcmp(cmd, "uncal")) {
     allowUncal = true;
     out.println("uncal: BENCH OVERRIDE until reboot: FLIGHT arming allowed with UNMEASURED calibration and without a GPS fix.");

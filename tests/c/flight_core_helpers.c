@@ -62,6 +62,8 @@ int t_phase_update(void *s, uint32_t now_ms, int armed, float accel_g, float bar
 {
     return rlg_phase_update((rlg_flightphase_t *)s, now_ms, armed != 0, accel_g, baro);
 }
+int t_phase_force_launch(void *s, uint32_t now_ms) { return rlg_phase_force_launch((rlg_flightphase_t *)s, now_ms); }
+float t_phase_max_g(void *s) { return ((rlg_flightphase_t *)s)->max_accel_g; }
 void t_phase_causes(void *p, uint32_t out[4])
 {
     rlg_flightphase_t *s = (rlg_flightphase_t *)p;

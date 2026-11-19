@@ -344,3 +344,17 @@ def test_pitch_target_equals_simulator_when_airspeed_equals_command():
         s = L.rlg_inner_loop(roll, pitch, p, q, r, bank, L.rlg_pitch_target(v, roll))
         assert s.elevator == pytest.approx(sim["elevator"], abs=3e-5)
         assert s.aileron == pytest.approx(sim["aileron"], abs=3e-5)
+
+
+def test_phase_bench_forced_launch_and_max_g():
+    L = lib()
+    L.t_phase_max_g.restype = ctypes.c_float
+    ph = Phase()
+    assert L.t_phase_force_launch(ph.b, 0) == 0            # not armed: refused
+    ph.step(0)
+    run(ph, 4, 100, g=2.2)                                  # below threshold: no launch, but recorded
+    assert abs(L.t_phase_max_g(ph.b) - 2.2) < 1e-5
+    assert L.t_phase_force_launch(ph.b, 100) == 1
+    assert ph.step(104) == LAUNCH and ph.causes()[0] == 2
+    assert L.t_phase_force_launch(ph.b, 108) == 0          # only from ARMED
+    assert run(ph, 108, 3200, baro=float("nan")) == AUTO    # then the normal apex logic
