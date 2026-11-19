@@ -17,7 +17,7 @@ The researcher decided these on 19 Nov 2026, and they are implemented in schema 
 
 | # | Resolution |
 |---|---|
-| 1 | The Pi sends **bank angle + speed command**, not pitch. The ESP32 turns the speed command into a pitch target at 225 Hz with the simulator's trim schedule, **without** the true-airspeed term (`rlg_pitch_target`). The effect is measured in simulation on development seeds: `results/onboard_airspeed_term_dev.json`, with a simulator cfg key `pitch_airspeed_term`. |
+| 1 | The Pi sends **bank angle + speed command**, not pitch. The ESP32 turns the speed command into a pitch target at 225 Hz with the simulator's trim schedule, **without** the true-airspeed term (`rlg_pitch_target`). **Measured on 200 development seeds: success drops 111→72 / 58→32 / 34→14 / 17→6 at stages 0–3 (all p < 0.02), so this is under review** (`results/onboard_airspeed_term_dev.json`; simulator cfg key `reward.pitch_airspeed_term`). |
 | 2 | No rudder from the Pi. The ESP32 keeps the simulator's `−KR·p`. |
 | 3 | NEO-6M configured to **UBX 5 Hz** at boot (NMEA 1 Hz fallback, flagged in status). |
 | 4 | **Vertical velocity** from UBX NAV-VELNED. In the NMEA fallback, the Pi uses a barometric rate, flagged in the log. |

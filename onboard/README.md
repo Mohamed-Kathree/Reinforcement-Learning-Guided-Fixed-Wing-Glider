@@ -52,8 +52,12 @@ heartbeats. The ESP32's own 150 ms Pi timeout then makes it fly the failsafe gli
 ## Decisions this relies on (19 Nov 2026)
 
 - **Pitch:** the ESP32 turns the speed command into a pitch target with the simulator's
-  trim schedule, **without** the true-airspeed correction (there is no pitot). This was
-  measured in simulation on the development seeds; see `results/onboard_airspeed_term_dev.json`.
+  trim schedule, **without** the true-airspeed correction (there is no pitot).
+  **Measured cost (20 Nov 2026, 200 development seeds, Run 4 gated, paired):** success
+  falls from 111 to 72 at stage 0 (p < 0.001), 58 to 32 at stage 1 (p = 0.001), 34 to 14
+  at stage 2 (p = 0.002) and 17 to 6 at stage 3 (p = 0.019). Crashes go 0→3, 8→14,
+  19→26 and 78→73. See `results/onboard_airspeed_term_dev.json`. **This decision is under
+  review:** the policy depends on that speed correction.
 - **Yaw:** aligned once to the GPS course after the throw, then gyro-integrated.
 - **Home:** the GPS position at FLIGHT arming. The barometric zero is also captured at arming.
 - **Hand-off at the apex,** not at the throw, because training starts at the apex
