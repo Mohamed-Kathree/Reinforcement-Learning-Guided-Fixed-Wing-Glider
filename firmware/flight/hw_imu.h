@@ -83,16 +83,16 @@ static bool imuBegin(Print* log) {
   return true;
 }
 
-// NEW (unverified): ODR, DLPF, data-ready interrupt. Full scales stay at the
-// power-on defaults (+/-2 g, +/-250 dps) that the bench sketch and its LSB
-// constants assume.
+// ODR, DLPF, full scale, data-ready interrupt. ODR/DLPF/interrupt verified on
+// hardware 19 Nov 2026 (230 Hz data-ready). Full scale per config.h
+// (IMU_ACCEL_FS_SEL / IMU_GYRO_FS_SEL, with matching LSB constants).
 static void imuConfigureRateAndInterrupt() {
   imuBank(2);
   imuWrite(ICM_GYRO_SMPLRT_DIV, IMU_SMPLRT_DIV);
-  imuWrite(ICM_GYRO_CONFIG_1, (IMU_DLPF_CFG << 3) | (0 << 1) | 0x01);   // DLPF, +/-250 dps, FCHOICE=1
+  imuWrite(ICM_GYRO_CONFIG_1, (IMU_DLPF_CFG << 3) | (IMU_GYRO_FS_SEL << 1) | 0x01);   // DLPF, FS, FCHOICE=1
   imuWrite(ICM_ACCEL_SMPLRT_DIV_1, (IMU_SMPLRT_DIV >> 8) & 0x0F);
   imuWrite(ICM_ACCEL_SMPLRT_DIV_2, IMU_SMPLRT_DIV & 0xFF);
-  imuWrite(ICM_ACCEL_CONFIG, (IMU_DLPF_CFG << 3) | (0 << 1) | 0x01);    // DLPF, +/-2 g, FCHOICE=1
+  imuWrite(ICM_ACCEL_CONFIG, (IMU_DLPF_CFG << 3) | (IMU_ACCEL_FS_SEL << 1) | 0x01);    // DLPF, FS, FCHOICE=1
   imuWrite(ICM_ODR_ALIGN_EN, 0x01);
   imuBank(0);
   imuWrite(ICM_INT_PIN_CFG, 0x00);     // active high, push-pull, 50 us pulse

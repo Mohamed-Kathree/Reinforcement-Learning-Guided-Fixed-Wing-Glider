@@ -32,8 +32,18 @@ static const uint8_t FLIGHT_MAC[6] = {0xF8, 0xB3, 0xB7, 0x30, 0x33, 0x40};
 static volatile uint32_t txFailed = 0;
 static uint32_t partialDropped = 0;
 
+// Received packets are copied into a queue and written to USB from loop():
+// writing a whole packet to the UART inside the Wi-Fi callback blocked the
+// Wi-Fi task for up to ~20 ms per packet (the suspected cause of the garbled
+// characters seen on 19 Nov 2026).
+struct RxPkt { uint8_t len; uint8_t d[250]; };
+static QueueHandle_t rxQ;
+static volatile uint32_t rxDropped = 0;
+
 void onRecv(const esp_now_recv_info_t*, const uint8_t* d, int len) {
-  Serial.write(d, len);
+  if (len <= 0 || len > 250) return;
+  RxPkt p; p.len = (uint8_t)len; memcpy(p.d, d, len);
+  if (xQueueSend(rxQ, &p, 0) != pdTRUE) rxDropped = rxDropped + 1;
 }
 
 void onSent(SEND_CB_ARG, esp_now_send_status_t s) {
@@ -41,6 +51,8 @@ void onSent(SEND_CB_ARG, esp_now_send_status_t s) {
 }
 
 void setup() {
+  rxQ = xQueueCreate(32, sizeof(RxPkt));
+  Serial.setTxBufferSize(4096);
   Serial.begin(115200);
   delay(400);
   WiFi.mode(WIFI_STA);
@@ -78,6 +90,8 @@ static void flushText() {
 }
 
 void loop() {
+  RxPkt pkt;
+  while (xQueueReceive(rxQ, &pkt, 0) == pdTRUE) Serial.write(pkt.d, pkt.len);
   uint32_t now = millis();
   while (Serial.available()) {
     uint8_t c = Serial.read();

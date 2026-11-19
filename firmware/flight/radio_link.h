@@ -44,9 +44,15 @@ class RadioLink : public Print {
 
   static void onRecv(const esp_now_recv_info_t*, const uint8_t* d, int len) {
     if (!self) return;
-    if (len == (int)RLG_COMMAND_SIZE && d[0] == RLG_SYNC && self->cmdQueue) {
+    if (len == (int)RLG_COMMAND_SIZE && d[0] == RLG_SYNC && d[1] == RLG_TYPE_COMMAND && self->cmdQueue) {
       CmdFrame f; memcpy(f.data, d, RLG_COMMAND_SIZE); f.src = 0;
       if (xQueueSend(self->cmdQueue, &f, 0) != pdTRUE) self->cmdDropped++;
+      return;
+    }
+    if (len == (int)RLG_CALIBRATIONSET_SIZE && d[0] == RLG_SYNC && d[1] == RLG_TYPE_CALIBRATIONSET && self->calQueue) {
+      rlg_calibrationset_t c; memcpy(&c, d, sizeof c);
+      if (rlg_crc8(&c.type, sizeof c - 2) == c.crc8) xQueueSend(self->calQueue, &c, 0);
+      else self->cmdDropped++;
       return;
     }
     for (int i = 0; i < len; i++) {
@@ -67,7 +73,7 @@ class RadioLink : public Print {
  public:
   static volatile uint32_t sent, failed;
   volatile uint32_t queueDropped = 0, cmdDropped = 0;
-  QueueHandle_t outQueue = nullptr, cmdQueue = nullptr;
+  QueueHandle_t outQueue = nullptr, cmdQueue = nullptr, calQueue = nullptr;
   bool up = false;
 
   void begin(QueueHandle_t commands) {

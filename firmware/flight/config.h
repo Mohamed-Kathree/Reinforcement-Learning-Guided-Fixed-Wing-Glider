@@ -31,13 +31,19 @@
 static const uint8_t GROUND_MAC[6] = {0xD4, 0x8A, 0xFC, 0xA4, 0xA0, 0x08};
 #define RADIO_SETTLE_MS      15     // after each esp_now_send; tuned, do not reduce
 #define RADIO_QUEUE_LEN      24
-#define TELEMETRY_PERIOD_MS  200    // binary rlg_telemetry_t, 5 Hz (toggle 'T')
+#define TELEMETRY_PERIOD_MS  200    // binary rlg_telemetry_t, 5 Hz, ON by default (console 'tlm' toggles)
+#define INFO_PERIOD_MS       1000   // binary rlg_info_t, 1 Hz (calibration in use, link counters)
 #define STATUS_PERIOD_MS     1000   // one text status line per second
 
 // ---------------- IMU (ICM-20948 over SPI) ----------------
 #define IMU_SPI_HZ       1000000    // as the verified bench sketch
-#define IMU_ACC_LSB      16384.0f   // +/-2 g (power-on default, as bench)
-#define IMU_GYRO_LSB     131.0f     // +/-250 dps (power-on default, as bench)
+// Full scale. The bench sketch uses the power-on default (+/-2 g, +/-250 dps);
+// a hand throw exceeds both (the launch detector needs > 2.5 g), so flight uses
+// +/-8 g and +/-1000 dps. FS_SEL and LSB MUST change together.
+#define IMU_ACCEL_FS_SEL 2          // 0 +/-2 g, 1 +/-4 g, 2 +/-8 g, 3 +/-16 g
+#define IMU_ACC_LSB      4096.0f    // LSB per g at +/-8 g
+#define IMU_GYRO_FS_SEL  2          // 0 +/-250, 1 +/-500, 2 +/-1000, 3 +/-2000 dps
+#define IMU_GYRO_LSB     32.8f      // LSB per dps at +/-1000 dps
 // Output data rate = 1125 Hz / (1 + div). div 4 -> 225 Hz: the nearest rate at
 // or above 200 Hz. dt is measured from the data-ready timestamps, so the
 // estimator does not assume it.
@@ -57,6 +63,22 @@ static const uint8_t GROUND_MAC[6] = {0xD4, 0x8A, 0xFC, 0xA4, 0xA0, 0x08};
 // hardware/in simulation before relying on it.
 #define FAILSAFE_ROLL_DEG    0.0f
 #define FAILSAFE_PITCH_DEG  -2.0f
+
+// ---------------- flight phases (src/core/flight_phase.h; FIRST GUESSES, tune on real throws) ----------------
+#define HANDOFF_AT_APEX      1      // 1: Pi takes over at the apex (training start state); 0: at the throw
+#define LAUNCH_ACCEL_G       2.5f   // |a| above this ...
+#define LAUNCH_HOLD_MS       20     // ... for this long = the throw
+#define APEX_MIN_MS          400    // earliest apex after the throw
+#define APEX_DROP_M          0.3f   // low-passed baro this far below its peak = descending
+#define APEX_TIMEOUT_MS      3000   // apex at the latest this long after the throw
+#define YAW_ALIGN_SPEED_MS   3.0f   // after launch, set yaw = GPS course once ground speed exceeds this
+#define REQUIRE_GPS_FIX_TO_ARM 1    // FLIGHT arming needs a 3D fix (home); the 'uncal' bench override skips it
+
+// ---------------- Pi link (pi_link.h) ----------------
+#define PI_TLM_PERIOD_MS     20     // PiTelemetry 50 Hz
+#define BANK_SP_MAX_DEG      45.0f  // policy action[0] range
+#define SPEED_CMD_MIN_MS     9.5f   // policy action[1] range (env/glider_env.py)
+#define SPEED_CMD_MAX_MS     16.0f
 
 // ---------------- slow sensors (core 0) ----------------
 #define SENSOR_PERIOD_MS     20     // 50 Hz task
