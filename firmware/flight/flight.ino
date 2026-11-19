@@ -355,7 +355,9 @@ void loop() {
     if (phase == RLG_PHASE_LAUNCH) {
       roll_sp = 0.0f;                                   // zoom climb: wings level, no pitch command
       elevNeutral = true;
-    } else if (phase == RLG_PHASE_AUTONOMOUS && !rlg_safety_pi_failsafe(&st) && havePiSp) {
+    } else if (phase == RLG_PHASE_AUTONOMOUS && !rlg_safety_pi_failsafe(&st) && havePiSp && piSp.controller != 0) {
+      // controller 0 = heartbeat (Pi alive, its controller not started): keeps the
+      // link fresh but is never flown.
       roll_sp = clampf(piSp.roll_sp, -BANK_SP_MAX_DEG * DEG_TO_RAD, BANK_SP_MAX_DEG * DEG_TO_RAD);
       float v = clampf(piSp.speed_cmd, SPEED_CMD_MIN_MS, SPEED_CMD_MAX_MS);
       pitch_sp = rlg_pitch_target(v, roll);             // trim schedule, no airspeed term
@@ -501,6 +503,8 @@ void piTask(void*) {
              | ((uint32_t)s.rail_valid << RLG_STATUS_RAIL_V_VALID_LSB);
     t.pi_rx_gaps = piRx.gaps > 65535 ? 65535 : piRx.gaps;
     t.pi_rx_bad = piRx.bad > 65535 ? 65535 : piRx.bad;
+    for (int i = 0; i < RLG_NUM_SERVOS; i++) t.servo_us[i] = c.us[i];
+    t.rail_adc_v = s.rail_valid ? s.rail_pin_v : -1.0f;
     piLinkSend(t);
   }
 }

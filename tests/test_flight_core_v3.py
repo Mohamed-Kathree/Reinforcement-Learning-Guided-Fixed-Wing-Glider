@@ -102,7 +102,7 @@ def sp(seq, roll=0.1, speed=11.0, ctl=1):
 def test_sizes_match_python():
     L = lib()
     assert L.t_pisetpoint_size() == P.PiSetpoint.SIZE == 16
-    assert L.t_pitelemetry_size() == P.PiTelemetry.SIZE == 83
+    assert L.t_pitelemetry_size() == P.PiTelemetry.SIZE == 95
 
 
 def test_pilink_clean_stream():

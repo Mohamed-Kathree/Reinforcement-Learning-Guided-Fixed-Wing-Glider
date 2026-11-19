@@ -178,10 +178,12 @@ typedef struct __attribute__((packed)) {
     uint32_t status;  /* offset 74 */
     uint16_t pi_rx_gaps;  /* offset 78 */
     uint16_t pi_rx_bad;  /* offset 80 */
-    uint8_t crc8;  /* offset 82 */
+    uint16_t servo_us[4];  /* offset 82 */
+    float rail_adc_v;  /* offset 90 */
+    uint8_t crc8;  /* offset 94 */
 } rlg_pitelemetry_t;
-#define RLG_PITELEMETRY_SIZE 83u
-_Static_assert(sizeof(rlg_pitelemetry_t) == 83, "PiTelemetry size");
+#define RLG_PITELEMETRY_SIZE 95u
+_Static_assert(sizeof(rlg_pitelemetry_t) == 95, "PiTelemetry size");
 _Static_assert(offsetof(rlg_pitelemetry_t, sync) == 0, "PiTelemetry.sync offset");
 _Static_assert(offsetof(rlg_pitelemetry_t, type) == 1, "PiTelemetry.type offset");
 _Static_assert(offsetof(rlg_pitelemetry_t, seq) == 2, "PiTelemetry.seq offset");
@@ -208,7 +210,9 @@ _Static_assert(offsetof(rlg_pitelemetry_t, gps_count) == 72, "PiTelemetry.gps_co
 _Static_assert(offsetof(rlg_pitelemetry_t, status) == 74, "PiTelemetry.status offset");
 _Static_assert(offsetof(rlg_pitelemetry_t, pi_rx_gaps) == 78, "PiTelemetry.pi_rx_gaps offset");
 _Static_assert(offsetof(rlg_pitelemetry_t, pi_rx_bad) == 80, "PiTelemetry.pi_rx_bad offset");
-_Static_assert(offsetof(rlg_pitelemetry_t, crc8) == 82, "PiTelemetry.crc8 offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, servo_us) == 82, "PiTelemetry.servo_us offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, rail_adc_v) == 90, "PiTelemetry.rail_adc_v offset");
+_Static_assert(offsetof(rlg_pitelemetry_t, crc8) == 94, "PiTelemetry.crc8 offset");
 
 #define RLG_TYPE_PISETPOINT 4u  /* Pi -> ESP32, UART 115200, 20 Hz */
 typedef struct __attribute__((packed)) {

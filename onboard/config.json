@@ -1,0 +1,15 @@
+{
+  "_comment": "Onboard (Raspberry Pi) runner configuration. controller: gated (default; Run 4 policy, one-way handover to the baseline), policy, or baseline. gate = training/configs/base.yaml gate.run4.window (frozen 2026-11-14 on development seeds). model is relative to the repository root. serial: /dev/serial0 = the Pi's primary UART on header pins 8/10 (enable_uart=1, serial console OFF). model and log_dir are relative to the repository root (or absolute).",
+  "controller": "gated",
+  "model": "onboard/model/run4.npz",
+  "gate": {
+    "threshold_ms": 1.5,
+    "t_earliest_s": 8.0,
+    "t_latest_s": 15.0
+  },
+  "serial": "/dev/serial0",
+  "baud": 115200,
+  "rate_hz": 20,
+  "stale_s": 0.25,
+  "log_dir": "logs"
+}

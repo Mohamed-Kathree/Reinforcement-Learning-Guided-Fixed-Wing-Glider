@@ -204,10 +204,10 @@ class Command:
 
 @dataclass
 class PiTelemetry:
-    """ESP32 -> Pi, UART 115200, 50 Hz. 83 bytes."""
+    """ESP32 -> Pi, UART 115200, 50 Hz. 95 bytes."""
     TYPE = 3
-    FMT = "<BBHIffffffffiiiifffBBHHIHHB"
-    SIZE = 83
+    FMT = "<BBHIffffffffiiiifffBBHHIHH4HfB"
+    SIZE = 95
     seq: int = 0
     t_ms: int = 0
     roll: float = 0.0
@@ -232,9 +232,11 @@ class PiTelemetry:
     status: int = 0
     pi_rx_gaps: int = 0
     pi_rx_bad: int = 0
+    servo_us: list = field(default_factory=lambda: [0] * 4)
+    rail_adc_v: float = 0.0
 
     def encode(self) -> bytes:
-        body = struct.pack(self.FMT[:-1], SYNC, self.TYPE, self.seq, self.t_ms, self.roll, self.pitch, self.yaw, self.p, self.q, self.r, self.baro_alt, self.sonar, self.lat, self.lon, self.home_lat, self.home_lon, self.vn, self.ve, self.vd, self.gps_fix, self.gps_sats, self.gps_age_ms, self.gps_count, self.status, self.pi_rx_gaps, self.pi_rx_bad)
+        body = struct.pack(self.FMT[:-1], SYNC, self.TYPE, self.seq, self.t_ms, self.roll, self.pitch, self.yaw, self.p, self.q, self.r, self.baro_alt, self.sonar, self.lat, self.lon, self.home_lat, self.home_lon, self.vn, self.ve, self.vd, self.gps_fix, self.gps_sats, self.gps_age_ms, self.gps_count, self.status, self.pi_rx_gaps, self.pi_rx_bad, *self.servo_us, self.rail_adc_v)
         return body + bytes([crc8(body[1:])])
 
     @classmethod
@@ -296,6 +298,10 @@ class PiTelemetry:
         kw["pi_rx_gaps"] = v[i]
         i += 1
         kw["pi_rx_bad"] = v[i]
+        i += 1
+        kw["servo_us"] = list(v[i:i + 4])
+        i += 4
+        kw["rail_adc_v"] = v[i]
         i += 1
         return cls(**kw)
 

@@ -2,7 +2,7 @@
  * pi_link.h -- UART link to the Raspberry Pi 4B (GPIO 32 TX -> Pi pin 10 RXD,
  * GPIO 33 RX <- Pi pin 8 TXD, 115200 8N1, common ground).
  *
- *   ESP32 -> Pi: PiTelemetry (83 B) at 50 Hz: attitude, rates, baro, sonar,
+ *   ESP32 -> Pi: PiTelemetry (95 B) at 50 Hz: attitude, rates, baro, sonar,
  *                GPS position/velocity, home, phase/status, link counters.
  *   Pi -> ESP32: PiSetpoint (16 B) at 20 Hz: bank angle and speed command.
  *

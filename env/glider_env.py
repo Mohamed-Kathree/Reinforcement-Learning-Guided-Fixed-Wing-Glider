@@ -203,6 +203,8 @@ class AttitudeController:
     Phase 4+ observation-redesign scope, not this fix.
     """
 
+    use_airspeed_term: bool = True   # cfg pitch_airspeed_term; see update()
+
     def update(
         self,
         imu_euler:    npt.NDArray,
@@ -259,7 +261,11 @@ class AttitudeController:
         cos_factor   = max(abs(cos_roll), 0.5)
         V_cmd_clamp  = max(float(speed_cmd_ms), 4.0)
         pitch_base   = (ALPHA_TRIM * (V_TRIM / V_cmd_clamp) ** 2) / cos_factor
-        pitch_corr   = -KV_PITCH * (speed_cmd_ms - V_actual)
+        # use_airspeed_term = False (cfg pitch_airspeed_term: false) drops this
+        # term: the real aircraft has no airspeed sensor, and its firmware flies
+        # the trim schedule alone (firmware/flight/src/core/inner_loop.c
+        # rlg_pitch_target, decision 19 Nov 2026). Default True: unchanged.
+        pitch_corr   = (-KV_PITCH * (speed_cmd_ms - V_actual)) if self.use_airspeed_term else 0.0
         pitch_target = float(np.clip(pitch_base + pitch_corr,
                                       np.radians(-8.0), np.radians(12.0)))
         pitch_err    = pitch_target - pitch
@@ -361,6 +367,7 @@ class GliderEnv(gym.Env):
         self._wind    = WindModel(dt=DT_PHYS)
         self._sensors = SensorSuite()
         self._ctrl    = AttitudeController()
+        self._ctrl.use_airspeed_term = bool(self.cfg.get('pitch_airspeed_term', True))
 
         # Episode state
         self._step_count: int         = 0

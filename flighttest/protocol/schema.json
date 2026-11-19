@@ -431,6 +431,17 @@
           "unit": "PiSetpoint frames dropped (sync/CRC/length)"
         },
         {
+          "name": "servo_us",
+          "ctype": "u16",
+          "count": 4,
+          "unit": "us being output, order = servos[].index"
+        },
+        {
+          "name": "rail_adc_v",
+          "ctype": "f32",
+          "unit": "V at the GPIO34 pin, -1 = not measured"
+        },
+        {
           "name": "crc8",
           "ctype": "u8"
         }

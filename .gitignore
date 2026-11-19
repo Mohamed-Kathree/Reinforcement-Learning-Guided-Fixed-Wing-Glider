@@ -272,3 +272,6 @@ analysis/fdm_variants/
 # Flight-test data written by the dashboard backend (fetched Pi logs, stub Pi)
 data/flightlogs/
 data/pi_stub/
+
+# onboard runner flight logs (written on the Pi inside the checkout)
+/logs/

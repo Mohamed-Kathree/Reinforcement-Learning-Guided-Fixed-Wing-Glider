@@ -1,0 +1,17 @@
+# Template: onboard/deploy/install.sh fills in @USER@ and @REPO@.
+[Unit]
+Description=RL glider onboard runner (Pi <-> ESP32 flight computer)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO@
+ExecStart=/usr/bin/python3 -u -m onboard.runner --config @REPO@/onboard/config.json
+Restart=always
+RestartSec=1
+Nice=-10
+# The ESP32 flies its failsafe glide on its own while this restarts.
+
+[Install]
+WantedBy=multi-user.target
