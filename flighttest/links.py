@@ -67,7 +67,7 @@ class SerialLink(Link):
 
     kind = "serial"
 
-    def __init__(self, port: str, baud: int = 115200) -> None:
+    def __init__(self, port: str, baud: int = 57600) -> None:   # firmware/ground_station GS_BAUD
         try:
             import serial  # pyserial
         except ImportError as exc:

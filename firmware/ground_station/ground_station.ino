@@ -22,6 +22,9 @@ static const uint8_t FLIGHT_MAC[6] = {0xF8, 0xB3, 0xB7, 0x30, 0x33, 0x40};
 #define RLG_SYNC 0xA5
 #define CMD_SIZE 14
 #define IDLE_FLUSH_MS 30
+#ifndef DIAG_HEX
+#define DIAG_HEX 0        // 1: print packet length + first bytes in hex (diagnostic build)
+#endif
 
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
   #define SEND_CB_ARG const wifi_tx_info_t*
@@ -53,7 +56,10 @@ void onSent(SEND_CB_ARG, esp_now_send_status_t s) {
 void setup() {
   rxQ = xQueueCreate(32, sizeof(RxPkt));
   Serial.setTxBufferSize(4096);
-  Serial.begin(115200);
+#ifndef GS_BAUD
+#define GS_BAUD 57600     // 20 Nov 2026: 115200 corrupted bytes 2-3 of each burst, 460800 far worse
+#endif
+  Serial.begin(GS_BAUD);
   delay(400);
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
@@ -69,6 +75,12 @@ void setup() {
     Serial.println("add_peer failed");
     while (1) delay(1000);
   }
+  // Wi-Fi modem power-save off (20 Nov 2026: the first bytes of each USB
+  // write burst came out corrupted while it was on; the radio data itself was intact).
+#ifndef GS_WIFI_PS_NONE
+#define GS_WIFI_PS_NONE 1
+#endif
+  if (GS_WIFI_PS_NONE) esp_wifi_set_ps(WIFI_PS_NONE);
   esp_now_register_recv_cb(onRecv);
   esp_now_register_send_cb(onSent);
   uint8_t mac[6] = {0};
@@ -91,7 +103,24 @@ static void flushText() {
 
 void loop() {
   RxPkt pkt;
-  while (xQueueReceive(rxQ, &pkt, 0) == pdTRUE) Serial.write(pkt.d, pkt.len);
+  while (xQueueReceive(rxQ, &pkt, 0) == pdTRUE) {
+#if DIAG_HEX
+    // Diagnostic: length and first 12 bytes of each packet, exactly as received.
+    Serial.printf("[%3u]", pkt.len);
+    for (int i = 0; i < 12 && i < pkt.len; i++) Serial.printf(" %02X", pkt.d[i]);
+    Serial.print("  ");
+    for (int i = 0; i < 12 && i < pkt.len; i++) Serial.write(pkt.d[i] >= 32 && pkt.d[i] < 127 ? pkt.d[i] : '.');
+    Serial.println();
+#else
+    // Two 0xFF bytes first: this board's USB-serial path misses the first
+    // start bit after the line has been idle (measured 20 Nov 2026), so the
+    // first byte(s) of a burst were lost or garbled. 0xFF is never a frame
+    // sync (0xA5) or printable text, and the ground app discards it.
+    static const uint8_t pre[2] = {0xFF, 0xFF};
+    Serial.write(pre, 2);
+    Serial.write(pkt.d, pkt.len);
+#endif
+  }
   uint32_t now = millis();
   while (Serial.available()) {
     uint8_t c = Serial.read();

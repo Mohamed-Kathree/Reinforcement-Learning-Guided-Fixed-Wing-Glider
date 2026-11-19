@@ -119,7 +119,8 @@ def ports() -> dict:
 
 
 @router.post("/api/ft/connect")
-def connect(transport: str = "stub", port: Optional[str] = None, baud: int = 115200) -> dict:
+def connect(transport: str = "stub", port: Optional[str] = None, baud: int = 57600) -> dict:
+    # 57600: the ground station's USB-serial path corrupted bursts at 115200 (20 Nov 2026)
     from flighttest.links import SerialLink, StubLink
     from flighttest.stub_glider import StubGlider
     from flighttest import calibration

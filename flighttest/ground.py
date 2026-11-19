@@ -240,7 +240,9 @@ class GroundStation:
             i = self._text.find(b"\n")
             if i < 0:
                 break
-            line = self._text[:i].decode("ascii", "replace").rstrip("\r")
+            # Console text is printable ASCII. The bridge's 0xFF wake-up bytes, and any
+            # byte mangled on the ground board's USB-serial path, are dropped here.
+            line = bytes(b for b in self._text[:i] if 32 <= b < 127 or b == 9).decode("ascii")
             del self._text[:i + 1]
             if line.strip():
                 self.console_seq += 1
