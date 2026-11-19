@@ -2,16 +2,76 @@
  "version": 2,
  "_comment": "Read and written by the ground app (flighttest/calibration.py validates every save). Values marked measured/calibrated=false are placeholders, not measurements. Per-servo limits live here, not in code: the elevator servo has already been swapped once. us_full_deflection = microseconds from neutral that give the simulator's full surface deflection (aileron 25 deg, elevator 20 deg, rudder 25 deg); direction = +1 if a positive command moves the surface the simulator's positive way (aileron +: roll right; elevator +: nose down; rudder +: nose left).",
  "servos": {
-  "aileron_l": {"type": "MG90S", "neutral_us": 1500, "direction": 1, "min_us": 600, "max_us": 2300, "sweep_min_us": 700, "sweep_max_us": 2200, "us_full_deflection": 400, "measured": false, "measured_on": null},
-  "aileron_r": {"type": "MG90S", "neutral_us": 1500, "direction": 1, "min_us": 600, "max_us": 2300, "sweep_min_us": 700, "sweep_max_us": 2200, "us_full_deflection": 400, "measured": false, "measured_on": null},
-  "elevator": {"type": "MG90S", "neutral_us": 1500, "direction": 1, "min_us": 600, "max_us": 2300, "sweep_min_us": 700, "sweep_max_us": 2200, "us_full_deflection": 400, "measured": false, "measured_on": null},
-  "rudder": {"type": "MG90S", "neutral_us": 1500, "direction": 1, "min_us": 600, "max_us": 2300, "sweep_min_us": 700, "sweep_max_us": 2200, "us_full_deflection": 400, "measured": false, "measured_on": null}
+  "aileron_l": {
+   "type": "MG90S",
+   "neutral_us": 1500,
+   "direction": 1,
+   "min_us": 600,
+   "max_us": 2300,
+   "sweep_min_us": 700,
+   "sweep_max_us": 2200,
+   "us_full_deflection": 400,
+   "measured": false,
+   "measured_on": null
+  },
+  "aileron_r": {
+   "type": "MG90S",
+   "neutral_us": 1500,
+   "direction": 1,
+   "min_us": 600,
+   "max_us": 2300,
+   "sweep_min_us": 700,
+   "sweep_max_us": 2200,
+   "us_full_deflection": 400,
+   "measured": false,
+   "measured_on": null
+  },
+  "elevator": {
+   "type": "MG90S",
+   "neutral_us": 1500,
+   "direction": 1,
+   "min_us": 600,
+   "max_us": 2300,
+   "sweep_min_us": 700,
+   "sweep_max_us": 2200,
+   "us_full_deflection": 400,
+   "measured": false,
+   "measured_on": null
+  },
+  "rudder": {
+   "type": "MG90S",
+   "neutral_us": 1500,
+   "direction": 1,
+   "min_us": 600,
+   "max_us": 2300,
+   "sweep_min_us": 700,
+   "sweep_max_us": 2200,
+   "us_full_deflection": 400,
+   "measured": false,
+   "measured_on": null
+  }
  },
  "imu": {
-  "_comment": "body = board_to_body @ board. Body frame: x forward, y right, z down. Must be a signed permutation with determinant +1. The current signs are stale and being re-derived.",
-  "board_to_body": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-  "verified": false,
-  "verified_on": null
+  "_comment": "body = board_to_body @ board. Body frame: x forward, y right, z down. Must be a signed permutation with determinant +1. Verified 19 Nov 2026 on battery with the flight firmware: level az -1.074 g, nose up ax +0.260 g, right wing down ay -0.304 g, yaw right +88 deg for ~90 deg (firmware/flight/README.md). Signed off by the researcher.",
+  "board_to_body": [
+   [
+    1,
+    0,
+    0
+   ],
+   [
+    0,
+    1,
+    0
+   ],
+   [
+    0,
+    0,
+    1
+   ]
+  ],
+  "verified": true,
+  "verified_on": "2026-11-19"
  },
  "baro": {
   "warmup_s": 120,

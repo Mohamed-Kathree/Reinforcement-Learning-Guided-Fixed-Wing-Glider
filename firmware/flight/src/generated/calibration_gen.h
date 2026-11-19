@@ -7,10 +7,10 @@
 
 #include <stdint.h>
 
-#define CAL_HASH "71e947d7bb91"
+#define CAL_HASH "2d55487a6cab"
 #define CAL_VERSION 2
 #define CAL_SERVOS_MEASURED 0   /* 0: neutrals/directions are placeholders */
-#define CAL_IMU_VERIFIED 0
+#define CAL_IMU_VERIFIED 1
 #define CAL_RAIL_CALIBRATED 0
 
 /* Servo order = protocol order: aileron_l, aileron_r, elevator, rudder */

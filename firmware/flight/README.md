@@ -226,6 +226,19 @@ radio.
 
 ### Servo calibration (joint session)
 
+**Status, 19 Nov 2026:** the servos are not fitted to the surfaces yet, so direction,
+neutral and full deflection **cannot be calibrated** (they depend on the linkage). The
+channel check is done: each output was driven alone and the expected servo moved: 0/GPIO 13
+left aileron, 1/GPIO 14 right aileron, 2/GPIO 25 elevator, 3/GPIO 27 rudder.
+
+**Fitting the horns:** do it with the board on battery and DISARMED (all servos holding
+1500 µs). Fit each horn so the surface is at neutral there, with the arm perpendicular to
+the pushrod. The neutrals then land near 1500 µs, with symmetric throw.
+
+**Tool:** `python -m flighttest.servo_cal --port COMx --servo elevator --us 1600 --hold 15`
+arms BENCH through the ground station, holds one servo, reads back what the flight computer
+is actually outputting, then disarms to neutral.
+
 A wrong servo direction is a **silent inversion**: the loop then drives the aircraft
 away from level. Each servo's `direction` in `calibration.json` is defined against the
 **simulator's** positive deflection:
@@ -252,10 +265,10 @@ run `python -m flighttest.firmware_sync`, rebuild and re-flash, then repeat test
 
 ## Known issues (open)
 
-- **The ground station bridge sends one byte per ESP-NOW packet** from USB. Text console
-  commands work, as in the bench sketch. Binary command frames from the dashboard arrive
-  split up, so the firmware treats them as text. Fix the bridge before the dashboard
-  drives BENCH or REPLAY over the air.
+- **Ground station bridge: FIXED 19 Nov 2026.** Binary command frames go out whole (one
+  packet each), and text goes out a line per packet. BENCH from the PC works
+  (`python -m flighttest.servo_cal`). Radio text still arrives with a few garbled
+  characters (cause not found); binary frames are CRC-checked.
 - **The bench sketch** still has `delay(8)` after `esp_now_send`. The flight firmware uses
   the 15 ms in the brief.
 - **ICM-20948 rate and interrupt configuration is new code.** Test 1 shows whether it
