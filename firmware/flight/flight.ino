@@ -17,11 +17,11 @@
  * Console: type "help". See firmware/flight/README.md for the bench test plan.
  */
 #include <Arduino.h>
-#include <ESP32Servo.h>
 #include <esp_task_wdt.h>
 #include "config.h"
 #include "hw_imu.h"
 #include "hw_sensors.h"
+#include "hw_servo.h"
 #include "radio_link.h"
 #include "src/core/attitude.h"
 #include "src/core/inner_loop.h"
@@ -33,7 +33,6 @@
 #define STREAM_DECIMATE 2            // USB stream at ~112 Hz (225 / 2); USB only, never radio
 
 static RadioLink Link;
-static Servo servos[RLG_NUM_SERVOS];
 static const int SERVO_PINS[RLG_NUM_SERVOS] = {PIN_SRV_AILL, PIN_SRV_AILR, PIN_SRV_ELEV, PIN_SRV_RUD};
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 static QueueHandle_t cmdQueue, streamQueue;
@@ -150,36 +149,14 @@ static void handleFrame(CmdFrame& f, uint32_t now_ms, const rlg_sensors_t& sens)
   if (res == RLG_CMD_ARMED && st.mode == RLG_MODE_FLIGHT && !airborneBefore) baroCaptureReq = true;
 }
 
-// Servo output. MEASURED 19 Nov 2026: ESP32Servo's writeMicroseconds() ->
-// ledcWrite() blocks ~10 ms per servo on this core (it waits for the 20 ms PWM
-// period boundary); four writes per cycle held the control loop to 25 Hz. So
-// servos are NOT written from the control loop: servoTask writes the latest
-// values at 50 Hz (a servo reads one pulse per 20 ms frame anyway), only the
-// ones that changed, and records how long the writes take ("sec=" 4th field).
+// Servo output (hw_servo.h, MCPWM): written from the control loop, changed
+// values only. A write is a shadow-register store latched by hardware at the
+// next 20 ms period, so it costs microseconds ("sec=" 4th field). The earlier
+// LEDC/ESP32Servo path blocked ~10 ms per write with interrupts off.
 static void writeServoValues(const uint16_t us[RLG_NUM_SERVOS]) {
   static uint16_t written[RLG_NUM_SERVOS] = {0};
   for (int i = 0; i < RLG_NUM_SERVOS; i++)
-    if (us[i] >= RLG_ABS_MIN_US && us[i] != written[i]) { servos[i].writeMicroseconds(us[i]); written[i] = us[i]; }
-}
-
-void servoTask(void*) {
-  esp_task_wdt_add(nullptr);
-  TickType_t wake = xTaskGetTickCount();
-  uint16_t us[RLG_NUM_SERVOS];
-  for (;;) {
-    vTaskDelayUntil(&wake, pdMS_TO_TICKS(20));
-    esp_task_wdt_reset();
-    if (!servoWrites) continue;
-    portENTER_CRITICAL(&mux);
-    for (int i = 0; i < RLG_NUM_SERVOS; i++) us[i] = ctrlShared.us[i];
-    portEXIT_CRITICAL(&mux);
-    uint32_t t = micros();
-    writeServoValues(us);
-    t = micros() - t;
-    portENTER_CRITICAL(&mux);
-    if (t > statsShared.secSrv) statsShared.secSrv = t;
-    portEXIT_CRITICAL(&mux);
-  }
+    if (us[i] >= RLG_ABS_MIN_US && us[i] != written[i]) { servoWriteUs(i, us[i]); written[i] = us[i]; }
 }
 
 // ======================= setup =======================
@@ -204,12 +181,9 @@ void setup() {
   }
   rlg_safety_init(&st, neutral, millis());
   if (!rlg_safety_set_limits(&st, mn, mx)) Link.println("ERROR: calibration min > max; using absolute envelope");
-  for (int i = 0; i < RLG_NUM_SERVOS; i++) {
-    servos[i].setPeriodHertz(50);
-    servos[i].attach(SERVO_PINS[i], RLG_ABS_MIN_US, RLG_ABS_MAX_US);
-  }
-  writeServoValues(st.servo_us);   // neutral before anything else runs
-  for (int i = 0; i < RLG_NUM_SERVOS; i++) ctrlShared.us[i] = st.servo_us[i];   // servoTask starts from neutral, never 0
+  servoBegin(SERVO_PINS, st.servo_us, &Link);   // starts at neutral
+  writeServoValues(st.servo_us);
+  for (int i = 0; i < RLG_NUM_SERVOS; i++) ctrlShared.us[i] = st.servo_us[i];
 
   imuOk = imuBegin(&Link);
   if (imuOk) {
@@ -244,7 +218,6 @@ void setup() {
   xTaskCreatePinnedToCore(sensorTask, "sensors", 4096, nullptr, 3, nullptr, 0);
   xTaskCreatePinnedToCore(radioTask, "radio", 4096, nullptr, 2, nullptr, 0);
   xTaskCreatePinnedToCore(consoleTask, "console", 6144, nullptr, 1, nullptr, 0);
-  xTaskCreatePinnedToCore(servoTask, "servos", 3072, nullptr, 5, nullptr, 1);   // below the control loop (10)
 
   ctrlTask = xTaskGetCurrentTaskHandle();
   vTaskPrioritySet(nullptr, 10);
@@ -313,10 +286,13 @@ void loop() {
     rlg_safety_flight_output(&st, us);
   }
   uint32_t tCtl = micros();
-  uint32_t comp = tCtl - t0;            // servos are written by servoTask, not here
+  if (servoWrites) writeServoValues(st.servo_us);
+  uint32_t tSrv = micros();
+  uint32_t comp = tSrv - t0;
   if (tImu - t0 > ls.secImu) ls.secImu = tImu - t0;
   if (tAtt - tImu > ls.secAtt) ls.secAtt = tAtt - tImu;
   if (tCtl - tAtt > ls.secCtl) ls.secCtl = tCtl - tAtt;
+  if (tSrv - tCtl > ls.secSrv) ls.secSrv = tSrv - tCtl;
 
   // ---- measurements ----
   if (dtUs) {

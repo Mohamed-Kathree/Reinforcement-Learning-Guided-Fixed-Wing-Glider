@@ -16,7 +16,8 @@ arduino-cli upload  -p COM3 --fqbn esp32:esp32:esp32 firmware/flight
 
 arduino-cli 1.6.0 ships with the Arduino IDE:
 `%LOCALAPPDATA%\Programs\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe`.
-Libraries: ESP32 core 3.3.x, ESP32Servo, Adafruit BMP280 (+ BusIO).
+Libraries: ESP32 core 3.3.x, Adafruit BMP280 (+ BusIO). Servos use the core's MCPWM
+driver (`hw_servo.h`), not ESP32Servo, which the bench sketch still uses.
 
 - **Confirm the COM port before every upload.** It changes between USB ports on this PC,
   and one port is marginal and causes brownouts.
@@ -36,6 +37,7 @@ Compile measurement (19 Nov 2026): 976,383 bytes of flash (74%), 49,596 bytes of
 | `config.h` | Pins (fixed), rates, failsafe setpoints, sensor settings. |
 | `hw_imu.h` | ICM-20948 SPI. The bench code (verified) plus new rate/DLPF/interrupt setup (unverified). |
 | `hw_sensors.h` | BMP280, sonar (interrupt-timed), NEO-6M NMEA, rail ADC. |
+| `hw_servo.h` | Four servo outputs on MCPWM (non-blocking shadow-register writes, 50 Hz). |
 | `radio_link.h` | ESP-NOW `RadioLink` (Print subclass, as in the bench sketch), queue-fed. |
 | `src/core/imu_frame.h` | **The** board-to-body transform. Sign defines; determinant +1 is checked at compile time. |
 | `src/core/attitude.*` | 2-state Kalman per axis (port of `glider_viz.py`), accel gate, kinematics. Pure C. |
@@ -184,7 +186,18 @@ radio.
   0.85–1.15 gate. Gyro bias at rest (+1.0, −0.5, 0.0) °/s.
 - BMP280 ok; NMEA parsing ok (123 sentences, 0 bad checksums, no fix indoors); rail pin
   0.142 V on USB (divider not fitted, reported invalid).
-- `ledcWrite()` blocks about 10 ms per servo, so servo output runs in its own 50 Hz task.
+- ESP32Servo's `ledcWrite()` blocks about 10 ms per servo with the core stalled. On
+  battery, armed, the loop fell to 50–130 Hz with gaps of up to 43 ms. Servo output was
+  moved to the **MCPWM** peripheral (`hw_servo.h`). Armed FLIGHT then measured (USB,
+  servo leads disconnected): loop 228 Hz, dt max 5.9 ms, compute 194 µs mean, servo
+  writes 5–15 µs, no timeouts or missed samples.
+- Frame checks on battery, over the radio: level az −1.074 g; nose up ax +0.260 g
+  (pitch +13.4°); right wing down ay −0.304 g (roll +16.7°); yaw right +88° for about
+  90°. All four pass.
+- Power: on USB, servo load stops the ESP32 from booting (no ROM boot message) until
+  the servo leads are disconnected. On battery, the board did not start at switch-on
+  until EN was pressed. **Open before flight:** measure the rail at switch-on and under
+  servo load, and fix the power-on reset (EN capacitor or supervisor).
 - Armed FLIGHT with `srv off` ran normally: failsafe engaged, barometer reference
   captured, surface commands correct in sign. With `srv on`, see the warning above.
 
