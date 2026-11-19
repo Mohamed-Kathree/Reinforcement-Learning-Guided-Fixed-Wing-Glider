@@ -150,7 +150,10 @@ def _episode(args):
     stage, seed, kind, airspeed_term, controller = args
     from training.benchmark import evaluate_seed, load_config
     cfg = load_config(RUN4_CONFIG)
-    cfg["pitch_airspeed_term"] = airspeed_term
+    # GliderEnv's cfg is training.train.flat_env_cfg(cfg): the reward section plus
+    # a few launch keys. A top-level key never reaches the env (the first run of
+    # this measurement, 19 Nov 2026, was invalid for exactly that reason).
+    cfg["reward"]["pitch_airspeed_term"] = bool(airspeed_term)
     actor = SimInTheLoop(onboard_cfg(controller)) if kind == "onboard" else Recording(reference_actor(controller))
     rec = evaluate_seed(cfg, stage, actor, seed, 1)
     return rec, [a.tolist() for a in actor.actions]

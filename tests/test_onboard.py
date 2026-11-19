@@ -222,3 +222,23 @@ def test_simulator_airspeed_term_default_unchanged():
     assert env._ctrl.use_airspeed_term is True
     env2 = G.GliderEnv(cfg={"pitch_airspeed_term": False})
     assert env2._ctrl.use_airspeed_term is False
+
+
+def test_airspeed_term_switch_reaches_the_env_through_the_benchmark_path():
+    """The measurement builds envs with training.benchmark.make_env (flat_env_cfg):
+    the switch must survive that path, and actually change the flight."""
+    from training.benchmark import evaluate_seed, load_config as bench_cfg, make_env
+    for term in (True, False):
+        cfg = bench_cfg(S.RUN4_CONFIG)
+        cfg["reward"]["pitch_airspeed_term"] = term
+        assert make_env(cfg, 0, 1)._ctrl.use_airspeed_term is term
+    seed = S.dev_seeds(1)[0]
+    traj = {}
+    for term in (True, False):
+        cfg = bench_cfg(S.RUN4_CONFIG)
+        cfg["reward"]["pitch_airspeed_term"] = term
+        rec = S.Recording(S.reference_actor())
+        evaluate_seed(cfg, 0, rec, seed, 1)
+        traj[term] = np.array(rec.actions)
+    k = min(len(traj[True]), len(traj[False]))
+    assert np.abs(traj[True][:k] - traj[False][:k]).max() > 1e-3, "the switch had no effect on the flight"
