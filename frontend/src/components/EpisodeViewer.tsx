@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AircraftPlayback from "./AircraftPlayback";
 import FlightScene from "./FlightScene";
 import GateTraceChart from "./GateTraceChart";
 import { lookupBenchmark } from "../data/validation";
@@ -273,6 +274,8 @@ export default function EpisodeViewer({ initialEpisodeId, label }: EpisodeViewer
           )}
 
           <BenchmarkCheck trajectory={trajectory} />
+
+          <AircraftPlayback frame={frame} playing={playing} onPick={(id) => setSelected(id)} />
 
           <div className="replay-layout">
             <div className="replay-visual">
