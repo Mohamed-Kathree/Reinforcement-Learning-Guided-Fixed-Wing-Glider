@@ -37,11 +37,29 @@ export interface GroundState {
 
 export interface Session { mode: string; servo_us: number[]; expires_in_ms: number }
 
+// Aircraft-side state reported by the flight computer's 1 Hz Info packet (schema v3).
+export interface AircraftInfo {
+  t_ms: number; cal_id_hex: string; cal_servos_measured: boolean; cal_imu_verified: boolean; cal_from_nvs: boolean;
+  schema: number; loop_hz: number; pi_rx_gaps: number; pi_rx_bad: number; pi_tlm_gaps: number; gps_rate_hz: number;
+  launch_cause: number; apex_cause: number; pitch_sp: number; roll_sp: number; file_cal_id_hex: string;
+}
+
+export interface CalibrationPush {
+  cal_id_hex: string; sends: number; first_ms: number; last_ms: number | null;
+  state: "sending" | "confirmed" | "not confirmed"; confirmed_ms?: number;
+}
+
+export interface ConsoleLine { n: number; t_ms: number; text: string; sent?: boolean }
+
 export interface Snapshot {
   ground: GroundState;
-  telemetry: Telemetry | null;
+  telemetry: (Telemetry & { phase?: string; status: StatusBits & Record<string, number> }) | null;
   session: Session | null;
   last_session_end: { reason: string; at_ms: number } | null;
+  info?: AircraftInfo | null;
+  calibration_push?: CalibrationPush | null;
+  file_cal_id_hex?: string;
+  console?: ConsoleLine[];
 }
 
 export interface PiLog { name: string; size_bytes: number; modified_utc: string }
@@ -214,6 +232,8 @@ export const ft = {
   log: (name: string) => api<ParsedLog>("GET", `/api/ft/logs/${encodeURIComponent(name)}`),
   calibration: () => api<{ calibration: Calibration; problems: string[] }>("GET", "/api/ft/calibration"),
   saveCalibration: (cal: Calibration) => act(() => api("PUT", "/api/ft/calibration", cal)),
+  pushCalibration: () => act(() => api("POST", "/api/ft/calibration/push")),
+  console: (line: string) => act(() => api("POST", "/api/ft/console", { line })),
   clearError: () => set({ error: null }),
 };
 

@@ -230,8 +230,35 @@ def put_calibration(cal: dict = Body(...)) -> dict:
         if r.stub_glider is not None:     # the stub "firmware" picks up neutrals and limits immediately
             r.stub_glider.safety.s.neutral_us = calibration.neutral_us(cal)
             r.stub_glider.safety.set_limits(*calibration.limits(cal))
-    # HARDWARE SEAM: the real ESP32 keeps neutrals in NVS; pushing them is not implemented.
+    # Saving does not change the aircraft: POST /api/ft/calibration/push sends it
+    # (CalibrationSet over ESP-NOW; applied only DISARMED and on the ground, stored in NVS).
     return {"calibration": cal, "problems": [], "pushed_to_firmware": False}
+
+
+@router.post("/api/ft/calibration/push")
+def push_calibration() -> dict:
+    """Send the saved calibration to the aircraft. Confirmed when the aircraft's
+    Info packet reports the same calibration id loaded from NVS (see snapshot
+    'calibration_push')."""
+    r = rt()
+    with r.lock:
+        try:
+            return {"calibration_push": r.ground.push_calibration(_now_ms())}
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc))
+
+
+@router.post("/api/ft/console")
+def console(line: str = Body(..., embed=True)) -> dict:
+    """A whitelisted flight-computer console command (arm, disarm, report, ...)."""
+    r = rt()
+    with r.lock:
+        try:
+            return {"sent": r.ground.console(line, _now_ms())}
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
 
 
 @router.post("/api/ft/stub")

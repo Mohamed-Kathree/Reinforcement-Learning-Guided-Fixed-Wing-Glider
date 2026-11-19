@@ -107,7 +107,7 @@ def test_crc_drops_counted_not_delivered():
     bad[10] ^= 0xFF
     link.inbox += bytes(bad) + P.Telemetry(seq=6).encode()
     gs.step(0)
-    assert gs.received_total == 1 and gs.parser.dropped >= 1
+    assert gs.received_total == 1 and gs.crc_drops >= 1
 
 
 # ---------------------------------------------------------------- commands

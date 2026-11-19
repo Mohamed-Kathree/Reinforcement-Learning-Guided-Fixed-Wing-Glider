@@ -1,6 +1,7 @@
 // pages.tsx -- the two flight-test pages built from the four panels.
 import type { Tab } from "../useHashRoute";
 import { IconAlert } from "../icons";
+import AircraftPanel from "./AircraftPanel";
 import ConnectionPanel from "./ConnectionPanel";
 import LogReplayPanel from "./LogReplayPanel";
 import ServoPanel from "./ServoPanel";
@@ -54,6 +55,7 @@ export function GroundStationPage() {
       </div>
       <BackendBanner />
       <ConnectionPanel />
+      <AircraftPanel />
       <TelemetryPanel />
       <ServoPanel />
     </section>

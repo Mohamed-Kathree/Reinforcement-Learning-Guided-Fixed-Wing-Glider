@@ -44,6 +44,7 @@ retrieved over WiFi on the ground. The stream is for monitoring; the SD log is t
 
 `GET /api/ft/status` (ground link and Pi reported separately), `POST /api/ft/connect?transport=stub|serial`,
 `/disconnect`, `/arm?mode=bench|replay`, `/disarm`, `/servos`, `/keepalive`, `GET|PUT /api/ft/calibration`,
+`POST /api/ft/calibration/push` (send the saved calibration to the aircraft; confirmed via its Info packet), `POST /api/ft/console` (whitelisted flight-computer commands, e.g. `arm` = FLIGHT),
 `POST /api/ft/stub` (stub only: airborne, loss, rail_sensor), `GET /api/ft/pi/logs`,
 `POST /api/ft/pi/logs/{name}/fetch`, `GET /api/ft/logs[/{name}]`, `WS /ws/ft`.
 

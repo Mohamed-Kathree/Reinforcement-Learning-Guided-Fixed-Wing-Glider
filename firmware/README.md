@@ -4,16 +4,30 @@ Shared protocol and safety code for the ESP32 flight controller, plus the sketch
 
 | Folder | What it is |
 |---|---|
-| `flight/` | **Production flight firmware.** Phase 1 (inner loop, no Pi): compiles, host-tested, not yet run on hardware. Build, decisions and the bench test plan: [flight/README.md](flight/README.md). |
+| `flight/` | **Production flight firmware.** Phase 1 (inner loop) verified on hardware on 19 Nov 2026, except calibration and power. Phase 2 (Pi link, GPS UBX, flight phases, calibration over radio) compiles and is host-tested, but has NOT run on hardware. Build, decisions and test plan: [flight/README.md](flight/README.md). |
 | `bench/` | The bench test menu (from `Hardware/PCB_test_code/Flight_Controller`), kept as the hardware regression suite. IMU signs and formulas corrected on 19 Nov 2026. |
-| `ground_station/` | The ESP-NOW ↔ USB bridge (from `Hardware/PCB_test_code`). It forwards USB **one byte per packet**, which needs fixing before binary commands go over the air. |
+| `ground_station/` | The ESP-NOW ↔ USB bridge. Binary frames go out whole and text a line per packet; received packets are queued and written from `loop()`. |
+| `../onboard/` | The Raspberry Pi side of the flight computer: [onboard/README.md](../onboard/README.md). |
 | `protocol/` | Shared protocol and safety code (below). Copied into `flight/src/protocol/` by `python -m flighttest.firmware_sync`. |
 | `tools/` | `glider_viz.py` (corrected frame), `attitude_ref.py` (Python reference filter), `compare_attitude.py` (firmware vs visualiser measurement). |
 
-## Phase 2 (Pi policy interface): contract mismatches to resolve first
+## Phase 2 (Pi policy interface): contract mismatches, and how each was resolved
 
-The trained policy's contract is defined by `env/glider_env.py`. These are the
-differences between that contract and the Pi link described in the flight brief:
+The researcher decided these on 19 Nov 2026, and they are implemented in schema v3:
+
+| # | Resolution |
+|---|---|
+| 1 | The Pi sends **bank angle + speed command**, not pitch. The ESP32 turns the speed command into a pitch target at 225 Hz with the simulator's trim schedule, **without** the true-airspeed term (`rlg_pitch_target`). The effect is measured in simulation on development seeds: `results/onboard_airspeed_term_dev.json`, with a simulator cfg key `pitch_airspeed_term`. |
+| 2 | No rudder from the Pi. The ESP32 keeps the simulator's `−KR·p`. |
+| 3 | NEO-6M configured to **UBX 5 Hz** at boot (NMEA 1 Hz fallback, flagged in status). |
+| 4 | **Vertical velocity** from UBX NAV-VELNED. In the NMEA fallback, the Pi uses a barometric rate, flagged in the log. |
+| 5 | **PiTelemetry** (95 B, 50 Hz) carries everything the observation needs, plus home, phase, servo outputs and link counters. |
+
+Also decided: home is the GPS position at FLIGHT arming; yaw is aligned to the GPS course
+after the throw; the Pi takes over at the detected **apex**, because training starts at
+the apex.
+
+The original list of mismatches, for the record:
 
 1. **The policy does not output attitude setpoints.** Its action is
    [bank angle ±45°, airspeed command 9.5–16 m/s]. The simulator turns the speed command
