@@ -26,6 +26,7 @@ pushing calibration neutrals to the ESP32 (NVS) is not implemented.
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import threading
 import time
@@ -100,6 +101,19 @@ def rt() -> Runtime:
     return _rt
 
 
+def json_safe(x):
+    """NaN and +/-inf -> None, recursively. The real aircraft sends NaN (e.g. baro
+    altitude before the arm-time reference exists); NaN is not valid JSON and the
+    browser's JSON.parse rejected every WebSocket message (found 20 Nov 2026)."""
+    if isinstance(x, float):
+        return x if math.isfinite(x) else None
+    if isinstance(x, dict):
+        return {k: json_safe(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [json_safe(v) for v in x]
+    return x
+
+
 @router.get("/api/ft/status")
 def status() -> dict:
     r = rt()
@@ -109,7 +123,7 @@ def status() -> dict:
     snap["stub"] = None if r.stub_glider is None else {
         "flying": r.stub_glider.alt_true > 0, "airborne": r.stub_glider.airborne, "loss": r.stub_glider.loss,
         "rail_sensor": r.stub_glider.rail_sensor, "pi_alive": r.stub_glider.pi_alive}
-    return snap
+    return json_safe(snap)
 
 
 @router.get("/api/ft/ports")
@@ -391,7 +405,7 @@ async def ws_ft(websocket: WebSocket) -> None:
                 new = [h for h in r.ground.history if h["t_ms"] > last_t]
             if new:
                 last_t = new[-1]["t_ms"]
-            await websocket.send_json({"now_ms": now, "snapshot": snap, "history": new})
+            await websocket.send_json(json_safe({"now_ms": now, "snapshot": snap, "history": new}))
             await asyncio.sleep(0.2)
     except (WebSocketDisconnect, RuntimeError):
         return

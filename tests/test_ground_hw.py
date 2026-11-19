@@ -205,3 +205,22 @@ def test_envelope_servos_only_in_bench():
     gs.arm(P.REPLAY, 0)
     with pytest.raises(RuntimeError):
         gs.set_servos([1500] * 4, 0, envelope=True)
+
+
+def test_snapshot_with_real_aircraft_nan_is_strict_json():
+    """The aircraft sends NaN baro altitude before the arm-time reference exists; the
+    dashboard's JSON.parse rejected every WebSocket message until the backend
+    replaced NaN with null (20 Nov 2026)."""
+    import json
+    import math
+    from backend.routers.flighttest import json_safe
+    link = FakeLink()
+    gs = GroundStation(link, cal=CAL)
+    link.inbox += P.Telemetry(seq=1, alt_baro=float("nan"), vn=float("nan"), status=P.pack_status(gps_ubx=1)).encode()
+    gs.step(0)
+    snap = gs.snapshot(0)
+    assert math.isnan(snap["telemetry"]["alt_baro"])
+    with pytest.raises(ValueError):
+        json.dumps(snap, allow_nan=False)
+    out = json.dumps(json_safe({"snapshot": snap, "history": list(gs.history)}), allow_nan=False)
+    assert '"alt_baro": null' in out and "NaN" not in out
