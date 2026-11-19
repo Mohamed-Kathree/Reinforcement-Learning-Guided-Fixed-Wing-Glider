@@ -58,6 +58,7 @@ static volatile bool baroCaptureReq = false;
 struct CtrlSnap {
   float roll_deg = 0, pitch_deg = 0, yaw_deg = 0, p = 0, q = 0, r = 0;   // rates rad/s
   float accel_g = 0;
+  float ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0;   // body frame, g and deg/s (frame check)
   bool seeded = false, accel_trusted = false, euler = true;
   uint8_t mode = 0; bool armed = false, failsafe = false, airborne = false;
   uint16_t us[RLG_NUM_SERVOS] = {0};
@@ -290,6 +291,8 @@ void loop() {
   ctrlShared.roll_deg = att.roll.angle; ctrlShared.pitch_deg = att.pitch.angle; ctrlShared.yaw_deg = att.yaw_deg;
   ctrlShared.p = p; ctrlShared.q = q; ctrlShared.r = r;
   ctrlShared.accel_g = att.accel_mag_g; ctrlShared.seeded = att.seeded;
+  ctrlShared.ax = ax; ctrlShared.ay = ay; ctrlShared.az = az;
+  ctrlShared.gx = gx; ctrlShared.gy = gy; ctrlShared.gz = gz;
   ctrlShared.accel_trusted = att.accel_trusted; ctrlShared.euler = att.euler_kinematics;
   ctrlShared.mode = st.mode; ctrlShared.armed = st.armed;
   ctrlShared.failsafe = rlg_safety_pi_failsafe(&st); ctrlShared.airborne = st.airborne;
@@ -394,6 +397,9 @@ static void printReport(const CtrlSnap& c, const SensorSnap& s) {
   Link.printf("R imu ok=%d drdy=%.0fHz timing=%s signs a(%d,%d,%d) g(%d,%d,%d) kin=%s\n", imuOk, drdyRateHz,
               useDrdyInterrupt ? "interrupt" : "poll", AX_SIGN, AY_SIGN, AZ_SIGN, GX_SIGN, GY_SIGN, GZ_SIGN,
               c.euler ? "euler" : "body-rate(viz)");
+  Link.printf("R raw body a=(%+.3f,%+.3f,%+.3f)g g=(%+.1f,%+.1f,%+.1f)dps  "
+              "[expect level az~-1, nose up ax>0, right wing down ay<0, yaw right gz>0]\n",
+              c.ax, c.ay, c.az, c.gx, c.gy, c.gz);
   Link.printf("R kalman Q_ANGLE=%.4f Q_BIAS=%.4f R=%.3f gate=%.2f-%.2fg samples=%lu gated=%lu dt_rejected=%lu\n",
               ATT_Q_ANGLE, ATT_Q_BIAS, ATT_R_MEASURE, ATT_GATE_LO_G, ATT_GATE_HI_G, (unsigned long)c.att_samples,
               (unsigned long)c.att_gated, (unsigned long)c.att_dt_rej);
