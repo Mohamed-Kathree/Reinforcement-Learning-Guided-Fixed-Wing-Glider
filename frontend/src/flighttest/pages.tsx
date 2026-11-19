@@ -5,6 +5,7 @@ import AircraftPanel from "./AircraftPanel";
 import CalibrationWizard from "./CalibrationWizard";
 import ConnectionPanel from "./ConnectionPanel";
 import LogReplayPanel from "./LogReplayPanel";
+import PanelBoundary from "./PanelBoundary";
 import ServoPanel from "./ServoPanel";
 import SetupChecklist from "./SetupChecklist";
 import TelemetryPanel from "./TelemetryPanel";
@@ -56,12 +57,12 @@ export function GroundStationPage() {
         </div>
       </div>
       <BackendBanner />
-      <SetupChecklist />
-      <ConnectionPanel />
-      <AircraftPanel />
-      <CalibrationWizard />
-      <TelemetryPanel />
-      <ServoPanel />
+      <PanelBoundary name="checklist"><SetupChecklist /></PanelBoundary>
+      <PanelBoundary name="connection"><ConnectionPanel /></PanelBoundary>
+      <PanelBoundary name="flight computer"><AircraftPanel /></PanelBoundary>
+      <PanelBoundary name="calibration"><CalibrationWizard /></PanelBoundary>
+      <PanelBoundary name="live telemetry"><TelemetryPanel /></PanelBoundary>
+      <PanelBoundary name="servo tester"><ServoPanel /></PanelBoundary>
     </section>
   );
 }
@@ -79,7 +80,7 @@ export function FlightLogsPage({ onNavigate }: { onNavigate: (tab: Tab, a?: stri
         </div>
       </div>
       <BackendBanner />
-      <LogReplayPanel onNavigate={onNavigate} />
+      <PanelBoundary name="flight log replay"><LogReplayPanel onNavigate={onNavigate} /></PanelBoundary>
     </section>
   );
 }

@@ -25,7 +25,8 @@ export interface RailState {
 
 export interface Telemetry {
   seq: number; t_ms: number; roll: number; pitch: number; yaw: number; p: number; q: number; r: number;
-  alt_baro: number; sonar: number | null; lat: number; lon: number; vn: number; ve: number;
+  // null: the aircraft sent NaN (e.g. no baro reference before arming); the backend maps NaN to null
+  alt_baro: number | null; sonar: number | null; lat: number | null; lon: number | null; vn: number | null; ve: number | null;
   rail_adc_v: number | null; rail_v: number | null; rail: RailState; status: StatusBits; mode: string;
 }
 

@@ -80,7 +80,7 @@ export default function TelemetryPanel() {
 
         <div className="surface ft-tile">
           <div className="ft-tile-label">Altitude above launch</div>
-          <div className="ft-tile-value">{t ? `${t.alt_baro.toFixed(1)} m` : "–"}</div>
+          <div className="ft-tile-value">{t && t.alt_baro != null ? `${t.alt_baro.toFixed(1)} m` : t ? "no reference yet" : "–"}</div>
           <div className="ft-tile-note">
             {t && (t.status.baro_ref_captured ? "Reference captured on arm" : t.status.baro_warm ? "Warm; reference not captured yet" : "Barometer warming up (~2 min)")}
             {" · "}sonar {t?.sonar == null ? "invalid (above ~4.5 m)" : `${t.sonar.toFixed(2)} m`}
@@ -90,7 +90,7 @@ export default function TelemetryPanel() {
         <div className="surface ft-tile">
           <div className="ft-tile-label">GPS</div>
           <div className="ft-tile-value">{t ? FIX[t.status.gps_fix] : "–"}</div>
-          <div className="ft-tile-note">{t ? `${t.status.gps_sats} satellites · ${Math.hypot(t.vn, t.ve).toFixed(1)} m/s` : "–"}</div>
+          <div className="ft-tile-note">{t ? `${t.status.gps_sats} satellites${t.vn != null && t.ve != null ? ` · ${Math.hypot(t.vn, t.ve).toFixed(1)} m/s` : ""}` : "–"}</div>
         </div>
 
         <div className="surface ft-tile">
