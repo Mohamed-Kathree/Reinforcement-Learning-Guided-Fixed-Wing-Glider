@@ -128,9 +128,15 @@ analysis/            Diagnostics, gate tuning, feasibility, dashboard data expor
 results/             Benchmark and analysis outputs (JSON)
 backend/             FastAPI server for the dashboard (records flights, runs checks, streams training)
 frontend/            React + Vite dashboard
-flighttest/          Flight-test ground code: packet schema and codegen, safety reference, calibration (see flighttest/README.md)
-firmware/            ESP32 protocol and safety C code, generated header (host-tested only; see firmware/README.md)
-tests/               Pytest suite (351 tests)
+flighttest/          Flight-test ground code: packet schema and codegen, safety reference, calibration, ground station (see flighttest/README.md)
+firmware/            ESP32 code (see firmware/README.md):
+  flight/                    flight firmware: 228 Hz attitude + inner loop, MCPWM servos, Pi link, UBX GPS, flight phases
+  ground_station/            ESP-NOW <-> USB bridge for the dashboard
+  bench/                     bench test menu (hardware regression suite)
+  protocol/                  shared packet header, CRC and safety state machine (generated / host-tested)
+  tools/                     corrected attitude visualiser and comparison tools
+onboard/             Raspberry Pi flight program: numpy policy, wind gate, 20 Hz runner, flight logs (see onboard/README.md)
+tests/               Pytest suite (about 450 tests)
 docs/                Decisions record and diagnostic summaries
 deployment/          Archived V14 deployment model (legacy)
 checkpoints_*/       Model checkpoints per run (not all tracked)
@@ -179,12 +185,12 @@ cd frontend && npm run dev                         # frontend, http://localhost:
 | Overview | What the system does, headline results and limitations, architecture and specs |
 | Validation | Run 4 – Gated benchmark: charts, paired significance, per-stage readings, every benchmark launch as a clickable tile map, gate behaviour, conclusions; live physics and unit checks |
 | Research | Every training run since V22 with benchmarks (negative results included), cross-run findings, calm-air forgetting, feasibility and gust analysis |
-| Flight Replay | Record a flight with the gated controller (default), the baseline or the legacy V14 policy, then replay it frame by frame. Gated flights show the wind-gate trace. Benchmark launches open side by side (`#/replay/<a>/<b>`) and are checked against the stored result |
+| Flight Replay | Record a flight with the gated controller (default), the baseline or the legacy V14 policy, then replay it frame by frame. Gated flights show the wind-gate trace. Benchmark launches open side by side (`#/replay/<a>/<b>`) and are checked against the stored result. **Play on aircraft**: the real servos follow the replayed surface movements in real time (REPLAY mode, firmware's calibration mapping) |
 | Baseline | Fresh baseline benchmark on random launches |
 | Training | Live and archived training runs |
 | Analysis | Touchdown scatter and failure gallery across recorded flights |
 | Readiness | Go/no-go wind limits from the results, pre-flight checklist, sim-to-real gaps, avionics as wired and open hardware items |
-| Ground Station | Flight-test link status (ground station and Pi, separately), live 5 Hz telemetry with rail voltage, and the control-surface tester (explicit arming, calibration editing). Runs against a stub glider until hardware is connected |
+| Ground Station | Aircraft checklist (ground station, flight computer, Pi, calibration, GPS, barometer, ready to arm), one-click connect, flight computer panel (phase, loop rate, Pi link, console, Arm FLIGHT), guided calibration wizard (centre, direction, travel, Send to aircraft), live telemetry and the control-surface tester. Runs against a stub glider when no hardware is connected |
 | Flight Logs | Replay full-rate Pi logs in the shared 3D view, optionally driving the real servos (REPLAY mode, 20 Hz cap, hold or centre on pause) |
 
 Light appearance by default; dark via the header toggle. The backend accepts requests from any
@@ -311,12 +317,15 @@ Weights: `training/configs/base.yaml` (`reward:`), implementation: `env/reward.p
 ## Testing
 
 ```bash
-pytest tests -q          # 351 tests, about 5 minutes
+pytest tests -q          # about 450 tests, about 7 minutes
 ```
 
 Includes physics and sensor tests, V22 restore and reward-reference tests, gate tests (the gate
 reads only on-board inputs; development and benchmark seeds are disjoint), stage-mix and
-`--init-from` tests, and dashboard data and gated-recording tests.
+`--init-from` tests, and dashboard data and gated-recording tests. The flight computer's pure-C
+code (attitude filter, inner loop, Pi link, UBX parser, flight phases, safety) is compiled with
+the host gcc and checked against the Python simulator; the Pi program is checked against the
+benchmark controller through the real byte protocol.
 
 ---
 
@@ -331,9 +340,17 @@ reads only on-board inputs; development and benchmark seeds are disjoint), stage
 
 ## Status and limitations
 
-- Simulation results only. No real flights yet.
-- The simulated attitude loop holds speed from true airspeed; the real glider has no pitot and
-  would use GPS ground speed, which differs in wind. Fly first tests in calm air.
+- Simulation results only. No real flights yet. The flight computer (ESP32 + Raspberry Pi) runs
+  the full chain on the bench: arm, launch, apex hand-off, the Pi's controller moving the servos
+  (see firmware/flight/README.md for the measured results and open hardware items).
+- The real aircraft has no airspeed sensor, so it flies the simulator's pitch trim schedule
+  without the true-airspeed correction. Measured in simulation on 200 development seeds, that
+  costs a lot (Run 4 gated success 111 -> 72, 58 -> 32, 34 -> 14, 17 -> 6 at stages 0-3);
+  accepted for the prototype demonstration (results/onboard_airspeed_term_dev.json).
+- Open hardware items: the board does not start by itself at battery-on (press EN); USB
+  back-feeds the servo rail (servo leads off whenever USB is plugged in); surfaces not yet
+  fitted, so the stored servo calibration is a trial run; GPS fix and launch/apex thresholds
+  untested outdoors.
 - One evaluation of 100 launches per stage: large effects only. Stage 1–2 gains and Stage 3
   crash differences need more seeds to confirm or rule out.
 - Mass properties beyond the fuselage and tail are estimates; weigh the aircraft before flying.

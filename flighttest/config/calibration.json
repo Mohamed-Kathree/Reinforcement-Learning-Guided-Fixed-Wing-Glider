@@ -4,51 +4,51 @@
  "servos": {
   "aileron_l": {
    "type": "MG90S",
-   "neutral_us": 1500,
-   "direction": 1,
+   "neutral_us": 2000,
+   "direction": -1,
    "min_us": 600,
    "max_us": 2300,
-   "sweep_min_us": 700,
-   "sweep_max_us": 2200,
-   "us_full_deflection": 400,
-   "measured": false,
-   "measured_on": null
+   "sweep_min_us": 600,
+   "sweep_max_us": 2300,
+   "us_full_deflection": 300,
+   "measured": true,
+   "measured_on": "2026-11-20"
   },
   "aileron_r": {
    "type": "MG90S",
-   "neutral_us": 1500,
-   "direction": 1,
+   "neutral_us": 1000,
+   "direction": -1,
    "min_us": 600,
    "max_us": 2300,
-   "sweep_min_us": 700,
-   "sweep_max_us": 2200,
+   "sweep_min_us": 600,
+   "sweep_max_us": 2300,
    "us_full_deflection": 400,
-   "measured": false,
-   "measured_on": null
+   "measured": true,
+   "measured_on": "2026-11-20"
   },
   "elevator": {
    "type": "MG90S",
-   "neutral_us": 1500,
-   "direction": 1,
+   "neutral_us": 2000,
+   "direction": -1,
    "min_us": 600,
    "max_us": 2300,
-   "sweep_min_us": 700,
-   "sweep_max_us": 2200,
-   "us_full_deflection": 400,
-   "measured": false,
-   "measured_on": null
+   "sweep_min_us": 600,
+   "sweep_max_us": 2300,
+   "us_full_deflection": 300,
+   "measured": true,
+   "measured_on": "2026-11-20"
   },
   "rudder": {
    "type": "MG90S",
-   "neutral_us": 1500,
+   "neutral_us": 2000,
    "direction": 1,
    "min_us": 600,
    "max_us": 2300,
-   "sweep_min_us": 700,
-   "sweep_max_us": 2200,
-   "us_full_deflection": 400,
-   "measured": false,
-   "measured_on": null
+   "sweep_min_us": 600,
+   "sweep_max_us": 2300,
+   "us_full_deflection": 300,
+   "measured": true,
+   "measured_on": "2026-11-20"
   }
  },
  "imu": {
@@ -80,8 +80,8 @@
  "rail": {
   "_comment": "5 V rail sensed through a ~2:1 divider on GPIO34 (ADC1). The ESP32 sends the voltage at the pin; rail_v = scale * adc_v + offset_v. Indicative until calibrated against a multimeter. The ADC is nonlinear below ~0.15 V and above ~3.0 V; a 2:1 divider puts 5 V near 2.5 V.",
   "adc_gpio": 34,
-  "scale": 2.0,
-  "offset_v": 0.0,
+  "scale": 2,
+  "offset_v": 0,
   "calibrated": false,
   "calibrated_on": null,
   "brownout_v": 4.75

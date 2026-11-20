@@ -7,16 +7,16 @@
 
 #include <stdint.h>
 
-#define CAL_HASH "2d55487a6cab"
+#define CAL_HASH "df556a9f759b"
 #define CAL_VERSION 2
-#define CAL_SERVOS_MEASURED 0   /* 0: neutrals/directions are placeholders */
+#define CAL_SERVOS_MEASURED 1   /* 0: neutrals/directions are placeholders */
 #define CAL_IMU_VERIFIED 1
 #define CAL_RAIL_CALIBRATED 0
 
 /* Servo order = protocol order: aileron_l, aileron_r, elevator, rudder */
-static const int16_t CAL_NEUTRAL_US[4] __attribute__((unused)) = {1500, 1500, 1500, 1500};
-static const int8_t  CAL_DIRECTION[4]  __attribute__((unused)) = {1, 1, 1, 1};
-static const int16_t CAL_FULL_US[4]    __attribute__((unused)) = {400, 400, 400, 400};
+static const int16_t CAL_NEUTRAL_US[4] __attribute__((unused)) = {2000, 1000, 2000, 2000};
+static const int8_t  CAL_DIRECTION[4]  __attribute__((unused)) = {-1, -1, -1, 1};
+static const int16_t CAL_FULL_US[4]    __attribute__((unused)) = {300, 400, 300, 300};
 static const int16_t CAL_MIN_US[4]     __attribute__((unused)) = {600, 600, 600, 600};
 static const int16_t CAL_MAX_US[4]     __attribute__((unused)) = {2300, 2300, 2300, 2300};
 
