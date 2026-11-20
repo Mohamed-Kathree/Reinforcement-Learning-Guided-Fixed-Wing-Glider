@@ -224,3 +224,14 @@ def test_snapshot_with_real_aircraft_nan_is_strict_json():
         json.dumps(snap, allow_nan=False)
     out = json.dumps(json_safe({"snapshot": snap, "history": list(gs.history)}), allow_nan=False)
     assert '"alt_baro": null' in out and "NaN" not in out
+
+
+def test_ground_station_bridge_knows_every_ground_to_aircraft_frame():
+    """firmware/ground_station must forward every ground -> aircraft packet whole; it
+    once only knew the 14-byte Command and cut the 43-byte CalibrationSet apart."""
+    import json
+    src = open(os.path.join(ROOT, "firmware", "ground_station", "ground_station.ino"), encoding="utf-8").read()
+    table = {int(t): int(n) for t, n in re.findall(r"case (\d+): return (\d+);", src)}
+    schema = json.load(open(os.path.join(ROOT, "flighttest", "protocol", "schema.json"), encoding="utf-8"))
+    want = {p["type"]: getattr(P, p["name"]).SIZE for p in schema["packets"] if p["direction"].startswith("ground ->")}
+    assert table == want

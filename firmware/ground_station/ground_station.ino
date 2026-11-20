@@ -20,7 +20,17 @@
 
 static const uint8_t FLIGHT_MAC[6] = {0xF8, 0xB3, 0xB7, 0x30, 0x33, 0x40};
 #define RLG_SYNC 0xA5
-#define CMD_SIZE 14
+#define MAX_FRAME 64
+// Ground -> aircraft frame lengths by type byte (flighttest/protocol/schema.json).
+// 20 Nov 2026: the bridge only knew the 14-byte Command, so the 43-byte
+// CalibrationSet was cut up and the aircraft never received a calibration.
+static uint8_t frameSize(uint8_t type) {
+  switch (type) {
+    case 2: return 14;    // Command
+    case 5: return 43;    // CalibrationSet
+    default: return 0;    // not a ground -> aircraft frame
+  }
+}
 #define IDLE_FLUSH_MS 30
 #ifndef DIAG_HEX
 #define DIAG_HEX 0        // 1: print packet length + first bytes in hex (diagnostic build)
@@ -91,7 +101,8 @@ void setup() {
   Serial.println("=== expecting flight board F8:B3:B7:30:33:40; frames bridged whole ===");
 }
 
-static uint8_t frame[CMD_SIZE];
+static uint8_t frame[MAX_FRAME];
+static uint8_t frameWant = 0;     // length of the frame being collected (0 = type not seen yet)
 static uint8_t frameLen = 0;
 static uint8_t text[200];
 static uint8_t textLen = 0;
@@ -127,7 +138,15 @@ void loop() {
     lastByteMs = now;
     if (frameLen > 0) {                       // inside a binary frame
       frame[frameLen++] = c;
-      if (frameLen == CMD_SIZE) { esp_now_send(FLIGHT_MAC, frame, CMD_SIZE); frameLen = 0; }
+      if (frameLen == 2) {                    // the type byte decides the length
+        frameWant = frameSize(c);
+        if (!frameWant) {                     // unknown type: it was text after all
+          for (uint8_t i = 0; i < frameLen && textLen < sizeof(text); i++) text[textLen++] = frame[i];
+          frameLen = 0;
+          continue;
+        }
+      }
+      if (frameWant && frameLen == frameWant) { esp_now_send(FLIGHT_MAC, frame, frameWant); frameLen = 0; frameWant = 0; }
     } else if (c == RLG_SYNC) {               // start of a binary frame
       flushText();
       frame[0] = c; frameLen = 1;
@@ -137,7 +156,7 @@ void loop() {
     }
   }
   if (now - lastByteMs > IDLE_FLUSH_MS) {
-    if (frameLen) { partialDropped++; frameLen = 0; }
+    if (frameLen) { partialDropped++; frameLen = 0; frameWant = 0; }
     flushText();
   }
 }
