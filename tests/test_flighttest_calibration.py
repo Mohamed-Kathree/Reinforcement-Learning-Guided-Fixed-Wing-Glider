@@ -22,8 +22,27 @@ sys.path.insert(0, ROOT)
 from flighttest import calibration as C  # noqa: E402
 
 
+def committed_cal() -> dict:
+    """flighttest/config/calibration.json as committed (HEAD), not the working copy:
+    the dashboard's calibration wizard saves into the working copy."""
+    import json
+    import subprocess
+    r = subprocess.run(["git", "show", "HEAD:flighttest/config/calibration.json"], cwd=ROOT,
+                       capture_output=True, text=True, encoding="utf-8")
+    return json.loads(r.stdout) if r.returncode == 0 else C.load()
+
+
+def base_cal() -> dict:
+    """Committed calibration with the servos reset to the placeholder values."""
+    cal = committed_cal()
+    for n in C.SERVO_NAMES:
+        cal["servos"][n].update(neutral_us=1500, direction=1, min_us=600, sweep_min_us=700, sweep_max_us=2200,
+                                max_us=2300, us_full_deflection=400, measured=False, measured_on=None)
+    return cal
+
+
 def test_committed_file_matches_the_hardware_answers():
-    cal = C.load()
+    cal = committed_cal()
     assert C.validate(cal) == []
     # 19 Nov: IMU frame verified on hardware and signed off (identity: raw frame = body frame).
     assert cal["imu"]["verified"] is True and cal["imu"]["verified_on"] == "2026-11-19"
@@ -42,14 +61,14 @@ def test_every_signed_permutation_is_classified_by_handedness():
             m = [[0] * 3 for _ in range(3)]
             for r, c in enumerate(perm):
                 m[r][c] = signs[r]
-            valid = C.validate(C.with_updates(C.load(), **{"imu.board_to_body": m})) == []
+            valid = C.validate(C.with_updates(base_cal(), **{"imu.board_to_body": m})) == []
             assert valid == (C.det3(m) == 1)
             ok += valid
     assert ok == 24
 
 
 def test_single_sign_flip_is_rejected_as_left_handed():
-    problems = C.validate(C.with_updates(C.load(), **{"imu.board_to_body": [[1, 0, 0], [0, 1, 0], [0, 0, -1]]}))
+    problems = C.validate(C.with_updates(base_cal(), **{"imu.board_to_body": [[1, 0, 0], [0, 1, 0], [0, 0, -1]]}))
     assert problems and "left-handed" in problems[0]
 
 
@@ -71,12 +90,12 @@ def test_single_sign_flip_is_rejected_as_left_handed():
     ("rail.brownout_v", 3.3),
 ])
 def test_bad_values_rejected(path, value):
-    assert C.validate(C.with_updates(C.load(), **{path: value}))
+    assert C.validate(C.with_updates(base_cal(), **{path: value}))
 
 
 def test_swapping_a_servo_type_is_a_config_change():
     """Fitting an MG996R again would need its own envelope (1000-2000 us)."""
-    cal = C.with_updates(C.load(), **{"servos.elevator.type": "MG996R"})
+    cal = C.with_updates(base_cal(), **{"servos.elevator.type": "MG996R"})
     assert C.validate(cal)                                       # 600-2300 no longer fits
     cal = C.with_updates(cal, **{"servos.elevator.min_us": 1000, "servos.elevator.max_us": 2000,
                                  "servos.elevator.sweep_min_us": 1050, "servos.elevator.sweep_max_us": 1950})
@@ -85,7 +104,7 @@ def test_swapping_a_servo_type_is_a_config_change():
 
 def test_save_refuses_invalid_and_round_trips_valid(tmp_path):
     p = str(tmp_path / "cal.json")
-    good = C.with_updates(C.load(), **{"servos.rudder.neutral_us": 1490, "servos.rudder.measured": True})
+    good = C.with_updates(base_cal(), **{"servos.rudder.neutral_us": 1490, "servos.rudder.measured": True})
     C.save(good, p)
     assert C.load(p)["servos"]["rudder"]["neutral_us"] == 1490
     with pytest.raises(ValueError):
@@ -94,7 +113,7 @@ def test_save_refuses_invalid_and_round_trips_valid(tmp_path):
 
 
 def test_accessors_follow_command_servo_order():
-    cal = C.with_updates(C.load(), **{"servos.aileron_l.neutral_us": 1401, "servos.rudder.neutral_us": 1404,
+    cal = C.with_updates(base_cal(), **{"servos.aileron_l.neutral_us": 1401, "servos.rudder.neutral_us": 1404,
                                        "servos.rudder.max_us": 2250})
     assert C.neutral_us(cal)[0] == 1401 and C.neutral_us(cal)[3] == 1404
     lo, hi = C.limits(cal)
@@ -103,7 +122,7 @@ def test_accessors_follow_command_servo_order():
 
 
 def test_rail_volts_scaling():
-    cal = C.load()
+    cal = base_cal()
     assert C.rail_volts(cal, 2.5) == pytest.approx(5.0)
     assert C.rail_volts(cal, -1.0) is None and C.rail_volts(cal, None) is None
     cal = C.with_updates(cal, **{"rail.scale": 1.98, "rail.offset_v": 0.02})

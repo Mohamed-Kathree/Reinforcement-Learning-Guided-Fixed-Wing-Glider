@@ -27,7 +27,23 @@ from flighttest.ground import GroundStation, calibration_id  # noqa: E402
 from flighttest.links import Link  # noqa: E402
 from flighttest.protocol import packets as P  # noqa: E402
 
-CAL = C.load()
+def base_cal() -> dict:
+    """The calibration file with the servos reset to the placeholder values, so these
+    tests do not depend on what the dashboard last saved into calibration.json."""
+    cal = C.load()
+    for n in C.SERVO_NAMES:
+        cal["servos"][n].update(neutral_us=1500, direction=1, min_us=600, sweep_min_us=700, sweep_max_us=2200,
+                                max_us=2300, us_full_deflection=400, measured=False, measured_on=None)
+    return cal
+
+
+def calibration_file_is_committed() -> bool:
+    import subprocess
+    r = subprocess.run(["git", "diff", "--quiet", "--", "flighttest/config/calibration.json"], cwd=ROOT)
+    return r.returncode == 0
+
+
+CAL = base_cal()
 
 
 class FakeLink(Link):
@@ -71,7 +87,7 @@ def test_text_and_frames_are_split():
 
 
 def test_calibration_packet_contents():
-    cal = C.load()
+    cal = base_cal()
     cal["servos"]["elevator"]["direction"] = -1
     link = FakeLink()
     gs = GroundStation(link, cal=cal)
@@ -140,6 +156,9 @@ def test_console_whitelist():
 def test_calibration_id_matches_firmware_header():
     src = open(os.path.join(ROOT, "firmware", "flight", "src", "generated", "calibration_gen.h")).read()
     h = re.search(r'#define CAL_HASH "([0-9a-f]+)"', src).group(1)
+    if not calibration_file_is_committed():
+        pytest.skip("calibration.json has uncommitted edits (saved from the dashboard); the compiled-in "
+                    "header follows the committed file: run python -m flighttest.firmware_sync after committing")
     raw = open(C.DEFAULT_PATH, "rb").read().replace(b"\r\n", b"\n")
     import json
     if raw.decode("utf-8") != json.dumps(C.load(), indent=1) + "\n":
@@ -158,7 +177,7 @@ def test_deflection_to_us_matches_firmware():
     L = TF.lib()
     rng = random.Random(4)
     for _ in range(300):
-        cal = C.load()
+        cal = base_cal()
         for n in C.SERVO_NAMES:
             sv = cal["servos"][n]
             sv["neutral_us"] = rng.randint(1300, 1700)
@@ -180,7 +199,7 @@ def test_deflection_to_us_matches_firmware():
 def test_surfaces_through_the_stub_glider():
     from flighttest.links import StubLink
     from flighttest.stub_glider import StubGlider
-    cal = C.load()
+    cal = base_cal()
     g = StubGlider(C.neutral_us(cal), now_ms=0, seed=1, limits=C.limits(cal))
     gs = GroundStation(StubLink(g), cal=cal)
     with pytest.raises(RuntimeError):
@@ -195,7 +214,7 @@ def test_surfaces_through_the_stub_glider():
 
 def test_envelope_servos_only_in_bench():
     link = FakeLink()
-    cal = C.load()
+    cal = base_cal()
     cal["servos"]["rudder"].update(min_us=1200, sweep_min_us=1200, max_us=1800, sweep_max_us=1800, us_full_deflection=200)
     gs = GroundStation(link, cal=cal)
     gs.arm(P.BENCH, 0)

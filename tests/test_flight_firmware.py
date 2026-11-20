@@ -313,6 +313,9 @@ def test_deflection_to_us():
 # ---------------------------------------------------------------- sources
 
 def test_firmware_sources_in_sync():
+    if subprocess.run(["git", "diff", "--quiet", "--", "flighttest/config/calibration.json"], cwd=ROOT).returncode:
+        pytest.skip("calibration.json has uncommitted edits (saved from the dashboard; the aircraft gets them "
+                    "over the radio). Commit, then python -m flighttest.firmware_sync, to update the compiled-in default")
     r = subprocess.run([sys.executable, "-m", "flighttest.firmware_sync", "--check"], cwd=ROOT,
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
