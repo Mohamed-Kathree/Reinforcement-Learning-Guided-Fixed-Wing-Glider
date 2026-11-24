@@ -73,6 +73,7 @@ def test_resolved_config_matches_v22():
     assert set(POST_V22) <= set(have), "every post-V22 key is pinned explicitly"
 
 
+@pytest.mark.skipif(not os.path.exists(V22_MODEL), reason="V22 checkpoint not present (not in git)")
 def test_disabled_features_off():
     from env.glider_env import GliderEnv
     from env.curriculum import STAGES
