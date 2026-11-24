@@ -161,6 +161,37 @@ pip install -r backend/requirements.txt   # dashboard backend only
 cd frontend && npm install
 ```
 
+### On a new machine: what a clone does and does not contain
+
+A clone has all the code, the results (`results/*.json`), the dashboard data, the selected
+policy (`checkpoints_v24_run4/best_model.zip` + `vecnormalize_best.pkl`), the Pi's numpy model
+(`onboard/model/run4.npz`) and the archived V14 model (`deployment/`). Everything the dashboard,
+the tests and the hardware need is there.
+
+Not in git (too large), and only needed if you want them:
+
+| Folder | Size | What you lose without it |
+|---|---|---|
+| `data/episodes/` | ~0.5 GB | previously recorded flights in Flight Replay (record new ones with **Record flight**) |
+| `data/runs/` | ~0.2 GB | archived training streams on the Training page |
+| other `checkpoints_*/`, `runs_*/` | ~180 MB per run | intermediate checkpoints of every run (re-benchmarking old runs) |
+
+Copy those folders across by hand (USB drive, or the cloud folder they live in) into the same
+places in the new clone.
+
+- **Do not reuse a `venv/` or `node_modules/` copied from another machine:** both contain
+  machine-specific paths. Create them fresh, as above.
+- **If the repo sits inside a synced cloud folder** (OneDrive), clone a separate copy on the
+  second machine rather than opening the synced one, so the two machines' `venv` folders do not
+  overwrite each other.
+
+**Hardware tools (only to build or flash firmware, or to update the Pi):**
+- **Arduino IDE 2:** includes `arduino-cli`. Add the ESP32 board package 3.3.x and the
+  libraries Adafruit BMP280 and Adafruit BusIO (and ESP32Servo for the bench sketch).
+- **gcc** (MinGW on Windows), for the C host tests. Without it they skip.
+- **`pip install paramiko`**, then `python onboard/deploy/push_to_pi.py` to copy the Pi program
+  and restart it.
+
 ---
 
 ## Quick start

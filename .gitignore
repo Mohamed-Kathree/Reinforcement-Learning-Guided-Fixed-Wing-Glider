@@ -275,3 +275,12 @@ data/pi_stub/
 
 # onboard runner flight logs (written on the Pi inside the checkout)
 /logs/
+
+# The selected policy (Run 4 best, used by the gated controller) is tracked, small files only,
+# so a fresh clone can record gated flights, export the Pi model and run every test.
+# Every other checkpoint stays out of git (about 180 MB per run).
+!checkpoints_v24_run4/
+checkpoints_v24_run4/*
+!checkpoints_v24_run4/best_model.zip
+!checkpoints_v24_run4/vecnormalize_best.pkl
+!checkpoints_v24_run4/best_model.json

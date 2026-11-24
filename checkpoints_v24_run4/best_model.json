@@ -1,0 +1,29 @@
+{
+ "timesteps": 15500000,
+ "score": 0.275,
+ "mean_crash": 0.25,
+ "stages": {
+  "0": {
+   "success": 0.7,
+   "crash": 0.0,
+   "median_miss_m": 12.705987572314669
+  },
+  "1": {
+   "success": 0.3,
+   "crash": 0.1,
+   "median_miss_m": 54.034407205136134
+  },
+  "2": {
+   "success": 0.1,
+   "crash": 0.2,
+   "median_miss_m": 82.12214594976325
+  },
+  "3": {
+   "success": 0.0,
+   "crash": 0.7,
+   "median_miss_m": 51.4535113829089
+  }
+ },
+ "seconds": 34.3,
+ "new_best": true
+}
